@@ -25,9 +25,9 @@ const STATE_SYNC_INTERVAL := 0.05
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const ChallengeLayerData = preload("res://scripts/challenge_layer.gd")
-const BLADE_TEXTURE: Texture2D = preload("res://assets/characters/blade.svg")
-const ARITHMETIC_TEXTURE: Texture2D = preload("res://assets/characters/arithmetic.svg")
-const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/chanter.svg")
+const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/typist_pixel_8dir.png")
+const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/arithmetician_pixel_8dir.png")
+const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/chanter_pixel_8dir_clean.png")
 
 var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
@@ -35,6 +35,7 @@ var status_text := "開始！ 距離を取りながら相手に通常攻撃を�
 var skill_projectiles: Array[Dictionary] = []
 var magic_zones: Array[Dictionary] = []
 var phase: String = "lobby"
+var screen: String = "title"
 var countdown_remaining: float = 0.0
 var p1_selection: int = 0
 var p2_selection: int = 1
@@ -53,16 +54,18 @@ var remote_input: Dictionary = {"move": Vector2.ZERO, "attack": false, "small": 
 var network_sync_elapsed: float = 0.0
 var pending_client_input: Dictionary = {}
 var network_target_players: Dictionary = {}
+var character_animation_elapsed: float = 0.0
 
 var player_one_label: Label
 var player_two_label: Label
 var timer_label: Label
 var status_label: Label
+var controls_label: Label
 var challenge_panel: PanelContainer
 var challenge_prompt_label: Label
 var challenge_progress_label: Label
 var typing_input: LineEdit
-var lobby_panel: PanelContainer
+var lobby_panel: Panel
 var lobby_label: Label
 var result_panel: Panel
 var result_label: Label
@@ -71,6 +74,26 @@ var result_lobby_button: Button
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
+var title_panel: Panel
+var home_panel: Panel
+var practice_panel: Panel
+var debug_panel: Panel
+var title_logo: TextureRect
+var practice_selection: int = 0
+var debug_p1_selection: int = 0
+var debug_p2_selection: int = 1
+var practice_preview: Label
+var debug_preview: Label
+var lobby_p1_preview: TextureRect
+var lobby_p2_preview: TextureRect
+var lobby_p1_info: Label
+var lobby_p2_info: Label
+var lobby_p1_left: Button
+var lobby_p1_right: Button
+var lobby_p1_ready: Button
+var lobby_p2_left: Button
+var lobby_p2_right: Button
+var lobby_p2_ready: Button
 
 
 func _ready() -> void:
@@ -79,11 +102,12 @@ func _ready() -> void:
 	create_lobby_ui()
 	create_result_ui()
 	create_network_ui()
+	create_navigation_ui()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
-	show_connection()
+	show_title()
 	queue_redraw()
 
 
@@ -114,6 +138,10 @@ func create_challenge_definitions() -> void:
 
 
 func _process(delta: float) -> void:
+	character_animation_elapsed += delta
+	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
+		queue_redraw()
+		return
 	if phase == "connection":
 		queue_redraw()
 		return
@@ -149,8 +177,9 @@ func _process(delta: float) -> void:
 
 	match_state.time_remaining = maxf(0.0, match_state.time_remaining - delta)
 	update_player(1, delta, KEY_A, KEY_D, KEY_W, KEY_S)
-	update_player(2, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
-	separate_players()
+	if network_mode != "practice":
+		update_player(2, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
+		separate_players()
 	update_typing_challenge(delta)
 	update_skill_projectiles(delta)
 	update_magic_zones(delta)
@@ -197,6 +226,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		player["facing"] = direction
 		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * (1.25 if float(player["buff_time"]) > 0.0 else 1.0)
 		player["position"] = clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
+	player["is_moving"] = direction.length_squared() > 0.0
 	player["attack_cooldown"] = maxf(0.0, player["attack_cooldown"] - delta)
 	player["attack_time"] = maxf(0.0, player["attack_time"] - delta)
 	player["hit_time"] = maxf(0.0, player["hit_time"] - delta)
@@ -582,6 +612,9 @@ func request_return_to_lobby() -> void:
 	if network_mode == "client":
 		rpc_id(1, "receive_remote_result_action", "lobby")
 		return
+	if network_mode == "local" or network_mode == "practice":
+		show_home()
+		return
 	show_lobby()
 
 
@@ -602,18 +635,28 @@ func create_hud() -> void:
 	status_label.size = Vector2(960, 28)
 	status_label.add_theme_font_size_override("font_size", 16)
 
-	var controls := make_hud_label(Vector2(300, 72), HORIZONTAL_ALIGNMENT_CENTER)
-	controls.size = Vector2(680, 24)
-	controls.text = "P1: WASD移動 / F斬撃 / Q小技 / E大技     P2: 矢印移動 / Enter斬撃 / Num0小技 / Num9大技"
-	controls.add_theme_font_size_override("font_size", 15)
-	controls.add_theme_color_override("font_color", Color("b7c1d8"))
+	controls_label = make_hud_label(Vector2(300, 72), HORIZONTAL_ALIGNMENT_CENTER)
+	controls_label.size = Vector2(680, 24)
+	controls_label.text = "P1: WASD移動 / F斬撃 / Q小技 / E大技     P2: 矢印移動 / Enter斬撃 / Num0小技 / Num9大技"
+	controls_label.add_theme_font_size_override("font_size", 15)
+	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
 	create_challenge_ui(layer)
 
 
+func set_gameplay_hud_visible(is_visible: bool) -> void:
+	player_one_label.visible = is_visible
+	player_two_label.visible = is_visible
+	timer_label.visible = is_visible
+	status_label.visible = is_visible
+	controls_label.visible = is_visible
+	if not is_visible:
+		challenge_panel.visible = false
+
+
 func create_lobby_ui() -> void:
-	lobby_panel = PanelContainer.new()
-	lobby_panel.position = Vector2(260, 150)
-	lobby_panel.size = Vector2(760, 390)
+	lobby_panel = Panel.new()
+	lobby_panel.position = Vector2(35, 105)
+	lobby_panel.size = Vector2(1210, 540)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = Color("8fa8e8")
@@ -625,12 +668,83 @@ func create_lobby_ui() -> void:
 	lobby_panel.add_theme_stylebox_override("panel", style)
 	get_child(0).add_child(lobby_panel)
 	lobby_label = Label.new()
-	lobby_label.position = Vector2(28, 22)
-	lobby_label.size = Vector2(700, 340)
+	lobby_label.position = Vector2(20, 16)
+	lobby_label.size = Vector2(1170, 48)
 	lobby_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lobby_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lobby_label.add_theme_font_size_override("font_size", 22)
+	lobby_label.add_theme_font_size_override("font_size", 28)
 	lobby_panel.add_child(lobby_label)
+	lobby_p1_preview = TextureRect.new()
+	lobby_p1_preview.position = Vector2(135, 115)
+	lobby_p1_preview.size = Vector2(300, 260)
+	lobby_p1_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	lobby_p1_preview.stretch_mode = TextureRect.STRETCH_SCALE
+	lobby_panel.add_child(lobby_p1_preview)
+	lobby_p2_preview = TextureRect.new()
+	lobby_p2_preview.position = Vector2(775, 115)
+	lobby_p2_preview.size = Vector2(300, 260)
+	lobby_p2_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	lobby_p2_preview.stretch_mode = TextureRect.STRETCH_SCALE
+	lobby_panel.add_child(lobby_p2_preview)
+	lobby_p1_info = make_lobby_info(Vector2(70, 72), Vector2(430, 50))
+	lobby_p2_info = make_lobby_info(Vector2(710, 72), Vector2(430, 50))
+	lobby_p1_left = make_lobby_button("◀", Vector2(95, 410), func(): set_lobby_selection(1, -1))
+	lobby_p1_right = make_lobby_button("▶", Vector2(390, 410), func(): set_lobby_selection(1, 1))
+	lobby_p1_ready = make_lobby_button("準備完了", Vector2(175, 465), func(): toggle_lobby_ready(1), Vector2(240, 46))
+	lobby_p2_left = make_lobby_button("◀", Vector2(735, 410), func(): set_lobby_selection(2, -1))
+	lobby_p2_right = make_lobby_button("▶", Vector2(1030, 410), func(): set_lobby_selection(2, 1))
+	lobby_p2_ready = make_lobby_button("準備完了", Vector2(815, 465), func(): toggle_lobby_ready(2), Vector2(240, 46))
+
+
+func make_lobby_info(info_position: Vector2, info_size: Vector2) -> Label:
+	var label := Label.new()
+	label.position = info_position
+	label.size = info_size
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 20)
+	lobby_panel.add_child(label)
+	return label
+
+
+func make_lobby_button(button_text: String, button_position: Vector2, callback: Callable, button_size := Vector2(90, 46)) -> Button:
+	var button := Button.new()
+	button.text = button_text
+	button.position = button_position
+	button.size = button_size
+	button.add_theme_font_size_override("font_size", 20)
+	button.pressed.connect(callback)
+	lobby_panel.add_child(button)
+	return button
+
+
+func set_lobby_selection(player_id: int, step: int) -> void:
+	if player_id == 1 and network_mode == "client":
+		return
+	if player_id == 2 and network_mode == "host":
+		return
+	if player_id == 1:
+		p1_selection = posmod(p1_selection + step, 3)
+		p1_ready = false
+	else:
+		p2_selection = posmod(p2_selection + step, 3)
+		p2_ready = false
+	if network_mode == "client":
+		rpc_id(1, "receive_remote_lobby_choice", p2_selection, p2_ready)
+	refresh_lobby_label()
+
+
+func toggle_lobby_ready(player_id: int) -> void:
+	if player_id == 1 and network_mode == "client":
+		return
+	if player_id == 2 and network_mode == "host":
+		return
+	if player_id == 1:
+		p1_ready = not p1_ready
+	else:
+		p2_ready = not p2_ready
+	if network_mode == "client":
+		rpc_id(1, "receive_remote_lobby_choice", p2_selection, p2_ready)
+	refresh_lobby_label()
 
 
 func create_result_ui() -> void:
@@ -713,6 +827,7 @@ func create_network_ui() -> void:
 	local_button.position = Vector2(200, 205)
 	local_button.size = Vector2(220, 34)
 	local_button.pressed.connect(start_local_debug)
+	local_button.visible = false
 	network_panel.add_child(local_button)
 	network_status_label = Label.new()
 	network_status_label.position = Vector2(30, 255)
@@ -722,20 +837,215 @@ func create_network_ui() -> void:
 	network_panel.add_child(network_status_label)
 
 
+func make_menu_panel(panel_position: Vector2, panel_size: Vector2, border_color: Color) -> Panel:
+	var panel := Panel.new()
+	panel.position = panel_position
+	panel.size = panel_size
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("111b34f5")
+	style.border_color = border_color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	panel.add_theme_stylebox_override("panel", style)
+	get_child(0).add_child(panel)
+	return panel
+
+
+func make_menu_button(parent: Control, text_value: String, button_position: Vector2, button_size: Vector2, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text_value
+	button.position = button_position
+	button.size = button_size
+	button.add_theme_font_size_override("font_size", 20)
+	button.pressed.connect(callback)
+	parent.add_child(button)
+	return button
+
+
+func create_navigation_ui() -> void:
+	title_panel = make_menu_panel(Vector2(160, 90), Vector2(960, 540), Color("71d6ba"))
+	# ロゴはNode2D側で描画するため、このパネルは枠だけにして覆い隠さない。
+	var title_panel_style := StyleBoxFlat.new()
+	title_panel_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	title_panel_style.border_color = Color("71d6ba")
+	title_panel_style.set_border_width_all(2)
+	title_panel_style.set_corner_radius_all(14)
+	title_panel.add_theme_stylebox_override("panel", title_panel_style)
+	title_logo = TextureRect.new()
+	title_logo.texture = preload("res://assets/ui/skill_battlers_logo.png")
+	title_logo.position = Vector2(55, 70)
+	title_logo.size = Vector2(850, 250)
+	title_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_logo.stretch_mode = TextureRect.STRETCH_SCALE
+	# ロゴはNode2Dの_drawで固定矩形へ描画する。TextureRectには描画を任せない。
+	title_logo.visible = false
+	title_panel.add_child(title_logo)
+	var title_prompt := Label.new()
+	title_prompt.text = "Press Space / Enter / Click to Start"
+	title_prompt.position = Vector2(40, 390)
+	title_prompt.size = Vector2(880, 48)
+	title_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_prompt.add_theme_font_size_override("font_size", 28)
+	title_panel.add_child(title_prompt)
+
+	home_panel = make_menu_panel(Vector2(150, 90), Vector2(980, 540), Color("8fa8e8"))
+	var home_title := Label.new()
+	home_title.text = "SKILL BATTLE HOME"
+	home_title.position = Vector2(30, 24)
+	home_title.size = Vector2(920, 50)
+	home_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	home_title.add_theme_font_size_override("font_size", 30)
+	home_panel.add_child(home_title)
+	make_menu_button(home_panel, "オンライン対戦", Vector2(55, 130), Vector2(400, 260), show_online_menu)
+	make_menu_button(home_panel, "練習", Vector2(525, 115), Vector2(370, 75), show_practice_select)
+	var character_button := make_menu_button(home_panel, "キャラクター", Vector2(525, 210), Vector2(370, 75), show_character_unavailable)
+	character_button.tooltip_text = "キャラクター育成画面は準備中です"
+	make_menu_button(home_panel, "デバッグ", Vector2(525, 305), Vector2(370, 75), show_debug_select)
+
+	practice_panel = make_menu_panel(Vector2(210, 90), Vector2(860, 540), Color("71d6ba"))
+	practice_preview = Label.new()
+	practice_preview.position = Vector2(40, 36)
+	practice_preview.size = Vector2(780, 270)
+	practice_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	practice_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	practice_preview.add_theme_font_size_override("font_size", 28)
+	practice_panel.add_child(practice_preview)
+	make_menu_button(practice_panel, "◀", Vector2(90, 350), Vector2(90, 55), func(): change_practice_selection(-1))
+	make_menu_button(practice_panel, "▶", Vector2(680, 350), Vector2(90, 55), func(): change_practice_selection(1))
+	make_menu_button(practice_panel, "このキャラクターで練習", Vector2(260, 430), Vector2(340, 52), start_practice)
+	make_menu_button(practice_panel, "戻る", Vector2(20, 20), Vector2(100, 42), show_home)
+
+	debug_panel = make_menu_panel(Vector2(120, 70), Vector2(1040, 580), Color("ffc45e"))
+	debug_preview = Label.new()
+	debug_preview.position = Vector2(35, 55)
+	debug_preview.size = Vector2(970, 250)
+	debug_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	debug_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	debug_preview.add_theme_font_size_override("font_size", 25)
+	debug_panel.add_child(debug_preview)
+	make_menu_button(debug_panel, "P1 ◀", Vector2(90, 350), Vector2(130, 55), func(): change_debug_selection(1, -1))
+	make_menu_button(debug_panel, "P1 ▶", Vector2(245, 350), Vector2(130, 55), func(): change_debug_selection(1, 1))
+	make_menu_button(debug_panel, "P2 ◀", Vector2(665, 350), Vector2(130, 55), func(): change_debug_selection(2, -1))
+	make_menu_button(debug_panel, "P2 ▶", Vector2(820, 350), Vector2(130, 55), func(): change_debug_selection(2, 1))
+	make_menu_button(debug_panel, "デバッグ対戦を開始", Vector2(350, 445), Vector2(340, 52), start_debug_match)
+	make_menu_button(debug_panel, "戻る", Vector2(20, 20), Vector2(100, 42), show_home)
+	title_panel.visible = false
+	home_panel.visible = false
+	practice_panel.visible = false
+	debug_panel.visible = false
+
+
+func character_names() -> Array[String]:
+	return ["打鍵者", "算術士", "詠唱者"]
+
+
+func update_selection_labels() -> void:
+	var names := character_names()
+	if practice_preview:
+		practice_preview.text = "練習するキャラクター\n\n%s\n\n◀ / ▶ で切替" % names[practice_selection]
+	if debug_preview:
+		debug_preview.text = "デバッグ対戦\n\nP1: %s　　　　　　　　　P2: %s\n\n左右のボタンでそれぞれ切替" % [names[debug_p1_selection], names[debug_p2_selection]]
+
+
+func hide_menu_panels() -> void:
+	title_panel.visible = false
+	home_panel.visible = false
+	practice_panel.visible = false
+	debug_panel.visible = false
+
+
+func show_title() -> void:
+	screen = "title"
+	hide_menu_panels()
+	title_panel.visible = true
+	network_panel.visible = false
+	lobby_panel.visible = false
+	result_panel.visible = false
+	set_gameplay_hud_visible(false)
+
+
+func show_home() -> void:
+	screen = "home"
+	hide_menu_panels()
+	home_panel.visible = true
+	network_panel.visible = false
+	lobby_panel.visible = false
+	result_panel.visible = false
+	set_gameplay_hud_visible(false)
+
+
+func show_online_menu() -> void:
+	screen = "connection"
+	show_connection()
+
+
+func show_practice_select() -> void:
+	screen = "practice_select"
+	hide_menu_panels()
+	practice_panel.visible = true
+	update_selection_labels()
+	set_gameplay_hud_visible(false)
+
+
+func show_debug_select() -> void:
+	screen = "debug_select"
+	hide_menu_panels()
+	debug_panel.visible = true
+	update_selection_labels()
+	set_gameplay_hud_visible(false)
+
+
+func show_character_unavailable() -> void:
+	status_text = "キャラクター画面は準備中です。"
+
+
+func change_practice_selection(step: int) -> void:
+	practice_selection = posmod(practice_selection + step, 3)
+	update_selection_labels()
+
+
+func change_debug_selection(player_id: int, step: int) -> void:
+	if player_id == 1:
+		debug_p1_selection = posmod(debug_p1_selection + step, 3)
+	else:
+		debug_p2_selection = posmod(debug_p2_selection + step, 3)
+	update_selection_labels()
+
+
+func start_practice() -> void:
+	network_mode = "practice"
+	local_player_id = 1
+	p1_selection = practice_selection
+	p2_selection = practice_selection
+	begin_match()
+	screen = "match"
+	hide_menu_panels()
+
+
+func start_debug_match() -> void:
+	network_mode = "local"
+	local_player_id = 1
+	p1_selection = debug_p1_selection
+	p2_selection = debug_p2_selection
+	begin_match()
+	screen = "match"
+	hide_menu_panels()
+
+
 func show_connection() -> void:
 	phase = "connection"
+	screen = "connection"
+	hide_menu_panels()
 	network_panel.visible = true
 	lobby_panel.visible = false
 	result_panel.visible = false
 	challenge_panel.visible = false
+	set_gameplay_hud_visible(false)
 	network_status_label.text = "ホスト作成、またはIP:ポートを入力して参加してください。"
 
 
 func start_local_debug() -> void:
-	network_mode = "local"
-	local_player_id = 1
-	network_panel.visible = false
-	show_lobby()
+	show_debug_select()
 
 
 func start_host() -> void:
@@ -776,6 +1086,7 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_connected_to_server() -> void:
 	network_panel.visible = false
 	phase = "lobby"
+	screen = "online_waiting"
 	rpc_id(1, "request_lobby_state")
 
 
@@ -862,6 +1173,10 @@ func receive_network_state(state: Dictionary) -> void:
 	match_state.match_over = bool(state["match_over"])
 	match_state.winner_id = int(state["winner_id"])
 	phase = str(state["phase"])
+	if phase == "lobby":
+		screen = "online_waiting"
+	elif phase == "match" or phase == "countdown" or phase == "result":
+		screen = "match"
 	p1_selection = int(state["p1_selection"])
 	p2_selection = int(state["p2_selection"])
 	p1_ready = bool(state["p1_ready"])
@@ -965,6 +1280,8 @@ func receive_remote_result_action(action: String) -> void:
 
 func show_lobby() -> void:
 	phase = "lobby"
+	screen = "online_waiting" if network_mode in ["host", "client"] else "debug_waiting"
+	set_gameplay_hud_visible(false)
 	match_state.reset()
 	players = match_state.players
 	p1_ready = false
@@ -990,11 +1307,40 @@ func update_lobby(_delta: float) -> void:
 
 func refresh_lobby_label() -> void:
 	var names: Array[String] = ["打鍵者", "算術士", "詠唱者"]
-	lobby_label.text = "SKILL BATTLE GAME\n\nP1選択: [%d] %s     P2選択: [%d] %s\n\n1/2/3: P1選択       7/8/9: P2選択\nSpace: P1準備 / Enter: P2準備\n\nP1: %s     P2: %s\n\n両者が準備完了すると3秒カウントダウン" % [p1_selection + 1, names[p1_selection], p2_selection + 1, names[p2_selection], "準備完了" if p1_ready else "未準備", "準備完了" if p2_ready else "未準備"]
+	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
+	lobby_label.text = "オンライン対戦 - 待機画面"
+	var local_side := 2 if network_mode == "client" else 1
+	var remote_connected := multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
+	lobby_p1_preview.visible = local_side == 1
+	lobby_p2_preview.visible = local_side == 2
+	lobby_p1_info.text = "あなた\n%s\n%s" % [names[p1_selection], "準備完了" if p1_ready else "準備中"] if local_side == 1 else "対戦相手\n%s" % ("入室済み\n準備完了" if remote_connected and p1_ready else ("入室済み\n準備中" if remote_connected else "入室待ち"))
+	lobby_p2_info.text = "あなた\n%s\n%s" % [names[p2_selection], "準備完了" if p2_ready else "準備中"] if local_side == 2 else "対戦相手\n%s" % ("入室済み\n準備完了" if remote_connected and p2_ready else ("入室済み\n準備中" if remote_connected else "入室待ち"))
+	if local_side == 1:
+		lobby_p1_preview.texture = get_idle_texture(visual_ids[p1_selection])
+		lobby_p2_preview.texture = null
+	else:
+		lobby_p1_preview.texture = null
+		lobby_p2_preview.texture = get_idle_texture(visual_ids[p2_selection])
+	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready]:
+		button.visible = local_side == 1
+	for button in [lobby_p2_left, lobby_p2_right, lobby_p2_ready]:
+		button.visible = local_side == 2
+
+
+func get_idle_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return preload("res://assets/characters/arithmetician_idle.png")
+	if visual_id == "chanter":
+		return preload("res://assets/characters/chanter_idle.png")
+	return preload("res://assets/characters/typist_idle.png")
 
 
 func begin_match() -> void:
 	phase = "match"
+	screen = "match"
+	lobby_panel.visible = false
+	network_panel.visible = false
+	set_gameplay_hud_visible(true)
 	match_state.match_over = false
 	match_state.time_remaining = MATCH_DURATION
 	configure_player(1, p1_selection)
@@ -1005,9 +1351,11 @@ func begin_match() -> void:
 func configure_player(player_id: int, selection: int) -> void:
 	var player: Dictionary = players[player_id]
 	var ids: Array[String] = ["blade", "arithmetic", "chanter"]
+	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	var names: Array[String] = ["打鍵者", "算術士", "詠唱者"]
 	var colors: Array[Color] = [Color("ef6b73"), Color("7498ff"), Color("b98aff")]
 	player["character_id"] = ids[selection]
+	player["visual_id"] = visual_ids[selection]
 	player["name"] = names[selection]
 	player["color"] = colors[selection]
 	player["normal_damage"] = 12 if selection == 0 else (10 if selection == 1 else 11)
@@ -1087,8 +1435,16 @@ func update_hud() -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("080d1d"))
+	if screen == "title":
+		# 元画像の解像度に影響されず、1280x720画面内の固定領域に収める。
+		draw_texture_rect(title_logo.texture, Rect2(215, 170, 850, 260), false)
+		return
+	if screen != "match":
+		return
 	draw_arena()
-	for player_id in [1, 2]:
+	# 条件式の配列リテラルは未型付きArrayになるため、ここでは推論型で受ける。
+	var draw_player_ids := [1] if network_mode == "practice" else [1, 2]
+	for player_id in draw_player_ids:
 		draw_player(players[player_id])
 	for projectile in skill_projectiles:
 		draw_skill_projectile(projectile)
@@ -1117,36 +1473,54 @@ func draw_arena() -> void:
 	draw_rect(ARENA, Color("9a967c"), false, 3.0)
 
 
+func get_character_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_TEXTURE
+	if visual_id == "chanter":
+		return CHANTER_TEXTURE
+	return TYPIST_TEXTURE
+
+
+func get_sprite_direction_column(facing: Vector2) -> int:
+	var octant: int = int(posmod(roundi(facing.angle() / (PI / 4.0)), 8))
+	match octant:
+		0: return 6 # 右
+		1: return 7 # 下右
+		2: return 0 # 下
+		3: return 1 # 下左
+		4: return 2 # 左
+		5: return 3 # 上左
+		6: return 4 # 上
+		_: return 5 # 上右
+
+
 func draw_player(player: Dictionary) -> void:
 	var position_value: Vector2 = player["position"]
 	var color: Color = player["color"]
 	var facing: Vector2 = player["facing"]
-	var side := Vector2(-facing.y, facing.x)
-	var body_color := Color("fff1dc") if player["hit_time"] > 0.0 else color
 	draw_circle(position_value, PLAYER_RADIUS + 6.0, Color(color.r, color.g, color.b, 0.20))
 	if bool(player["focused"]):
 		draw_circle(position_value, PLAYER_RADIUS + 15.0, Color("ef6b7355"))
 		draw_arc(position_value, PLAYER_RADIUS + 18.0, 0.0, TAU, 28, Color("ffd0a1"), 2.5, true)
-	var character_texture: Texture2D = BLADE_TEXTURE
-	if str(player["character_id"]) == "arithmetic":
-		character_texture = ARITHMETIC_TEXTURE
-	elif str(player["character_id"]) == "chanter":
-		character_texture = CHANTER_TEXTURE
-	var sprite_rect := Rect2(position_value - Vector2(32, 32), Vector2(64, 64))
-	draw_texture_rect(character_texture, sprite_rect, false, body_color)
-	var weapon_start := position_value + facing * 7.0 + side * 10.0
-	var weapon_end := position_value + facing * 34.0 + side * 15.0
-	draw_line(weapon_start, weapon_end, Color("e9eef5"), 4.0)
+	var is_moving: bool = bool(player.get("is_moving", false))
+	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
+	var sprite_column: int = get_sprite_direction_column(facing)
+	var sprite_row: int = 0 if not is_moving else 1 + (int(floor(character_animation_elapsed * 8.0)) % 4)
+	var source_rect := Rect2(sprite_column * 64.0, sprite_row * 64.0, 64.0, 64.0)
+	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
+	draw_texture_rect_region(character_texture, sprite_rect, source_rect, Color.WHITE)
+	if player["hit_time"] > 0.0:
+		draw_circle(position_value, PLAYER_RADIUS + 2.0, Color(1.0, 1.0, 1.0, 0.22))
 	if player["attack_time"] > 0.0:
 		var angle := facing.angle()
 		draw_arc(position_value, SLASH_RANGE, angle - SLASH_ARC_HALF_ANGLE, angle + SLASH_ARC_HALF_ANGLE, 18, Color("fff3ad"), 7.0, true)
 	var health_ratio: float = float(player["hp"]) / 100.0
-	var health_rect := Rect2(position_value + Vector2(-30, -44), Vector2(60, 7))
+	var health_rect := Rect2(position_value + Vector2(-30, -54), Vector2(60, 7))
 	draw_rect(health_rect, Color("070b14"), true)
 	draw_rect(Rect2(health_rect.position, Vector2(health_rect.size.x * health_ratio, health_rect.size.y)), Color("52d6ad"), true)
 	if bool(player["focused"]) and float(player["interrupt_gauge_max"]) > 0.0:
 		var gauge_ratio: float = clampf(float(player["interrupt_gauge_display"]) / float(player["interrupt_gauge_max"]), 0.0, 1.0)
-		var gauge_rect := Rect2(position_value + Vector2(-30, -33), Vector2(60, 5))
+		var gauge_rect := Rect2(position_value + Vector2(-30, -43), Vector2(60, 5))
 		draw_rect(gauge_rect, Color("070b14"), true)
 		draw_rect(Rect2(gauge_rect.position, Vector2(gauge_rect.size.x * gauge_ratio, gauge_rect.size.y)), Color("ffc45e"), true)
 
@@ -1161,6 +1535,12 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if screen == "title":
+		if (event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_SPACE, KEY_ENTER]) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+			show_home()
+			return
+	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if phase == "lobby":
 			if network_mode == "client":

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d2rv5uxm1ih32"
-path="res://.godot/imported/arithmetic.svg-1c8c20aa41a921d9cd7cf2d42100441d.ctex"
+uid="uid://bj761tw1u3hv8"
+path="res://.godot/imported/chanter_pixel_8dir.png-44a458e9066fe2e84b7002939abedd76.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/arithmetic.svg"
-dest_files=["res://.godot/imported/arithmetic.svg-1c8c20aa41a921d9cd7cf2d42100441d.ctex"]
+source_file="res://assets/characters/chanter_pixel_8dir.png"
+dest_files=["res://.godot/imported/chanter_pixel_8dir.png-44a458e9066fe2e84b7002939abedd76.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

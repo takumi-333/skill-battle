@@ -26,6 +26,8 @@ func create_player(display_name: String, start_position: Vector2, start_facing: 
 	return {
 		"name": display_name,
 		"character_id": "blade",
+		"visual_id": "typist",
+		"is_moving": false,
 		"position": start_position,
 		"facing": start_facing,
 		"color": display_color,

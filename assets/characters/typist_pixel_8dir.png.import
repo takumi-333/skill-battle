@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7bn4nbcp0hbx"
-path="res://.godot/imported/chanter.svg-bdd3d8d89eb2c7dca09a56f92d5d46da.ctex"
+uid="uid://ccbrwf3bj7h0h"
+path="res://.godot/imported/typist_pixel_8dir.png-b602095fd1cfe6c79e3e192064ef25be.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/chanter.svg"
-dest_files=["res://.godot/imported/chanter.svg-bdd3d8d89eb2c7dca09a56f92d5d46da.ctex"]
+source_file="res://assets/characters/typist_pixel_8dir.png"
+dest_files=["res://.godot/imported/typist_pixel_8dir.png-b602095fd1cfe6c79e3e192064ef25be.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

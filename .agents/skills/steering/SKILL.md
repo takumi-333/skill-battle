@@ -5,6 +5,18 @@ description: 作業指示毎の作業計画、タスクリストをドキュメ�
 
 # Steering スキル
 
+## 依頼の受付・移管運用
+
+実装に関する依頼は、`docs/.steering/tmp.md` または `issues/issues-*.md` に記載する。モード1でステアリングを作成するときは、次の順序を必ず守る。
+
+1. 今回の依頼元として、`docs/.steering/tmp.md` またはユーザーが指定した `issues/issues-*.md` を一つ選ぶ。複数の issue がある場合は、ユーザーに対象ファイルを確認する。
+2. 選んだ依頼元の内容を読み取る。
+3. `docs/.steering/[YYYYMMDD]-[タスク名]/request.md` を作成し、その内容を一字も変更せずコピーする。
+4. `tmp.md` を依頼元にした場合のみ、内容を削除して空にする。issue ファイルを依頼元にした場合は変更しない。
+5. `request.md` を一次情報として、以後の `requirements.md`、`design.md`、`tasklist.md` を作成する。
+
+`request.md` は依頼原文の記録であり、要約・補足・編集を加えない。内容の整理や解釈は `requirements.md` に記載する。
+
 ステアリングファイル（`docs/.steering/`）に基づいた実装を支援し、tasklist.mdの進捗管理を確実に行うスキルです。
 
 ## スキルの目的
@@ -34,11 +46,19 @@ description: 作業指示毎の作業計画、タスクリストをドキュメ�
    現在の日付を取得し、`docs/.steering/[YYYYMMDD]-[作業名]/` の形式でディレクトリを作成
    ```
 
-2. **重要ドキュメントの確認**
+2. **依頼原文の移管**
+
+   今回の依頼元を一つ選び、作成したディレクトリの `request.md` に内容をそのままコピーする。通常の依頼では `docs/.steering/tmp.md`、issue 起点の依頼ではユーザーが指定した `issues/issues-*.md` を使用する。複数の issue がある場合は対象を確認する。
+
+   `tmp.md` を依頼元にした場合はコピー後に空にする。issue ファイルを依頼元にした場合は内容を変更しない。
+
+   `tmp.md` が空で、issue ファイルも指定されていない場合は、ユーザーが会話で示した依頼文を `request.md` にそのまま記録する。この場合も、`tmp.md` は空のままにする。
+
+3. **重要ドキュメントの確認**
 
    これらを読んで、プロジェクトの方針を理解する
 
-3. **テンプレートからファイル作成**
+4. **テンプレートからファイル作成**
 
    以下のテンプレートを読み込み、プレースホルダーを具体的な内容に置き換えてファイルを作成:
 
@@ -46,7 +66,7 @@ description: 作業指示毎の作業計画、タスクリストをドキュメ�
    - `.claude/skills/steering/templates/design.md` → `docs/.steering/[日付]-[作業名]/design.md`
    - `.claude/skills/steering/templates/tasklist.md` → `docs/.steering/[日付]-[作業名]/tasklist.md`
 
-4. **tasklist.mdの詳細化**
+5. **tasklist.mdの詳細化**
 
    requirements.mdとdesign.mdに基づいて、tasklist.mdを詳細化:
    - 各フェーズのタスクを具体的に記述

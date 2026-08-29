@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boc2hoe8xggkt"
-path="res://.godot/imported/blade.svg-613d4c5735d1c9004c3a65c5854503a1.ctex"
+uid="uid://cprenbp7wtjoj"
+path="res://.godot/imported/arithmetician_pixel_8dir.png-a5c6224c95e3977da954c823728477e0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/blade.svg"
-dest_files=["res://.godot/imported/blade.svg-613d4c5735d1c9004c3a65c5854503a1.ctex"]
+source_file="res://assets/characters/arithmetician_pixel_8dir.png"
+dest_files=["res://.godot/imported/arithmetician_pixel_8dir.png-a5c6224c95e3977da954c823728477e0.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
