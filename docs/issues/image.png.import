@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://kfkspvv5l4pa"
-path="res://.godot/imported/chanter_pixel_8dir_clean.png-5bd46278a40adc7e828abb1730f13283.ctex"
+uid="uid://d1d18eulmbyw1"
+path="res://.godot/imported/image.png-e09e74a4971ca870b8b06b433fd451e4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/chanter_pixel_8dir_clean.png"
-dest_files=["res://.godot/imported/chanter_pixel_8dir_clean.png-5bd46278a40adc7e828abb1730f13283.ctex"]
+source_file="res://docs/issues/image.png"
+dest_files=["res://.godot/imported/image.png-e09e74a4971ca870b8b06b433fd451e4.ctex"]
 
 [params]
 
