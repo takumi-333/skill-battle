@@ -49,7 +49,11 @@ class TraceCanvas extends Control:
 			draw_circle(point, 3.0, Color("fff2b0"))
 
 const ARENA := Rect2(40, 100, 1200, 580)
-const PLAYER_RADIUS := 26.0
+## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
+## アンカーから少し上にずらした縦長の楕円を当たり判定として使う。
+const PLAYER_HITBOX_RADIUS_X := 20.0
+const PLAYER_HITBOX_RADIUS_Y := 30.0
+const PLAYER_HITBOX_OFFSET := Vector2(0.0, -12.0)
 const PLAYER_SPEED := 280.0
 const SLASH_RANGE := 74.0
 const SLASH_DAMAGE := 12
@@ -272,7 +276,6 @@ func _process(delta: float) -> void:
 	update_player(1, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
 	if network_mode != "practice":
 		update_player(2, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
-		separate_players()
 	update_typing_challenge(delta)
 	update_skill_projectiles(delta)
 	update_magic_zones(delta)
@@ -324,12 +327,16 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	else:
 		direction.x = float(Input.is_key_pressed(right_key)) - float(Input.is_key_pressed(left_key))
 		direction.y = float(Input.is_key_pressed(down_key)) - float(Input.is_key_pressed(up_key))
+	var moved := false
 	if direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		player["facing"] = direction
 		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * (1.25 if float(player["buff_time"]) > 0.0 else 1.0)
-		player["position"] = clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
-	player["is_moving"] = direction.length_squared() > 0.0
+		var next_position := clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
+		if can_move_player_to(player_id, next_position):
+			player["position"] = next_position
+			moved = true
+	player["is_moving"] = moved
 	player["attack_cooldown"] = maxf(0.0, player["attack_cooldown"] - delta)
 	player["attack_time"] = maxf(0.0, player["attack_time"] - delta)
 	player["hit_time"] = maxf(0.0, player["hit_time"] - delta)
@@ -355,9 +362,9 @@ func try_attack(player_id: int) -> void:
 	players[player_id] = player
 	var target_id := 2 if player_id == 1 else 1
 	var target: Dictionary = players[target_id]
-	var to_target: Vector2 = target["position"] - player["position"]
+	var to_target: Vector2 = get_player_hitbox_center(target["position"]) - get_player_hitbox_center(player["position"])
 	var facing: Vector2 = player["facing"]
-	var in_range: bool = to_target.length() <= SLASH_RANGE + PLAYER_RADIUS
+	var in_range: bool = to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 	var in_front: bool = to_target.length_squared() > 0.0 and facing.dot(to_target.normalized()) >= cos(SLASH_ARC_HALF_ANGLE)
 	if in_range and in_front:
 		apply_damage(target_id, int(player["normal_damage"]), "%sの斬撃" % player["name"])
@@ -532,7 +539,7 @@ func spawn_typing_projectile(score: int) -> void:
 	var damage: int = 10 + roundi(float(score) * 0.1)
 	var speed: float = 500.0 + float(score) * 3.0
 	skill_projectiles.append({
-		"position": owner_position + facing * (PLAYER_RADIUS + SKILL_PROJECTILE_RADIUS),
+		"position": get_player_hitbox_center(owner_position) + facing * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS),
 		"velocity": facing * speed,
 		"damage": damage,
 		"lifetime": 1.6,
@@ -558,8 +565,7 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 		var target: Dictionary = players[target_id]
 		var owner_position: Vector2 = owner["position"]
 		var target_position: Vector2 = target["position"]
-		var distance: float = owner_position.distance_to(target_position)
-		if not is_big and distance <= 170.0:
+		if not is_big and is_point_in_player_hitbox(get_player_hitbox_center(owner_position), target_position, 170.0):
 			apply_damage(target_id, 18 + roundi(float(score) * 0.08), "詠唱者の衝撃波")
 		elif is_big:
 			spawn_zone(owner_id, score, owner["position"] + owner["facing"] * 110.0)
@@ -571,7 +577,7 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 	var facing: Vector2 = owner_facing.rotated(angle_offset)
 	skill_projectiles.append({
 		"owner_id": owner_id,
-		"position": owner["position"] + facing * (PLAYER_RADIUS + SKILL_PROJECTILE_RADIUS),
+		"position": get_player_hitbox_center(owner["position"]) + facing * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS),
 		"velocity": facing * (540.0 if is_big else 500.0),
 		"damage": (24 if is_big else 10) + roundi(float(score) * (0.12 if is_big else 0.1)),
 		"lifetime": 2.0 if is_big else 1.6,
@@ -593,7 +599,7 @@ func update_magic_zones(delta: float) -> void:
 			var target: Dictionary = players[target_id]
 			var target_position: Vector2 = target["position"]
 			var zone_position: Vector2 = zone["position"]
-			if target_position.distance_to(zone_position) <= 80.0:
+			if is_point_in_player_hitbox(zone_position, target_position, 80.0):
 				apply_damage(target_id, int(zone["damage"]), "魔法陣")
 			zone["damage_timer"] = 0.8
 		if float(zone["lifetime"]) <= 0.0:
@@ -612,7 +618,7 @@ func update_skill_projectiles(delta: float) -> void:
 		var target_id: int = 2 if owner_id == 1 else 1
 		var target: Dictionary = players[target_id]
 		var target_position: Vector2 = target["position"]
-		if position_value.distance_to(target_position) <= PLAYER_RADIUS + SKILL_PROJECTILE_RADIUS:
+		if is_point_in_player_hitbox(position_value, target_position, SKILL_PROJECTILE_RADIUS):
 			apply_damage(target_id, int(projectile["damage"]), "ブレード弾")
 			status_text = "ブレード弾が%sに命中！" % target["name"]
 			if bool(projectile["piercing"]):
@@ -629,23 +635,39 @@ func update_skill_projectiles(delta: float) -> void:
 			skill_projectiles[index] = projectile
 
 
-func separate_players() -> void:
-	var first: Dictionary = players[1]
-	var second: Dictionary = players[2]
-	var offset: Vector2 = second["position"] - first["position"]
-	var minimum_distance := PLAYER_RADIUS * 2.0
-	if offset.length_squared() > 0.0 and offset.length() < minimum_distance:
-		var push := offset.normalized() * (minimum_distance - offset.length()) * 0.5
-		first["position"] = clamp_to_arena(first["position"] - push)
-		second["position"] = clamp_to_arena(second["position"] + push)
-		players[1] = first
-		players[2] = second
+func get_player_hitbox_center(player_position: Vector2) -> Vector2:
+	return player_position + PLAYER_HITBOX_OFFSET
+
+
+func is_point_in_player_hitbox(point: Vector2, player_position: Vector2, padding: float = 0.0) -> bool:
+	var center := get_player_hitbox_center(player_position)
+	var radius_x: float = PLAYER_HITBOX_RADIUS_X + padding
+	var radius_y: float = PLAYER_HITBOX_RADIUS_Y + padding
+	var normalized_point := point - center
+	return (normalized_point.x * normalized_point.x) / (radius_x * radius_x) + (normalized_point.y * normalized_point.y) / (radius_y * radius_y) <= 1.0
+
+
+func can_move_player_to(player_id: int, next_position: Vector2) -> bool:
+	if network_mode == "practice":
+		return true
+	var other_id: int = 2 if player_id == 1 else 1
+	if not players.has(other_id):
+		return true
+	var other: Dictionary = players[other_id]
+	return not are_player_hitboxes_overlapping(next_position, other["position"])
+
+
+func are_player_hitboxes_overlapping(first_position: Vector2, second_position: Vector2) -> bool:
+	var offset := get_player_hitbox_center(first_position) - get_player_hitbox_center(second_position)
+	var combined_radius_x: float = PLAYER_HITBOX_RADIUS_X * 2.0
+	var combined_radius_y: float = PLAYER_HITBOX_RADIUS_Y * 2.0
+	return (offset.x * offset.x) / (combined_radius_x * combined_radius_x) + (offset.y * offset.y) / (combined_radius_y * combined_radius_y) < 1.0
 
 
 func clamp_to_arena(position_value: Vector2) -> Vector2:
 	return Vector2(
-		clampf(position_value.x, ARENA.position.x + PLAYER_RADIUS, ARENA.end.x - PLAYER_RADIUS),
-		clampf(position_value.y, ARENA.position.y + PLAYER_RADIUS, ARENA.end.y - PLAYER_RADIUS)
+		clampf(position_value.x, ARENA.position.x + PLAYER_HITBOX_RADIUS_X, ARENA.end.x - PLAYER_HITBOX_RADIUS_X),
+		clampf(position_value.y, ARENA.position.y + PLAYER_HITBOX_RADIUS_Y, ARENA.end.y - PLAYER_HITBOX_RADIUS_Y)
 	)
 
 
@@ -1794,23 +1816,20 @@ func get_sprite_direction_column(facing: Vector2) -> int:
 
 func draw_player(player_id: int, player: Dictionary) -> void:
 	var position_value: Vector2 = player["position"]
-	var color: Color = player["color"]
 	var facing: Vector2 = player["facing"]
-	draw_circle(position_value, PLAYER_RADIUS + 6.0, Color(color.r, color.g, color.b, 0.20))
 	if bool(player["focused"]):
-		draw_circle(position_value, PLAYER_RADIUS + 15.0, Color("ef6b7355"))
-		draw_arc(position_value, PLAYER_RADIUS + 18.0, 0.0, TAU, 28, Color("ffd0a1"), 2.5, true)
+		var focus_center := get_player_hitbox_center(position_value)
+		draw_arc(focus_center, PLAYER_HITBOX_RADIUS_Y + 15.0, 0.0, TAU, 28, Color("ffd0a1"), 2.5, true)
 	var is_moving: bool = bool(player.get("is_moving", false))
 	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
 	var sprite_column: int = get_sprite_direction_column(facing)
 	var sprite_row: int = 0 if not is_moving else 1 + (int(floor(character_animation_elapsed * 8.0)) % 4)
 	var source_rect := Rect2(sprite_column * 64.0, sprite_row * 64.0, 64.0, 64.0)
 	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
-	draw_texture_rect_region(character_texture, sprite_rect, source_rect, Color.WHITE)
+	var sprite_tint := Color(4.0, 4.0, 4.0, 1.0) if float(player["hit_time"]) > 0.0 else Color.WHITE
+	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
 	if network_mode in ["host", "client"] and player_id == local_player_id:
 		draw_string(ThemeDB.fallback_font, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
-	if player["hit_time"] > 0.0:
-		draw_circle(position_value, PLAYER_RADIUS + 2.0, Color(1.0, 1.0, 1.0, 0.22))
 	if player["attack_time"] > 0.0:
 		var angle := facing.angle()
 		draw_arc(position_value, SLASH_RANGE, angle - SLASH_ARC_HALF_ANGLE, angle + SLASH_ARC_HALF_ANGLE, 18, Color("fff3ad"), 7.0, true)
