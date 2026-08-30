@@ -129,6 +129,9 @@ var result_panel: Panel
 var result_label: Label
 var result_rematch_button: Button
 var result_lobby_button: Button
+var network_back_button: Button
+var lobby_home_button: Button
+var gameplay_home_button: Button
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
@@ -762,11 +765,18 @@ func create_hud() -> void:
 	status_label.size = Vector2(960, 28)
 	status_label.add_theme_font_size_override("font_size", 16)
 
-	controls_label = make_hud_label(Vector2(300, 72), HORIZONTAL_ALIGNMENT_CENTER)
-	controls_label.size = Vector2(680, 24)
-	controls_label.text = ""
+	controls_label = make_hud_label(Vector2(760, 68), HORIZONTAL_ALIGNMENT_RIGHT)
+	controls_label.size = Vector2(470, 48)
+	controls_label.text = "移動: 矢印キー  通常攻撃: Space\nスキル1/2: 1・2  課題中止: Esc"
 	controls_label.add_theme_font_size_override("font_size", 15)
 	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
+	gameplay_home_button = Button.new()
+	gameplay_home_button.text = "ホームへ戻る"
+	gameplay_home_button.position = Vector2(1040, 24)
+	gameplay_home_button.size = Vector2(190, 40)
+	gameplay_home_button.add_theme_font_size_override("font_size", 18)
+	gameplay_home_button.pressed.connect(return_to_home)
+	get_child(0).add_child(gameplay_home_button)
 	create_challenge_ui(layer)
 
 
@@ -775,7 +785,8 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	player_two_label.visible = is_visible and network_mode == "local"
 	timer_label.visible = is_visible
 	status_label.visible = false
-	controls_label.visible = false
+	controls_label.visible = is_visible and network_mode == "practice"
+	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local"]
 	if not is_visible:
 		challenge_panel.visible = false
 		challenge_dimmer.visible = false
@@ -783,12 +794,12 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 
 func create_lobby_ui() -> void:
 	lobby_panel = Panel.new()
-	lobby_panel.position = Vector2(35, 105)
-	lobby_panel.size = Vector2(1210, 540)
+	lobby_panel.position = Vector2.ZERO
+	lobby_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = Color("8fa8e8")
-	style.set_border_width_all(2)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -823,6 +834,7 @@ func create_lobby_ui() -> void:
 	lobby_p2_left = make_lobby_button("◀", Vector2(735, 410), func(): set_lobby_selection(2, -1))
 	lobby_p2_right = make_lobby_button("▶", Vector2(1030, 410), func(): set_lobby_selection(2, 1))
 	lobby_p2_ready = make_lobby_button("準備完了", Vector2(815, 465), func(): toggle_lobby_ready(2), Vector2(240, 46))
+	lobby_home_button = make_lobby_button("ホームへ戻る", Vector2(40, 24), return_to_home, Vector2(190, 42))
 
 
 func make_lobby_info(info_position: Vector2, info_size: Vector2) -> Label:
@@ -887,12 +899,12 @@ func toggle_lobby_ready(player_id: int) -> void:
 
 func create_result_ui() -> void:
 	result_panel = Panel.new()
-	result_panel.position = Vector2(330, 170)
-	result_panel.size = Vector2(620, 320)
+	result_panel.position = Vector2.ZERO
+	result_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = Color("ffc45e")
-	style.set_border_width_all(2)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -900,21 +912,21 @@ func create_result_ui() -> void:
 	result_panel.add_theme_stylebox_override("panel", style)
 	get_child(0).add_child(result_panel)
 	result_label = Label.new()
-	result_label.position = Vector2(22, 18)
-	result_label.size = Vector2(575, 270)
+	result_label.position = Vector2(330, 170)
+	result_label.size = Vector2(620, 270)
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	result_label.add_theme_font_size_override("font_size", 21)
 	result_panel.add_child(result_label)
 	result_rematch_button = Button.new()
 	result_rematch_button.text = "もう一度対戦"
-	result_rematch_button.position = Vector2(120, 270)
+	result_rematch_button.position = Vector2(450, 440)
 	result_rematch_button.size = Vector2(170, 36)
 	result_rematch_button.pressed.connect(request_rematch)
 	result_panel.add_child(result_rematch_button)
 	result_lobby_button = Button.new()
 	result_lobby_button.text = "ロビーへ戻る"
-	result_lobby_button.position = Vector2(330, 270)
+	result_lobby_button.position = Vector2(660, 440)
 	result_lobby_button.size = Vector2(170, 36)
 	result_lobby_button.pressed.connect(request_return_to_lobby)
 	result_panel.add_child(result_lobby_button)
@@ -923,12 +935,12 @@ func create_result_ui() -> void:
 
 func create_network_ui() -> void:
 	network_panel = Panel.new()
-	network_panel.position = Vector2(330, 175)
-	network_panel.size = Vector2(620, 300)
+	network_panel.position = Vector2.ZERO
+	network_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = Color("71d6ba")
-	style.set_border_width_all(2)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -937,53 +949,60 @@ func create_network_ui() -> void:
 	get_child(0).add_child(network_panel)
 	var title := Label.new()
 	title.text = "オンライン対戦"
-	title.position = Vector2(30, 25)
-	title.size = Vector2(560, 38)
+	title.position = Vector2(330, 175)
+	title.size = Vector2(620, 38)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	network_panel.add_child(title)
 	network_address_input = LineEdit.new()
 	network_address_input.text = "127.0.0.1:7000"
 	network_address_input.placeholder_text = "接続先 IP:ポート"
-	network_address_input.position = Vector2(110, 93)
+	network_address_input.position = Vector2(440, 243)
 	network_address_input.size = Vector2(400, 38)
 	network_panel.add_child(network_address_input)
 	var host_button := Button.new()
 	host_button.text = "ルームを作成"
-	host_button.position = Vector2(110, 150)
+	host_button.position = Vector2(440, 300)
 	host_button.size = Vector2(185, 42)
 	host_button.pressed.connect(start_host)
 	network_panel.add_child(host_button)
 	var join_button := Button.new()
 	join_button.text = "ルームに参加"
-	join_button.position = Vector2(325, 150)
+	join_button.position = Vector2(655, 300)
 	join_button.size = Vector2(185, 42)
 	join_button.pressed.connect(join_host)
 	network_panel.add_child(join_button)
 	var local_button := Button.new()
 	local_button.text = "同一PCデバッグで開始"
-	local_button.position = Vector2(200, 205)
+	local_button.position = Vector2(530, 355)
 	local_button.size = Vector2(220, 34)
 	local_button.pressed.connect(start_local_debug)
 	local_button.visible = false
 	network_panel.add_child(local_button)
 	network_status_label = Label.new()
-	network_status_label.position = Vector2(30, 255)
+	network_status_label.position = Vector2(330, 405)
 	network_status_label.size = Vector2(560, 26)
 	network_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	network_status_label.add_theme_color_override("font_color", Color("b7c1d8"))
 	network_panel.add_child(network_status_label)
+	network_back_button = Button.new()
+	network_back_button.text = "ホームへ戻る"
+	network_back_button.position = Vector2(40, 24)
+	network_back_button.size = Vector2(190, 42)
+	network_back_button.add_theme_font_size_override("font_size", 18)
+	network_back_button.pressed.connect(return_to_home)
+	network_panel.add_child(network_back_button)
 
 
 func make_menu_panel(panel_position: Vector2, panel_size: Vector2, border_color: Color) -> Panel:
 	var panel := Panel.new()
-	panel.position = panel_position
-	panel.size = panel_size
+	panel.position = Vector2.ZERO
+	panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = border_color
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(14)
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
 	panel.add_theme_stylebox_override("panel", style)
 	get_child(0).add_child(panel)
 	return panel
@@ -1006,8 +1025,8 @@ func create_navigation_ui() -> void:
 	var title_panel_style := StyleBoxFlat.new()
 	title_panel_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
 	title_panel_style.border_color = Color("71d6ba")
-	title_panel_style.set_border_width_all(2)
-	title_panel_style.set_corner_radius_all(14)
+	title_panel_style.set_border_width_all(0)
+	title_panel_style.set_corner_radius_all(0)
 	title_panel.add_theme_stylebox_override("panel", title_panel_style)
 	title_logo = TextureRect.new()
 	title_logo.texture = preload("res://assets/ui/skill_battlers_logo.png")
@@ -1020,7 +1039,7 @@ func create_navigation_ui() -> void:
 	title_panel.add_child(title_logo)
 	title_prompt = Label.new()
 	title_prompt.text = "Press Space / Enter / Click to Start"
-	title_prompt.position = Vector2(40, 390)
+	title_prompt.position = Vector2(200, 390)
 	title_prompt.size = Vector2(880, 48)
 	title_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_prompt.add_theme_font_size_override("font_size", 28)
@@ -1029,51 +1048,51 @@ func create_navigation_ui() -> void:
 	home_panel = make_menu_panel(Vector2(150, 90), Vector2(980, 540), Color("8fa8e8"))
 	var home_title := Label.new()
 	home_title.text = "SKILL BATTLE HOME"
-	home_title.position = Vector2(30, 24)
+	home_title.position = Vector2(180, 24)
 	home_title.size = Vector2(920, 50)
 	home_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	home_title.add_theme_font_size_override("font_size", 30)
 	home_panel.add_child(home_title)
-	make_menu_button(home_panel, "オンライン対戦", Vector2(55, 130), Vector2(400, 260), show_online_menu)
-	make_menu_button(home_panel, "練習", Vector2(525, 115), Vector2(370, 75), show_practice_select)
-	var character_button := make_menu_button(home_panel, "キャラクター", Vector2(525, 210), Vector2(370, 75), show_character_unavailable)
+	make_menu_button(home_panel, "オンライン対戦", Vector2(205, 130), Vector2(400, 260), show_online_menu)
+	make_menu_button(home_panel, "練習", Vector2(675, 115), Vector2(370, 75), show_practice_select)
+	var character_button := make_menu_button(home_panel, "キャラクター", Vector2(675, 210), Vector2(370, 75), show_character_unavailable)
 	character_button.tooltip_text = "キャラクター育成画面は準備中です"
-	make_menu_button(home_panel, "デバッグ", Vector2(525, 305), Vector2(370, 75), show_debug_select)
+	make_menu_button(home_panel, "デバッグ", Vector2(675, 305), Vector2(370, 75), show_debug_select)
 
 	practice_panel = make_menu_panel(Vector2(210, 90), Vector2(860, 540), Color("71d6ba"))
 	practice_preview = Label.new()
-	practice_preview.position = Vector2(160, 35)
+	practice_preview.position = Vector2(370, 35)
 	practice_preview.size = Vector2(540, 42)
 	practice_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	practice_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	practice_preview.add_theme_font_size_override("font_size", 28)
 	practice_panel.add_child(practice_preview)
-	practice_portrait = make_selection_portrait(practice_panel, Vector2(270, 82), Vector2(320, 250))
-	make_menu_button(practice_panel, "◀", Vector2(90, 350), Vector2(90, 55), func(): change_practice_selection(-1))
-	make_menu_button(practice_panel, "▶", Vector2(680, 350), Vector2(90, 55), func(): change_practice_selection(1))
-	make_menu_button(practice_panel, "このキャラクターで練習", Vector2(260, 430), Vector2(340, 52), start_practice)
-	make_menu_button(practice_panel, "戻る", Vector2(20, 20), Vector2(100, 42), show_home)
+	practice_portrait = make_selection_portrait(practice_panel, Vector2(480, 82), Vector2(320, 250))
+	make_menu_button(practice_panel, "◀", Vector2(300, 350), Vector2(90, 55), func(): change_practice_selection(-1))
+	make_menu_button(practice_panel, "▶", Vector2(890, 350), Vector2(90, 55), func(): change_practice_selection(1))
+	make_menu_button(practice_panel, "このキャラクターで練習", Vector2(470, 430), Vector2(340, 52), start_practice)
+	make_menu_button(practice_panel, "戻る", Vector2(230, 20), Vector2(100, 42), show_home)
 
 	debug_panel = make_menu_panel(Vector2(120, 70), Vector2(1040, 580), Color("ffc45e"))
 	debug_preview = Label.new()
-	debug_preview.position = Vector2(35, 25)
+	debug_preview.position = Vector2(155, 25)
 	debug_preview.size = Vector2(970, 40)
 	debug_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	debug_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	debug_preview.add_theme_font_size_override("font_size", 25)
 	debug_panel.add_child(debug_preview)
-	debug_p1_name = make_selection_name(debug_panel, Vector2(90, 64), Vector2(390, 36))
-	debug_p2_name = make_selection_name(debug_panel, Vector2(560, 64), Vector2(390, 36))
-	debug_p1_portrait = make_selection_portrait(debug_panel, Vector2(115, 102), Vector2(340, 235))
-	debug_p2_portrait = make_selection_portrait(debug_panel, Vector2(585, 102), Vector2(340, 235))
-	make_menu_button(debug_panel, "P1 ◀", Vector2(90, 350), Vector2(130, 55), func(): change_debug_selection(1, -1))
-	make_menu_button(debug_panel, "P1 ▶", Vector2(245, 350), Vector2(130, 55), func(): change_debug_selection(1, 1))
-	make_menu_button(debug_panel, "P2 ◀", Vector2(665, 350), Vector2(130, 55), func(): change_debug_selection(2, -1))
-	make_menu_button(debug_panel, "P2 ▶", Vector2(820, 350), Vector2(130, 55), func(): change_debug_selection(2, 1))
-	debug_control_p1_button = make_menu_button(debug_panel, "P1を操作", Vector2(270, 420), Vector2(220, 42), func(): set_debug_controlled_player(1))
-	debug_control_p2_button = make_menu_button(debug_panel, "P2を操作", Vector2(550, 420), Vector2(220, 42), func(): set_debug_controlled_player(2))
-	make_menu_button(debug_panel, "デバッグ対戦を開始", Vector2(350, 480), Vector2(340, 52), start_debug_match)
-	make_menu_button(debug_panel, "戻る", Vector2(20, 20), Vector2(100, 42), show_home)
+	debug_p1_name = make_selection_name(debug_panel, Vector2(210, 64), Vector2(390, 36))
+	debug_p2_name = make_selection_name(debug_panel, Vector2(680, 64), Vector2(390, 36))
+	debug_p1_portrait = make_selection_portrait(debug_panel, Vector2(235, 102), Vector2(340, 235))
+	debug_p2_portrait = make_selection_portrait(debug_panel, Vector2(705, 102), Vector2(340, 235))
+	make_menu_button(debug_panel, "P1 ◀", Vector2(210, 350), Vector2(130, 55), func(): change_debug_selection(1, -1))
+	make_menu_button(debug_panel, "P1 ▶", Vector2(365, 350), Vector2(130, 55), func(): change_debug_selection(1, 1))
+	make_menu_button(debug_panel, "P2 ◀", Vector2(785, 350), Vector2(130, 55), func(): change_debug_selection(2, -1))
+	make_menu_button(debug_panel, "P2 ▶", Vector2(940, 350), Vector2(130, 55), func(): change_debug_selection(2, 1))
+	debug_control_p1_button = make_menu_button(debug_panel, "P1を操作", Vector2(390, 420), Vector2(220, 42), func(): set_debug_controlled_player(1))
+	debug_control_p2_button = make_menu_button(debug_panel, "P2を操作", Vector2(670, 420), Vector2(220, 42), func(): set_debug_controlled_player(2))
+	make_menu_button(debug_panel, "デバッグ対戦を開始", Vector2(470, 480), Vector2(340, 52), start_debug_match)
+	make_menu_button(debug_panel, "戻る", Vector2(140, 20), Vector2(100, 42), show_home)
 	title_panel.visible = false
 	home_panel.visible = false
 	practice_panel.visible = false
@@ -1159,6 +1178,29 @@ func show_home() -> void:
 	set_gameplay_hud_visible(false)
 
 
+func return_to_home() -> void:
+	if challenge_owner != 0:
+		end_active_challenge(false, 0, "課題を中止した。")
+	challenge_owner = 0
+	challenge_panel.visible = false
+	challenge_dimmer.visible = false
+	typing_input.release_focus()
+	skill_projectiles.clear()
+	magic_zones.clear()
+	match_state.reset()
+	players = match_state.players
+	phase = "lobby"
+	if multiplayer.has_multiplayer_peer():
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	network_mode = "local"
+	local_player_id = 1
+	p1_ready = false
+	p2_ready = false
+	network_target_players.clear()
+	remote_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false}
+	show_home()
+
+
 func show_online_menu() -> void:
 	screen = "connection"
 	show_connection()
@@ -1233,6 +1275,7 @@ func show_connection() -> void:
 	challenge_dimmer.visible = false
 	set_gameplay_hud_visible(false)
 	network_status_label.text = "ホスト作成、またはIP:ポートを入力して参加してください。"
+	network_back_button.visible = true
 
 
 func start_local_debug() -> void:
@@ -1487,6 +1530,7 @@ func show_lobby() -> void:
 	challenge_panel.visible = false
 	challenge_dimmer.visible = false
 	lobby_panel.visible = true
+	lobby_home_button.visible = network_mode in ["host", "client"]
 	result_panel.visible = false
 	status_text = "キャラクターを選択してください。"
 	update_lobby(0.0)
@@ -1799,6 +1843,9 @@ func _input(event: InputEvent) -> void:
 	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE and phase == "match" and challenge_owner == 0 and network_mode in ["practice", "local"]:
+			return_to_home()
+			return
 		if phase == "lobby":
 			if network_mode == "client":
 				if event.keycode == KEY_1 or event.keycode == KEY_7:
