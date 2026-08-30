@@ -1,0 +1,15 @@
+[
+  { "name": "draft", "color": "6E7781", "description": "起票途中。自動実装しない" },
+  { "name": "needs-info", "color": "D93F0B", "description": "実装前に追加情報が必要" },
+  { "name": "ready-for-agent", "color": "0E8A16", "description": "Codexによる作業開始を許可" },
+  { "name": "in-progress", "color": "1D76DB", "description": "Codexが作業中" },
+  { "name": "blocked", "color": "B60205", "description": "外部情報または判断待ち" },
+  { "name": "needs-review", "color": "5319E7", "description": "PRのレビュー待ち" },
+  { "name": "done", "color": "0E8A16", "description": "マージ済み・完了" },
+  { "name": "priority:high", "color": "B60205", "description": "優先度: 高" },
+  { "name": "priority:normal", "color": "FBCA04", "description": "優先度: 通常" },
+  { "name": "priority:low", "color": "C2E0C6", "description": "優先度: 低" },
+  { "name": "size:S", "color": "BFDADC", "description": "規模: 小" },
+  { "name": "size:M", "color": "F9D0C4", "description": "規模: 中" },
+  { "name": "size:L", "color": "D4C5F9", "description": "規模: 大。設計承認後に実装" }
+]
