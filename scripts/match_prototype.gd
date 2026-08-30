@@ -21,6 +21,33 @@ class StatusIcon extends Control:
 		else:
 			draw_arc(center, 14.0, spinner_angle, spinner_angle + PI * 1.45, 20, Color("ffc45e"), 4.0, true)
 
+class TraceCanvas extends Control:
+	var target_points: PackedVector2Array = PackedVector2Array()
+	var input_points: PackedVector2Array = PackedVector2Array()
+	var is_tracing: bool = false
+
+	func set_trace_data(target: PackedVector2Array, input: PackedVector2Array) -> void:
+		target_points = target
+		input_points = input
+		queue_redraw()
+
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), Color("0a1224cc"), true)
+		draw_rect(Rect2(Vector2.ZERO, size), Color("7386b8"), false, 2.0)
+		if target_points.size() >= 2:
+			draw_polyline(target_points, Color("8fa8e888"), 12.0, true)
+			draw_circle(target_points[0], 13.0, Color("71d6ba"))
+			draw_circle(target_points[0], 6.0, Color("10233a"))
+			var end_point := target_points[target_points.size() - 1]
+			var previous_point := target_points[target_points.size() - 2]
+			var direction := (end_point - previous_point).normalized()
+			var side := direction.orthogonal() * 10.0
+			draw_colored_polygon(PackedVector2Array([end_point, end_point - direction * 24.0 + side, end_point - direction * 24.0 - side]), Color("ffc45e"))
+		if input_points.size() >= 2:
+			draw_polyline(input_points, Color("fff2b0"), 5.0, true)
+		for point in input_points:
+			draw_circle(point, 3.0, Color("fff2b0"))
+
 const ARENA := Rect2(40, 100, 1200, 580)
 const PLAYER_RADIUS := 26.0
 const PLAYER_SPEED := 280.0
@@ -71,6 +98,7 @@ var challenge_prompt: String = ""
 var challenge_answer: String = ""
 var challenge_score: int = 0
 var challenge_trace_points: PackedVector2Array = PackedVector2Array()
+var challenge_target_points: PackedVector2Array = PackedVector2Array()
 var challenge_definitions: Dictionary = {}
 var network_mode: String = "local"
 var local_player_id: int = 1
@@ -91,6 +119,9 @@ var challenge_panel: PanelContainer
 var challenge_title_label: Label
 var challenge_prompt_label: Label
 var challenge_progress_label: Label
+var challenge_dimmer: ColorRect
+var challenge_time_bar: ProgressBar
+var challenge_trace_canvas: TraceCanvas
 var typing_input: LineEdit
 var lobby_panel: Panel
 var lobby_label: Label
@@ -378,6 +409,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 		challenge_prompt = "星形をなぞってください" if is_big else "右向きの線をなぞってください"
 		challenge_answer = ""
 		challenge_skill = "big_trace" if is_big else "small_trace"
+		challenge_target_points = make_trace_target(is_big)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
 	player["interrupt_gauge_max"] = 50.0 if is_big else TYPING_INTERRUPT_GAUGE
@@ -385,6 +417,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	players[owner_id] = player
 	var show_local_challenge: bool = network_mode != "host" or owner_id == 1
+	challenge_dimmer.visible = show_local_challenge
 	challenge_panel.visible = show_local_challenge
 	typing_input.visible = not challenge_skill.ends_with("trace")
 	typing_input.text = ""
@@ -392,6 +425,24 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 		typing_input.grab_focus()
 	status_text = "%sが%sの集中を開始！" % [player["name"], "スキル2" if is_big else "スキル1"]
 	update_challenge_ui(0.0)
+	update_trace_canvas()
+
+
+func make_trace_target(is_big: bool) -> PackedVector2Array:
+	if not is_big:
+		return PackedVector2Array([Vector2(120, 110), Vector2(560, 110)])
+	var center := Vector2(340, 118)
+	var points := PackedVector2Array()
+	for index in range(11):
+		var angle := -PI / 2.0 + float(index) * TAU / 10.0
+		var radius := 96.0 if index % 2 == 0 else 39.0
+		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	return points
+
+
+func update_trace_canvas() -> void:
+	if challenge_trace_canvas:
+		challenge_trace_canvas.set_trace_data(challenge_target_points, challenge_trace_points)
 
 
 func update_typing_challenge(delta: float) -> void:
@@ -453,6 +504,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 		player["challenge_best_score"] = maxi(int(player["challenge_best_score"]), score)
 	players[owner_id] = player
 	challenge_panel.visible = false
+	challenge_dimmer.visible = false
 	typing_input.release_focus()
 	typing_input.visible = true
 	if success:
@@ -462,6 +514,8 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 		status_text = failure_message
 	challenge_owner = 0
 	challenge_skill = ""
+	challenge_target_points.clear()
+	update_trace_canvas()
 
 
 func end_typing_challenge(success: bool, score: int, failure_message: String) -> void:
@@ -622,8 +676,11 @@ func interrupt_active_challenge(player_id: int, attack_name: String) -> void:
 	player["small_cooldown"] = TYPING_SKILL_COOLDOWN
 	players[player_id] = player
 	challenge_panel.visible = false
+	challenge_dimmer.visible = false
 	typing_input.release_focus()
 	challenge_owner = 0
+	challenge_target_points.clear()
+	update_trace_canvas()
 	status_text = "%sの集中は%sで中断された。" % [player["name"], attack_name]
 
 
@@ -631,6 +688,7 @@ func finish_match(winner_id: int) -> void:
 	match_state.match_over = true
 	match_state.winner_id = winner_id
 	challenge_panel.visible = false
+	challenge_dimmer.visible = false
 	typing_input.release_focus()
 	status_text = "%sの勝利！ Rキーで再戦できます。" % players[winner_id]["name"]
 	show_result(winner_id)
@@ -720,6 +778,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	controls_label.visible = false
 	if not is_visible:
 		challenge_panel.visible = false
+		challenge_dimmer.visible = false
 
 
 func create_lobby_ui() -> void:
@@ -1171,6 +1230,7 @@ func show_connection() -> void:
 	lobby_panel.visible = false
 	result_panel.visible = false
 	challenge_panel.visible = false
+	challenge_dimmer.visible = false
 	set_gameplay_hud_visible(false)
 	network_status_label.text = "ホスト作成、またはIP:ポートを入力して参加してください。"
 
@@ -1319,6 +1379,7 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_owner = int(state["challenge_owner"])
 	challenge_skill = str(state["challenge_skill"])
 	challenge_prompt = str(state["challenge_prompt"])
+	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if challenge_skill.ends_with("trace") else PackedVector2Array()
 	update_client_ui_from_state()
 
 
@@ -1345,10 +1406,12 @@ func update_client_ui_from_state() -> void:
 		return
 	result_panel.visible = false
 	var player_is_challenging: bool = challenge_owner == local_player_id and phase == "match"
+	challenge_dimmer.visible = player_is_challenging
 	challenge_panel.visible = player_is_challenging
 	if player_is_challenging:
 		challenge_prompt_label.text = challenge_prompt
 		typing_input.visible = not challenge_skill.ends_with("trace")
+		update_challenge_ui(float(players[local_player_id]["challenge_elapsed"]))
 		if typing_input.visible and not typing_input.has_focus():
 			typing_input.grab_focus()
 	else:
@@ -1422,6 +1485,7 @@ func show_lobby() -> void:
 	skill_projectiles.clear()
 	magic_zones.clear()
 	challenge_panel.visible = false
+	challenge_dimmer.visible = false
 	lobby_panel.visible = true
 	result_panel.visible = false
 	status_text = "キャラクターを選択してください。"
@@ -1509,9 +1573,16 @@ func create_challenge_ui(layer: CanvasLayer) -> void:
 	var challenge_layer: ChallengeLayer = ChallengeLayerData.new()
 	add_child(challenge_layer)
 	layer = challenge_layer
+	challenge_dimmer = ColorRect.new()
+	challenge_dimmer.position = Vector2.ZERO
+	challenge_dimmer.size = Vector2(1280, 720)
+	challenge_dimmer.color = Color(0.02, 0.04, 0.10, 0.58)
+	challenge_dimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	challenge_dimmer.visible = false
+	layer.add_child(challenge_dimmer)
 	challenge_panel = PanelContainer.new()
-	challenge_panel.position = Vector2(40, 520)
-	challenge_panel.size = Vector2(390, 154)
+	challenge_panel.position = Vector2(250, 185)
+	challenge_panel.size = Vector2(780, 400)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color("111b34e8")
 	panel_style.border_color = Color("ef6b73")
@@ -1524,34 +1595,63 @@ func create_challenge_ui(layer: CanvasLayer) -> void:
 	layer.add_child(challenge_panel)
 
 	var content: VBoxContainer = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 5)
+	content.add_theme_constant_override("separation", 10)
+	content.add_theme_constant_override("margin_left", 22)
+	content.add_theme_constant_override("margin_top", 18)
+	content.add_theme_constant_override("margin_right", 22)
+	content.add_theme_constant_override("margin_bottom", 18)
 	challenge_panel.add_child(content)
+	challenge_time_bar = ProgressBar.new()
+	challenge_time_bar.min_value = 0.0
+	challenge_time_bar.max_value = 1.0
+	challenge_time_bar.value = 1.0
+	challenge_time_bar.show_percentage = false
+	challenge_time_bar.custom_minimum_size = Vector2(0, 8)
+	var time_bar_style := StyleBoxFlat.new()
+	time_bar_style.bg_color = Color("ffc45e")
+	time_bar_style.set_corner_radius_all(4)
+	challenge_time_bar.add_theme_stylebox_override("fill", time_bar_style)
+	var time_bar_bg := StyleBoxFlat.new()
+	time_bar_bg.bg_color = Color("263452")
+	time_bar_bg.set_corner_radius_all(4)
+	challenge_time_bar.add_theme_stylebox_override("background", time_bar_bg)
+	content.add_child(challenge_time_bar)
 	challenge_title_label = Label.new()
-	challenge_title_label.add_theme_font_size_override("font_size", 18)
+	challenge_title_label.add_theme_font_size_override("font_size", 26)
 	challenge_title_label.add_theme_color_override("font_color", Color("ffc1c6"))
+	challenge_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(challenge_title_label)
 	challenge_prompt_label = Label.new()
-	challenge_prompt_label.add_theme_font_size_override("font_size", 17)
+	challenge_prompt_label.add_theme_font_size_override("font_size", 20)
+	challenge_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(challenge_prompt_label)
+	challenge_trace_canvas = TraceCanvas.new()
+	challenge_trace_canvas.custom_minimum_size = Vector2(0, 235)
+	challenge_trace_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	challenge_trace_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(challenge_trace_canvas)
 	typing_input = LineEdit.new()
 	typing_input.placeholder_text = "ここに入力して Enter"
 	typing_input.add_theme_font_size_override("font_size", 18)
 	typing_input.text_submitted.connect(_on_typing_submitted)
 	content.add_child(typing_input)
 	challenge_progress_label = Label.new()
-	challenge_progress_label.add_theme_font_size_override("font_size", 13)
+	challenge_progress_label.add_theme_font_size_override("font_size", 16)
 	challenge_progress_label.add_theme_color_override("font_color", Color("b7c1d8"))
+	challenge_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(challenge_progress_label)
 	challenge_panel.visible = false
 
 
 func update_challenge_ui(elapsed: float) -> void:
 	var challenge_player: Dictionary = players[challenge_owner] if challenge_owner in players else {}
-	var skill_name := "スキル2" if challenge_skill.begins_with("big") else "スキル1"
-	challenge_title_label.text = "%s・%s  集中中" % [challenge_player.get("name", ""), skill_name]
+	var skill_name := "スキル２" if challenge_skill.begins_with("big") else "スキル１"
+	challenge_title_label.text = "%s　発動！！" % skill_name
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
-	challenge_progress_label.text = "残り %.1f秒  |  Esc: 中止  |  集中中は移動低下・通常攻撃不可" % maxf(0.0, limit - elapsed)
+	challenge_progress_label.text = "残り %.1f秒　|　Esc: 中止" % maxf(0.0, limit - elapsed)
+	challenge_time_bar.value = clampf(1.0 - elapsed / limit, 0.0, 1.0)
+	update_trace_canvas()
 
 
 func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> Label:
@@ -1608,8 +1708,6 @@ func _draw() -> void:
 		var zone_ratio: float = clampf(float(zone["lifetime"]) / ZONE_DURATION, 0.0, 1.0)
 		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, 0.12 + zone_ratio * 0.10))
 		draw_arc(zone["position"], 80.0, 0.0, TAU, 32, Color("c7a6ff"), 3.0, true)
-	if challenge_owner != 0 and challenge_skill.ends_with("trace") and challenge_trace_points.size() >= 2:
-		draw_polyline(challenge_trace_points, Color("ffd36a"), 5.0, true)
 
 
 func draw_arena() -> void:
@@ -1736,9 +1834,12 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and challenge_owner != 0 and challenge_skill.ends_with("trace"):
 		if network_mode == "host" and challenge_owner != 1:
 			return
+		if challenge_trace_canvas == null or not challenge_trace_canvas.get_global_rect().has_point(event.position):
+			return
 		if event.pressed:
 			challenge_trace_points.clear()
-			challenge_trace_points.append(event.position)
+			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
+			update_trace_canvas()
 		else:
 			if network_mode == "client":
 				rpc_id(1, "receive_remote_trace", challenge_trace_points)
@@ -1749,15 +1850,44 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and challenge_owner != 0 and challenge_skill.ends_with("trace") and event.button_mask != 0:
 		if network_mode == "host" and challenge_owner != 1:
 			return
-		challenge_trace_points.append(event.position)
+		if challenge_trace_canvas != null and challenge_trace_canvas.get_global_rect().has_point(event.position):
+			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
+			update_trace_canvas()
 
 
 func evaluate_trace() -> int:
-	if challenge_trace_points.size() < 2:
+	if challenge_trace_points.size() < 2 or challenge_target_points.size() < 2:
 		return 0
-	var path_length: float = 0.0
-	for index in range(1, challenge_trace_points.size()):
-		path_length += challenge_trace_points[index - 1].distance_to(challenge_trace_points[index])
-	var target_length: float = 260.0 if challenge_skill.begins_with("big") else 140.0
-	var length_score: float = clampf(100.0 - absf(path_length - target_length) * 0.35, 0.0, 100.0)
-	return roundi(length_score)
+	var start_score := clampf(100.0 - challenge_trace_points[0].distance_to(challenge_target_points[0]) * 0.8, 0.0, 100.0)
+	var end_score := clampf(100.0 - challenge_trace_points[challenge_trace_points.size() - 1].distance_to(challenge_target_points[challenge_target_points.size() - 1]) * 0.8, 0.0, 100.0)
+	var distance_total := 0.0
+	for point in challenge_trace_points:
+		distance_total += distance_to_trace_target(point)
+	var distance_score := clampf(100.0 - distance_total / float(challenge_trace_points.size()) * 1.8, 0.0, 100.0)
+	var covered := 0
+	var sample_count := 0
+	for index in range(challenge_target_points.size() - 1):
+		var segment_start := challenge_target_points[index]
+		var segment_end := challenge_target_points[index + 1]
+		var segment_length := segment_start.distance_to(segment_end)
+		var steps := maxi(1, ceili(segment_length / 24.0))
+		for step in range(steps + 1):
+			var target_point := segment_start.lerp(segment_end, float(step) / float(steps))
+			sample_count += 1
+			for input_point in challenge_trace_points:
+				if input_point.distance_to(target_point) <= 28.0:
+					covered += 1
+					break
+	var coverage_score := 0.0 if sample_count == 0 else float(covered) / float(sample_count) * 100.0
+	return roundi(start_score * 0.20 + end_score * 0.20 + distance_score * 0.25 + coverage_score * 0.35)
+
+
+func distance_to_trace_target(point: Vector2) -> float:
+	var closest := INF
+	for index in range(challenge_target_points.size() - 1):
+		var start_point := challenge_target_points[index]
+		var end_point := challenge_target_points[index + 1]
+		var segment := end_point - start_point
+		var ratio := clampf((point - start_point).dot(segment) / maxf(segment.length_squared(), 0.001), 0.0, 1.0)
+		closest = minf(closest, point.distance_to(start_point + segment * ratio))
+	return closest
