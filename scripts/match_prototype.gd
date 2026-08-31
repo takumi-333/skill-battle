@@ -77,6 +77,7 @@ const STATE_SYNC_INTERVAL := 0.05
 const TITLE_LOGO_ANIMATION_DURATION := 1.2
 const TITLE_PROMPT_BLINK_SPEED := 4.0
 const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
+const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const ChallengeLayerData = preload("res://scripts/challenge_layer.gd")
@@ -1829,7 +1830,7 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	var sprite_tint := Color(4.0, 4.0, 4.0, 1.0) if float(player["hit_time"]) > 0.0 else Color.WHITE
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
 	if network_mode in ["host", "client"] and player_id == local_player_id:
-		draw_string(ThemeDB.fallback_font, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
+		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
 		var angle := facing.angle()
 		draw_arc(position_value, SLASH_RANGE, angle - SLASH_ARC_HALF_ANGLE, angle + SLASH_ARC_HALF_ANGLE, 18, Color("fff3ad"), 7.0, true)
