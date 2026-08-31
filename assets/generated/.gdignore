@@ -1,0 +1,3 @@
+# AI and other asset-pipeline working files are not game resources.
+# Keep raw/rgba/frame/candidate/report outputs here; promote only approved
+# assets into assets/characters/ or another runtime asset directory.

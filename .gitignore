@@ -2,3 +2,16 @@
 .import/
 *.import
 *.tmp
+
+# Asset generation workspace.
+# Raw images, normalized frames, candidate sheets, and validation reports are
+# local working files. Keep the directory marker so Godot ignores the same
+# files as well.
+/assets/generated/*
+!/assets/generated/.gdignore
+/assets/manifests/*
+!/assets/manifests/.gdignore
+/assets/motions/*
+!/assets/motions/.gdignore
+/assets/specs/*
+!/assets/specs/.gdignore
