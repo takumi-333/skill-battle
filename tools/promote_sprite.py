@@ -14,12 +14,19 @@ from pathlib import Path
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--motion", type=Path)
+    parser.add_argument("--build-report", type=Path)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--target", type=Path, required=True)
     args = parser.parse_args()
     report = args.input.with_suffix(".promotion-validation.json")
     validator = Path(__file__).with_name("validate_sprite.py")
-    result = subprocess.run([sys.executable, str(validator), "--spec", str(args.spec), "--input", str(args.input), "--report", str(report)], check=False)
+    command = [sys.executable, str(validator), "--spec", str(args.spec), "--input", str(args.input), "--report", str(report)]
+    if args.motion:
+        command.extend(["--motion", str(args.motion)])
+    if args.build_report:
+        command.extend(["--build-report", str(args.build_report)])
+    result = subprocess.run(command, check=False)
     if result.returncode:
         print(json.dumps({"status": "refused", "reason": "validation_failed"}, ensure_ascii=False))
         return result.returncode
