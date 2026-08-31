@@ -2,6 +2,8 @@
 .import/
 *.import
 *.tmp
+**/*.import
+project.godot
 
 # Asset generation workspace.
 # Raw images, normalized frames, candidate sheets, and validation reports are
