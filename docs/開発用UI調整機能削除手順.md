@@ -10,7 +10,7 @@
 - UIのドラッグ移動・サイズ変更
 - 複数選択・整列・複製
 - 数字キーによる画面プレビュー切替
-- `user://ui_layout_overrides.cfg` による位置・サイズ保存
+- `res://resources/ui_layout_overrides.cfg` による位置・サイズ保存
 
 ## 削除前の確認
 
@@ -87,15 +87,17 @@ if handle_ui_adjust_input(event):
 
 ## 保存データの扱い
 
-調整機能は `user://ui_layout_overrides.cfg` に保存する。これはプロジェクト内の `res://` ではないため、ソースコードを削除しても自動では消えない。
+調整機能は `res://resources/ui_layout_overrides.cfg` に保存する。これはGit管理対象のプロジェクト内ファイルである。
+
+過去版の調整機能が作成した `user://ui_layout_overrides.cfg` は、移行確認後に不要なら削除する。
 
 不要になった場合は、Godotのユーザーデータフォルダ内にある次のファイルだけを削除する。
 
 ```text
-ui_layout_overrides.cfg
+res://resources/ui_layout_overrides.cfg
 ```
 
-場所が分からない場合は、Godotの「エディタ設定」ではなく、実行プロジェクトのユーザーデータフォルダを確認する。
+旧ファイルの場所が分からない場合は、Godotの「エディタ設定」ではなく、実行プロジェクトのユーザーデータフォルダを確認する。
 
 ## ドキュメントの扱い
 

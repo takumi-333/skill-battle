@@ -170,24 +170,22 @@ class TraceCanvas extends Control:
 			draw_circle(point, 3.0, Color("fff2b0"))
 
 class UIAdjustOverlay extends Control:
-	var target: Control
-	var targets: Array[Control] = []
-	var target_label := ""
-	var resize_mode := false
-
 	func _draw() -> void:
-		for selected in targets:
+		var active_target: Control = get_meta("ui_adjust_target") if has_meta("ui_adjust_target") else null
+		var selected_targets: Array = get_meta("ui_adjust_targets") if has_meta("ui_adjust_targets") else []
+		var active_label := str(get_meta("ui_adjust_target_label")) if has_meta("ui_adjust_target_label") else ""
+		for selected in selected_targets:
 			if not is_instance_valid(selected):
 				continue
 			var rect := Rect2(selected.global_position, selected.size)
-			var color := Color("ffc45e") if selected == target else Color("71d6ba")
+			var color := Color("ffc45e") if selected == active_target else Color("71d6ba")
 			draw_rect(rect, color, false, 2.0)
-			if selected == target:
+			if selected == active_target:
 				draw_line(rect.position, rect.position + Vector2(12, 0), color, 3.0)
 				draw_line(rect.position, rect.position + Vector2(0, 12), color, 3.0)
 				var handle := Rect2(rect.end - Vector2(16, 16), Vector2(16, 16))
 				draw_rect(handle, Color("ffc45e"), true)
-				draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, -8), target_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("fff0c9"))
+				draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, -8), active_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("fff0c9"))
 
 const ARENA := Rect2(0, 0, 2520, 1160)
 ## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
@@ -360,6 +358,7 @@ var menu_background: TextureRect
 
 var ui_adjust_mode := false
 var ui_adjust_targets: Array[Control] = []
+var ui_adjust_key_counts: Dictionary = {}
 var ui_adjust_selected: Array[Control] = []
 var ui_adjust_index := 0
 var ui_adjust_drag_target: Control
@@ -368,7 +367,8 @@ var ui_adjust_resize_mode := false
 var ui_adjust_resize_target: Control
 var ui_adjust_overlay: UIAdjustOverlay
 var ui_adjust_hint: Label
-const UI_ADJUST_SAVE_PATH := "user://ui_layout_overrides.cfg"
+const UI_ADJUST_SAVE_PATH := "res://resources/ui_layout_overrides.cfg"
+const UI_ADJUST_LEGACY_SAVE_PATH := "user://ui_layout_overrides.cfg"
 
 
 class NormalAttackHitArea:
@@ -428,6 +428,7 @@ func _ready() -> void:
 
 
 func create_ui_adjustment_tools() -> void:
+	ui_adjust_key_counts.clear()
 	collect_ui_adjust_targets(get_child(0))
 	ui_adjust_overlay = UIAdjustOverlay.new()
 	ui_adjust_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -468,19 +469,63 @@ func register_ui_adjust_target(control: Control) -> void:
 	if control.is_in_group("ui_adjustable"):
 		return
 	control.add_to_group("ui_adjustable")
-	control.set_meta("ui_adjust_key", str(control.get_path()))
-	control.set_meta("ui_adjust_label", control.name)
+	control.set_meta("ui_adjust_legacy_key", str(control.get_path()))
+	var parent_key := str(control.get_parent().get_meta("ui_adjust_parent_key", "root"))
+	var descriptor := ""
+	if control is Button:
+		descriptor = (control as Button).text
+	if descriptor.is_empty() and control is TextureRect and (control as TextureRect).texture:
+		descriptor = (control as TextureRect).texture.resource_path
+	if descriptor.is_empty():
+		descriptor = control.get_class()
+	var base_key := "%s/%s/%s" % [parent_key, control.get_class(), descriptor]
+	var occurrence := int(ui_adjust_key_counts.get(base_key, 0)) + 1
+	ui_adjust_key_counts[base_key] = occurrence
+	var stable_key := base_key if occurrence == 1 else "%s#%d" % [base_key, occurrence]
+	control.set_meta("ui_adjust_key", stable_key)
+	control.set_meta("ui_adjust_legacy_key", str(control.get_path()))
+	control.set_meta("ui_adjust_label", descriptor.get_file() if descriptor.contains("/") else descriptor)
 	ui_adjust_targets.append(control)
 
 
 func load_ui_layout_overrides() -> void:
 	var config := ConfigFile.new()
-	if config.load(UI_ADJUST_SAVE_PATH) != OK:
-		return
+	var has_project_overrides := config.load(UI_ADJUST_SAVE_PATH) == OK and config.has_section("positions") and config.get_section_keys("positions").size() > 0
+	var legacy := ConfigFile.new()
+	var has_legacy_overrides := legacy.load(UI_ADJUST_LEGACY_SAVE_PATH) == OK
+	var migrated := false
 	for control in ui_adjust_targets:
 		var key := str(control.get_meta("ui_adjust_key", ""))
-		if config.has_section_key("positions", key):
-			control.position = config.get_value("positions", key, control.position)
+		if has_project_overrides:
+			var position_value = find_ui_override_value(config, "positions", key)
+			if position_value != null:
+				control.position = position_value
+				if not config.has_section_key("positions", key):
+					migrated = true
+			var size_value = find_ui_override_value(config, "sizes", key)
+			if size_value != null:
+				control.size = size_value
+				if not config.has_section_key("sizes", key):
+					migrated = true
+		elif not has_project_overrides and has_legacy_overrides:
+			var legacy_key := str(control.get_meta("ui_adjust_legacy_key", ""))
+			if legacy.has_section_key("positions", legacy_key):
+				control.position = legacy.get_value("positions", legacy_key, control.position)
+				migrated = true
+	if migrated:
+		save_ui_layout_overrides()
+
+
+func find_ui_override_value(config: ConfigFile, section: String, key: String):
+	if not config.has_section(section):
+		return null
+	if config.has_section_key(section, key):
+		return config.get_value(section, key)
+	var legacy_prefix := key.split("#", false, 1)[0]
+	for candidate in config.get_section_keys(section):
+		if str(candidate).begins_with(legacy_prefix + "@"):
+			return config.get_value(section, candidate)
+	return null
 
 
 func save_ui_layout_overrides() -> void:
@@ -494,6 +539,7 @@ func save_ui_layout_overrides() -> void:
 			continue
 		saved_keys[key] = true
 		config.set_value("positions", key, control.position)
+		config.set_value("sizes", key, control.size)
 	config.save(UI_ADJUST_SAVE_PATH)
 	update_ui_adjust_hint()
 
@@ -508,7 +554,8 @@ func toggle_ui_adjust_mode() -> void:
 		ui_adjust_hint.visible = true
 	else:
 		ui_adjust_hint.visible = false
-		ui_adjust_overlay.target = null
+		ui_adjust_overlay.set_meta("ui_adjust_target", null)
+		ui_adjust_overlay.set_meta("ui_adjust_targets", [])
 	ui_adjust_overlay.queue_redraw()
 	if ui_adjust_mode:
 		update_ui_adjust_hint()
@@ -518,13 +565,14 @@ func update_ui_adjust_hint() -> void:
 	if not ui_adjust_mode or ui_adjust_targets.is_empty():
 		return
 	var target := ui_adjust_targets[ui_adjust_index]
-	ui_adjust_overlay.target = target
-	ui_adjust_overlay.targets = ui_adjust_selected if not ui_adjust_selected.is_empty() else [target]
-	ui_adjust_overlay.resize_mode = true
-	ui_adjust_overlay.target_label = "%s  (%d/%d)" % [str(target.get_meta("ui_adjust_label", target.name)), ui_adjust_index + 1, ui_adjust_targets.size()]
+	var selected_targets: Array = ui_adjust_selected if not ui_adjust_selected.is_empty() else [target]
+	var target_label := "%s  (%d/%d)" % [str(target.get_meta("ui_adjust_label", target.name)), ui_adjust_index + 1, ui_adjust_targets.size()]
+	ui_adjust_overlay.set_meta("ui_adjust_target", target)
+	ui_adjust_overlay.set_meta("ui_adjust_targets", selected_targets)
+	ui_adjust_overlay.set_meta("ui_adjust_target_label", target_label)
 	ui_adjust_overlay.queue_redraw()
 	var visibility_label := "表示中" if target.is_visible_in_tree() else "非表示（枠のみ）"
-	ui_adjust_hint.text = "UI調整モード  F10:終了 / 1-8:画面切替 / Tab:全UI対象切替 / Shift+クリック:複数選択 / 矢印:移動 / 右下ハンドル:サイズ / Ctrl+Shift+L/R/T/B:整列 / Ctrl+D:複製 / Ctrl+S:保存\n%s  [%s] position=(%.0f, %.0f) size=(%.0f, %.0f) 選択数=%d" % [ui_adjust_overlay.target_label, visibility_label, target.position.x, target.position.y, target.size.x, target.size.y, ui_adjust_selected.size()]
+	ui_adjust_hint.text = "UI調整モード  F9/F10/Ctrl+Shift+U:終了 / 1-8:画面切替 / Tab:全UI対象切替 / Shift+クリック:複数選択 / 矢印:移動 / 右下ハンドル:サイズ / Ctrl+Shift+L/R/T/B:整列 / Ctrl+D:複製 / Ctrl+S:保存\n%s  [%s] position=(%.0f, %.0f) size=(%.0f, %.0f) 選択数=%d" % [target_label, visibility_label, target.position.x, target.position.y, target.size.x, target.size.y, ui_adjust_selected.size()]
 
 
 func move_ui_adjust_target(delta: Vector2) -> void:
@@ -605,7 +653,7 @@ func preview_ui_adjust_screen(slot: int) -> void:
 
 func handle_ui_adjust_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_F10:
+		if event.keycode in [KEY_F9, KEY_F10] or (event.keycode == KEY_U and event.ctrl_pressed and event.shift_pressed):
 			toggle_ui_adjust_mode()
 			return true
 		if not ui_adjust_mode:
@@ -1520,6 +1568,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 
 func create_lobby_ui() -> void:
 	lobby_panel = Panel.new()
+	lobby_panel.set_meta("ui_adjust_parent_key", "lobby")
 	lobby_panel.position = Vector2.ZERO
 	lobby_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
@@ -1635,6 +1684,7 @@ func toggle_lobby_ready(player_id: int) -> void:
 
 func create_result_ui() -> void:
 	result_panel = Panel.new()
+	result_panel.set_meta("ui_adjust_parent_key", "result")
 	result_panel.position = Vector2.ZERO
 	result_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
@@ -1671,6 +1721,7 @@ func create_result_ui() -> void:
 
 func create_network_ui() -> void:
 	network_panel = Panel.new()
+	network_panel.set_meta("ui_adjust_parent_key", "connection")
 	network_panel.position = Vector2.ZERO
 	network_panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
@@ -1722,6 +1773,7 @@ func create_network_ui() -> void:
 
 func make_menu_panel(panel_position: Vector2, panel_size: Vector2, border_color: Color) -> Panel:
 	var panel := Panel.new()
+	panel.set_meta("ui_adjust_parent_key", "menu_%s" % border_color.to_html(false))
 	panel.position = Vector2.ZERO
 	panel.size = Vector2(1280, 720)
 	var style := StyleBoxFlat.new()
