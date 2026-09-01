@@ -1,21 +1,7 @@
-[gd_resource type="Resource" script_class="MenuLayout" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="MenuLayout" format=3 uid="uid://b3b81awgvecge"]
 
-[ext_resource type="Script" path="res://scripts/data/menu_layout.gd" id="1_menu_layout"]
+[ext_resource type="Script" uid="uid://bqelb3r48t1fy" path="res://scripts/data/menu_layout.gd" id="1_menu_layout"]
 
 [resource]
 script = ExtResource("1_menu_layout")
-online_logo_position = Vector2(500, 18)
-online_logo_size = Vector2(280, 186)
-online_title_position = Vector2(330, 188)
-online_title_size = Vector2(620, 42)
-online_panel_position = Vector2(235, 245)
-online_panel_size = Vector2(810, 340)
-online_address_frame_position = Vector2(350, 300)
-online_address_frame_size = Vector2(580, 64)
-online_address_input_position = Vector2(370, 313)
-online_address_input_size = Vector2(540, 38)
-online_host_button_position = Vector2(340, 390)
-online_join_button_position = Vector2(650, 390)
-online_action_button_size = Vector2(290, 80)
-online_status_position = Vector2(330, 495)
-online_status_size = Vector2(620, 30)
+online_title_position = Vector2(330, 187.97)
