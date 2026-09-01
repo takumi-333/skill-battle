@@ -169,6 +169,26 @@ class TraceCanvas extends Control:
 		for point in input_points:
 			draw_circle(point, 3.0, Color("fff2b0"))
 
+class UIAdjustOverlay extends Control:
+	var target: Control
+	var targets: Array[Control] = []
+	var target_label := ""
+	var resize_mode := false
+
+	func _draw() -> void:
+		for selected in targets:
+			if not is_instance_valid(selected):
+				continue
+			var rect := Rect2(selected.global_position, selected.size)
+			var color := Color("ffc45e") if selected == target else Color("71d6ba")
+			draw_rect(rect, color, false, 2.0)
+			if selected == target:
+				draw_line(rect.position, rect.position + Vector2(12, 0), color, 3.0)
+				draw_line(rect.position, rect.position + Vector2(0, 12), color, 3.0)
+				var handle := Rect2(rect.end - Vector2(16, 16), Vector2(16, 16))
+				draw_rect(handle, Color("ffc45e"), true)
+				draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, -8), target_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("fff0c9"))
+
 const ARENA := Rect2(0, 0, 2520, 1160)
 ## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
 ## アンカーから少し上にずらした縦長の楕円を当たり判定として使う。
@@ -338,6 +358,18 @@ var ui_click_player: AudioStreamPlayer
 var menu_background: TextureRect
 @export var menu_layout: MenuLayoutData
 
+var ui_adjust_mode := false
+var ui_adjust_targets: Array[Control] = []
+var ui_adjust_selected: Array[Control] = []
+var ui_adjust_index := 0
+var ui_adjust_drag_target: Control
+var ui_adjust_drag_offset := Vector2.ZERO
+var ui_adjust_resize_mode := false
+var ui_adjust_resize_target: Control
+var ui_adjust_overlay: UIAdjustOverlay
+var ui_adjust_hint: Label
+const UI_ADJUST_SAVE_PATH := "user://ui_layout_overrides.cfg"
+
 
 class NormalAttackHitArea:
 	var origin: Vector2
@@ -386,12 +418,289 @@ func _ready() -> void:
 	create_result_ui()
 	create_network_ui()
 	create_navigation_ui()
+	create_ui_adjustment_tools()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	show_title()
 	queue_redraw()
+
+
+func create_ui_adjustment_tools() -> void:
+	collect_ui_adjust_targets(get_child(0))
+	ui_adjust_overlay = UIAdjustOverlay.new()
+	ui_adjust_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui_adjust_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_adjust_overlay.z_index = 1000
+	get_child(0).add_child(ui_adjust_overlay)
+	ui_adjust_hint = Label.new()
+	ui_adjust_hint.position = Vector2(18, 14)
+	ui_adjust_hint.size = Vector2(1240, 70)
+	ui_adjust_hint.add_theme_font_size_override("font_size", 16)
+	ui_adjust_hint.add_theme_color_override("font_color", Color("fff0c9"))
+	ui_adjust_hint.add_theme_color_override("font_shadow_color", Color("090817"))
+	ui_adjust_hint.add_theme_constant_override("shadow_offset_x", 2)
+	ui_adjust_hint.add_theme_constant_override("shadow_offset_y", 2)
+	ui_adjust_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_adjust_hint.visible = false
+	get_child(0).add_child(ui_adjust_hint)
+	load_ui_layout_overrides()
+
+
+func collect_ui_adjust_targets(node: Node) -> void:
+	for child in node.get_children():
+		if child == ui_adjust_overlay or child == ui_adjust_hint:
+			continue
+		if child is Control:
+			var control := child as Control
+			var has_control_child := false
+			for grandchild in control.get_children():
+				if grandchild is Control:
+					has_control_child = true
+					break
+			if control != menu_background and not has_control_child and control.size.x < 1200.0 and control.size.y < 680.0:
+				register_ui_adjust_target(control)
+		collect_ui_adjust_targets(child)
+
+
+func register_ui_adjust_target(control: Control) -> void:
+	if control.is_in_group("ui_adjustable"):
+		return
+	control.add_to_group("ui_adjustable")
+	control.set_meta("ui_adjust_key", str(control.get_path()))
+	control.set_meta("ui_adjust_label", control.name)
+	ui_adjust_targets.append(control)
+
+
+func load_ui_layout_overrides() -> void:
+	var config := ConfigFile.new()
+	if config.load(UI_ADJUST_SAVE_PATH) != OK:
+		return
+	for control in ui_adjust_targets:
+		var key := str(control.get_meta("ui_adjust_key", ""))
+		if config.has_section_key("positions", key):
+			control.position = config.get_value("positions", key, control.position)
+
+
+func save_ui_layout_overrides() -> void:
+	var config := ConfigFile.new()
+	var saved_keys: Dictionary = {}
+	for control in ui_adjust_targets:
+		if not is_instance_valid(control):
+			continue
+		var key := str(control.get_meta("ui_adjust_key", ""))
+		if saved_keys.has(key):
+			continue
+		saved_keys[key] = true
+		config.set_value("positions", key, control.position)
+	config.save(UI_ADJUST_SAVE_PATH)
+	update_ui_adjust_hint()
+
+
+func toggle_ui_adjust_mode() -> void:
+	ui_adjust_mode = not ui_adjust_mode
+	ui_adjust_drag_target = null
+	ui_adjust_resize_target = null
+	ui_adjust_selected.clear()
+	if ui_adjust_mode:
+		ui_adjust_index = clampi(ui_adjust_index, 0, maxi(ui_adjust_targets.size() - 1, 0))
+		ui_adjust_hint.visible = true
+	else:
+		ui_adjust_hint.visible = false
+		ui_adjust_overlay.target = null
+	ui_adjust_overlay.queue_redraw()
+	if ui_adjust_mode:
+		update_ui_adjust_hint()
+
+
+func update_ui_adjust_hint() -> void:
+	if not ui_adjust_mode or ui_adjust_targets.is_empty():
+		return
+	var target := ui_adjust_targets[ui_adjust_index]
+	ui_adjust_overlay.target = target
+	ui_adjust_overlay.targets = ui_adjust_selected if not ui_adjust_selected.is_empty() else [target]
+	ui_adjust_overlay.resize_mode = true
+	ui_adjust_overlay.target_label = "%s  (%d/%d)" % [str(target.get_meta("ui_adjust_label", target.name)), ui_adjust_index + 1, ui_adjust_targets.size()]
+	ui_adjust_overlay.queue_redraw()
+	var visibility_label := "表示中" if target.is_visible_in_tree() else "非表示（枠のみ）"
+	ui_adjust_hint.text = "UI調整モード  F10:終了 / 1-8:画面切替 / Tab:全UI対象切替 / Shift+クリック:複数選択 / 矢印:移動 / 右下ハンドル:サイズ / Ctrl+Shift+L/R/T/B:整列 / Ctrl+D:複製 / Ctrl+S:保存\n%s  [%s] position=(%.0f, %.0f) size=(%.0f, %.0f) 選択数=%d" % [ui_adjust_overlay.target_label, visibility_label, target.position.x, target.position.y, target.size.x, target.size.y, ui_adjust_selected.size()]
+
+
+func move_ui_adjust_target(delta: Vector2) -> void:
+	if ui_adjust_targets.is_empty():
+		return
+	var targets := ui_adjust_selected if not ui_adjust_selected.is_empty() else [ui_adjust_targets[ui_adjust_index]]
+	for target in targets:
+		target.position += delta
+	update_ui_adjust_hint()
+
+
+func resize_ui_adjust_target(delta: Vector2) -> void:
+	if ui_adjust_targets.is_empty():
+		return
+	var target := ui_adjust_targets[ui_adjust_index]
+	target.size = Vector2(maxf(16.0, target.size.x + delta.x), maxf(16.0, target.size.y + delta.y))
+	update_ui_adjust_hint()
+
+
+func align_ui_adjust_targets(alignment: String) -> void:
+	if ui_adjust_selected.size() < 2:
+		return
+	var anchor := ui_adjust_targets[ui_adjust_index]
+	for target in ui_adjust_selected:
+		if target == anchor:
+			continue
+		match alignment:
+			"left": target.position.x = anchor.position.x
+			"right": target.position.x = anchor.position.x + anchor.size.x - target.size.x
+			"top": target.position.y = anchor.position.y
+			"bottom": target.position.y = anchor.position.y + anchor.size.y - target.size.y
+			"hcenter": target.position.x = anchor.position.x + (anchor.size.x - target.size.x) * 0.5
+			"vcenter": target.position.y = anchor.position.y + (anchor.size.y - target.size.y) * 0.5
+	update_ui_adjust_hint()
+
+
+func duplicate_ui_adjust_target() -> void:
+	if ui_adjust_targets.is_empty():
+		return
+	var source := ui_adjust_targets[ui_adjust_index]
+	var clone := source.duplicate() as Control
+	if clone == null:
+		return
+	source.get_parent().add_child(clone)
+	clone.name = "%s_copy" % source.name
+	clone.position += Vector2(20, 20)
+	register_ui_adjust_target(clone)
+	if source is Button and clone is Button:
+		for connection in source.get_signal_connection_list("pressed"):
+			clone.pressed.connect(connection.callable)
+	ui_adjust_selected = [clone]
+	ui_adjust_index = ui_adjust_targets.find(clone)
+	update_ui_adjust_hint()
+
+
+func preview_ui_adjust_screen(slot: int) -> void:
+	match slot:
+		1: show_title()
+		2: show_home()
+		3: show_practice_select()
+		4: show_debug_select()
+		5: show_connection()
+		6:
+			network_mode = "local"
+			show_lobby()
+		7:
+			hide_menu_panels()
+			network_panel.visible = false
+			lobby_panel.visible = false
+			show_result(1)
+		8:
+			network_mode = "practice"
+			begin_match()
+	ui_adjust_selected.clear()
+	ui_adjust_index = 0
+	update_ui_adjust_hint()
+
+
+func handle_ui_adjust_input(event: InputEvent) -> bool:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F10:
+			toggle_ui_adjust_mode()
+			return true
+		if not ui_adjust_mode:
+			return false
+		if event.keycode == KEY_TAB:
+			if not ui_adjust_targets.is_empty():
+				var direction := -1 if event.shift_pressed else 1
+				ui_adjust_index = posmod(ui_adjust_index + direction, ui_adjust_targets.size())
+				ui_adjust_selected = [ui_adjust_targets[ui_adjust_index]]
+				update_ui_adjust_hint()
+			return true
+		match event.keycode:
+			KEY_1: preview_ui_adjust_screen(1)
+			KEY_2: preview_ui_adjust_screen(2)
+			KEY_3: preview_ui_adjust_screen(3)
+			KEY_4: preview_ui_adjust_screen(4)
+			KEY_5: preview_ui_adjust_screen(5)
+			KEY_6: preview_ui_adjust_screen(6)
+			KEY_7: preview_ui_adjust_screen(7)
+			KEY_8: preview_ui_adjust_screen(8)
+			_: pass
+		if event.keycode == KEY_ESCAPE:
+			toggle_ui_adjust_mode()
+			return true
+		if event.keycode == KEY_S and event.ctrl_pressed:
+			save_ui_layout_overrides()
+			return true
+		if event.keycode == KEY_D and event.ctrl_pressed:
+			duplicate_ui_adjust_target()
+			return true
+		if event.ctrl_pressed and event.shift_pressed:
+			match event.keycode:
+				KEY_L: align_ui_adjust_targets("left")
+				KEY_R: align_ui_adjust_targets("right")
+				KEY_T: align_ui_adjust_targets("top")
+				KEY_B: align_ui_adjust_targets("bottom")
+				KEY_H: align_ui_adjust_targets("hcenter")
+				KEY_V: align_ui_adjust_targets("vcenter")
+				_: return false
+			return true
+		var step := 10.0 if event.shift_pressed else 1.0
+		var adjustment := Vector2.ZERO
+		match event.keycode:
+			KEY_LEFT: adjustment = Vector2(-step, 0)
+			KEY_RIGHT: adjustment = Vector2(step, 0)
+			KEY_UP: adjustment = Vector2(0, -step)
+			KEY_DOWN: adjustment = Vector2(0, step)
+			_: return false
+		if event.ctrl_pressed:
+			resize_ui_adjust_target(adjustment)
+		else:
+			move_ui_adjust_target(adjustment)
+		return true
+	if not ui_adjust_mode:
+		return false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			var found_target := false
+			for index in range(ui_adjust_targets.size() - 1, -1, -1):
+				var candidate := ui_adjust_targets[index]
+				if candidate.is_visible_in_tree() and candidate.get_global_rect().has_point(event.position):
+					ui_adjust_index = index
+					if event.shift_pressed:
+						if ui_adjust_selected.has(candidate):
+							ui_adjust_selected.erase(candidate)
+						else:
+							ui_adjust_selected.append(candidate)
+					else:
+						ui_adjust_selected = [candidate]
+					var handle_rect := Rect2(candidate.global_position + candidate.size - Vector2(20, 20), Vector2(28, 28))
+					if handle_rect.has_point(event.position):
+						ui_adjust_resize_target = candidate
+						ui_adjust_drag_target = null
+					else:
+						ui_adjust_drag_target = candidate
+						ui_adjust_resize_target = null
+					ui_adjust_drag_offset = event.position - candidate.global_position
+					found_target = true
+					update_ui_adjust_hint()
+					break
+			if not found_target:
+				ui_adjust_drag_target = null
+		else:
+			ui_adjust_drag_target = null
+			ui_adjust_resize_target = null
+		return true
+	if event is InputEventMouseMotion and ui_adjust_resize_target != null:
+		ui_adjust_resize_target.size = Vector2(maxf(16.0, ui_adjust_resize_target.size.x + event.relative.x), maxf(16.0, ui_adjust_resize_target.size.y + event.relative.y))
+		update_ui_adjust_hint()
+		return true
+	if event is InputEventMouseMotion and ui_adjust_drag_target != null:
+		ui_adjust_drag_target.position += event.relative
+		update_ui_adjust_hint()
+		return true
+	return true
 
 
 func create_ui_sound_player() -> void:
@@ -1223,7 +1532,6 @@ func create_lobby_ui() -> void:
 	style.corner_radius_bottom_right = 12
 	lobby_panel.add_theme_stylebox_override("panel", style)
 	get_child(0).add_child(lobby_panel)
-	add_menu_logo(lobby_panel, Vector2(500, 12), Vector2(280, 186))
 	add_menu_texture(lobby_panel, UI_PANEL_FRAME, Vector2(220, 175), Vector2(840, 420))
 	add_menu_texture(lobby_panel, UI_CARD_CHARACTER, Vector2(280, 220), Vector2(340, 360))
 	add_menu_texture(lobby_panel, UI_CARD_CHARACTER, Vector2(660, 220), Vector2(340, 360))
@@ -1375,7 +1683,6 @@ func create_network_ui() -> void:
 	style.corner_radius_bottom_right = 12
 	network_panel.add_theme_stylebox_override("panel", style)
 	get_child(0).add_child(network_panel)
-	add_menu_logo(network_panel, menu_layout.online_logo_position, menu_layout.online_logo_size)
 	add_menu_texture(network_panel, UI_PANEL_FRAME, menu_layout.online_panel_position, menu_layout.online_panel_size)
 	var title := Label.new()
 	title.text = "オンライン対戦"
@@ -1509,7 +1816,6 @@ func create_navigation_ui() -> void:
 	title_panel.add_child(title_prompt)
 
 	home_panel = make_menu_panel(Vector2(150, 90), Vector2(980, 540), Color("8fa8e8"))
-	add_menu_logo(home_panel, Vector2(490, 20), Vector2(300, 200))
 	add_menu_texture(home_panel, UI_PANEL_FRAME, Vector2(165, 235), Vector2(470, 345))
 	add_menu_panel_button(home_panel, "オンライン対戦", Vector2(205, 280), Vector2(390, 250), show_online_menu)
 	make_menu_button(home_panel, "練習", Vector2(680, 235), Vector2(400, 130), show_practice_select)
@@ -1518,7 +1824,6 @@ func create_navigation_ui() -> void:
 	make_menu_button(home_panel, "デバッグ", Vector2(680, 475), Vector2(400, 130), show_debug_select)
 
 	practice_panel = make_menu_panel(Vector2(210, 90), Vector2(860, 540), Color("71d6ba"))
-	add_menu_logo(practice_panel, Vector2(490, 12), Vector2(300, 200))
 	add_menu_texture(practice_panel, UI_PANEL_FRAME, Vector2(280, 205), Vector2(720, 385))
 	practice_preview = Label.new()
 	practice_preview.position = Vector2(370, 195)
@@ -1534,7 +1839,6 @@ func create_navigation_ui() -> void:
 	make_menu_button(practice_panel, "戻る", Vector2(32, 24), Vector2(190, 52), show_home)
 
 	debug_panel = make_menu_panel(Vector2(120, 70), Vector2(1040, 580), Color("ffc45e"))
-	add_menu_logo(debug_panel, Vector2(490, 6), Vector2(300, 200))
 	add_menu_texture(debug_panel, UI_PANEL_FRAME, Vector2(245, 190), Vector2(790, 405))
 	debug_preview = Label.new()
 	debug_preview.position = Vector2(155, 182)
@@ -2511,6 +2815,9 @@ func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if handle_ui_adjust_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if screen == "title":
 		if (event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_SPACE, KEY_ENTER]) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 			play_ui_click()
