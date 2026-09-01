@@ -58,8 +58,10 @@ const PLAYER_SPEED := 280.0
 const SLASH_RANGE := 74.0
 const SLASH_DAMAGE := 12
 const SLASH_ARC_HALF_ANGLE := deg_to_rad(55.0)
+const SLASH_INNER_RANGE := 64.0
 const ATTACK_COOLDOWN := 0.5
-const ATTACK_DURATION := 0.16
+const ATTACK_DURATION := 0.28
+const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
 const FOCUS_SPEED_MULTIPLIER := 0.35
 const TYPING_CHALLENGE_LIMIT := 6.0
@@ -93,6 +95,9 @@ const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/typist_pixel_8dir.png")
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/arithmetician_pixel_8dir.png")
 const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/chanter_pixel_8dir.png")
+const TYPIST_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist.png")
+const ARITHMETICIAN_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician.png")
+const CHANTER_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter.png")
 
 var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
@@ -391,7 +396,7 @@ func try_attack(player_id: int) -> void:
 	var target: Dictionary = players[target_id]
 	var to_target: Vector2 = get_player_hitbox_center(target["position"]) - get_player_hitbox_center(player["position"])
 	var facing: Vector2 = player["facing"]
-	var in_range: bool = to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
+	var in_range: bool = to_target.length() >= SLASH_INNER_RANGE and to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 	var in_front: bool = to_target.length_squared() > 0.0 and facing.dot(to_target.normalized()) >= cos(SLASH_ARC_HALF_ANGLE)
 	if in_range and in_front:
 		apply_damage(target_id, int(player["normal_damage"]), "%sの斬撃" % player["name"])
@@ -1880,6 +1885,64 @@ func get_character_texture(visual_id: String) -> Texture2D:
 	return TYPIST_TEXTURE
 
 
+func get_normal_attack_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_NORMAL_ATTACK_TEXTURE
+	if visual_id == "chanter":
+		return CHANTER_NORMAL_ATTACK_TEXTURE
+	return TYPIST_NORMAL_ATTACK_TEXTURE
+
+
+func draw_normal_attack_effect(player: Dictionary, position_value: Vector2, facing: Vector2) -> void:
+	var progress := clampf(1.0 - float(player["attack_time"]) / ATTACK_DURATION, 0.0, 1.0)
+	var frame_index := mini(NORMAL_ATTACK_FRAME_COUNT - 1, int(floor(progress * NORMAL_ATTACK_FRAME_COUNT)))
+	var visual_id := str(player.get("visual_id", "typist"))
+	var texture := get_normal_attack_texture(visual_id)
+	var source_rect := Rect2(frame_index * 64.0, 0.0, 64.0, 64.0)
+	var effect_distance := 26.0 + sin(progress * PI * 0.88) * 34.0
+	var effect_center := position_value + facing * effect_distance
+	var scale_strength := 1.25 + sin(progress * PI) * 0.18
+	var opacity := 1.0
+	var rotation_offset := lerpf(-0.26, 0.24, progress)
+	if visual_id == "arithmetician":
+		effect_center = position_value + facing * (40.0 + progress * 24.0)
+		scale_strength = 1.12 + sin(progress * PI) * 0.10
+		opacity = clampf(sin(progress * PI) * 1.25, 0.28, 1.0)
+		rotation_offset = 0.0
+	# 元素材の斜め軌跡を水平方向に反転し、正面方向へ振り抜く見た目にする。
+	draw_set_transform(effect_center, facing.angle() + rotation_offset, Vector2(-scale_strength, scale_strength))
+	draw_texture_rect_region(texture, Rect2(-32.0, -32.0, 64.0, 64.0), source_rect, Color(1.0, 1.0, 1.0, opacity))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func draw_debug_normal_attack_hit_area(position_value: Vector2, facing: Vector2) -> void:
+	# 通常攻撃は対象の中心が内側の死角より外、かつ射程内にある場合に命中させる。
+	# デバッグ表示も同じドーナツ状扇形を、赤いドットの輪郭だけで示す。
+	const DOT_SPACING := 8.0
+	const DOT_RADIUS := 1.5
+	var attack_origin := get_player_hitbox_center(position_value)
+	var min_distance := SLASH_INNER_RANGE
+	var max_distance := SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
+	var start_angle := facing.angle() - SLASH_ARC_HALF_ANGLE
+	var end_angle := facing.angle() + SLASH_ARC_HALF_ANGLE
+	var debug_color := Color(1.0, 0.20, 0.24, 0.90)
+	var edge_steps := ceili((max_distance - min_distance) / DOT_SPACING)
+	for edge_index in range(edge_steps + 1):
+		var distance := minf(min_distance + float(edge_index) * DOT_SPACING, max_distance)
+		draw_circle(attack_origin + Vector2.from_angle(start_angle) * distance, DOT_RADIUS, debug_color, true)
+		draw_circle(attack_origin + Vector2.from_angle(end_angle) * distance, DOT_RADIUS, debug_color, true)
+	var inner_arc_steps := ceili((end_angle - start_angle) * min_distance / DOT_SPACING)
+	for arc_index in range(inner_arc_steps + 1):
+		var ratio := float(arc_index) / float(inner_arc_steps)
+		var direction := Vector2.from_angle(lerpf(start_angle, end_angle, ratio))
+		draw_circle(attack_origin + direction * min_distance, DOT_RADIUS, debug_color, true)
+	var outer_arc_steps := ceili((end_angle - start_angle) * max_distance / DOT_SPACING)
+	for arc_index in range(outer_arc_steps + 1):
+		var ratio := float(arc_index) / float(outer_arc_steps)
+		var direction := Vector2.from_angle(lerpf(start_angle, end_angle, ratio))
+		draw_circle(attack_origin + direction * max_distance, DOT_RADIUS, debug_color, true)
+
+
 func get_sprite_direction_column(facing: Vector2) -> int:
 	var octant: int = int(posmod(roundi(facing.angle() / (PI / 4.0)), 8))
 	match octant:
@@ -1935,8 +1998,9 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	if network_mode in ["host", "client"] and player_id == local_player_id:
 		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
-		var angle := facing.angle()
-		draw_arc(position_value, SLASH_RANGE, angle - SLASH_ARC_HALF_ANGLE, angle + SLASH_ARC_HALF_ANGLE, 18, Color("fff3ad"), 7.0, true)
+		draw_normal_attack_effect(player, position_value, facing)
+		if network_mode == "local":
+			draw_debug_normal_attack_hit_area(position_value, facing)
 	var health_ratio: float = float(player["hp"]) / 100.0
 	var health_rect := Rect2(position_value + Vector2(-30, -54), Vector2(60, 7))
 	draw_rect(health_rect, Color("070b14"), true)
