@@ -92,9 +92,9 @@ const UI_MENU_BACKGROUND: Texture2D = preload("res://assets/ui/menu_background.p
 const MatchStateData = preload("res://scripts/match_state.gd")
 const ChallengeLayerData = preload("res://scripts/challenge_layer.gd")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
-const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/typist_pixel_8dir.png")
-const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/arithmetician_pixel_8dir.png")
-const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/chanter_pixel_8dir.png")
+const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
+const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
+const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chanter_pixel_8dir.png")
 const TYPIST_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist.png")
 const ARITHMETICIAN_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician.png")
 const CHANTER_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter.png")
@@ -1681,10 +1681,10 @@ func set_lobby_status_icon(icon: StatusIcon, is_ready: bool, is_present: bool) -
 
 func get_idle_texture(visual_id: String) -> Texture2D:
 	if visual_id == "arithmetician":
-		return preload("res://assets/characters/arithmetician_idle.png")
+		return preload("res://assets/characters/portraits/arithmetician_idle.png")
 	if visual_id == "chanter":
-		return preload("res://assets/characters/chanter_idle.png")
-	return preload("res://assets/characters/typist_idle.png")
+		return preload("res://assets/characters/portraits/chanter_idle.png")
+	return preload("res://assets/characters/portraits/typist_idle.png")
 
 
 func begin_match() -> void:
