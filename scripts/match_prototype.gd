@@ -51,7 +51,10 @@ const PLAYER_SPEED := 280.0
 const SLASH_RANGE := 74.0
 const SLASH_DAMAGE := 12
 const SLASH_ARC_HALF_ANGLE := deg_to_rad(55.0)
-const SLASH_INNER_RANGE := 64.0
+const NORMAL_ATTACK_OUTER_RANGE := SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
+const NORMAL_ATTACK_HAND_OFFSET := 10.0
+const WEAPON_HANDLE_UV := Vector2(0.07, 0.94)
+const WEAPON_TIP_UV := Vector2(0.93, 0.07)
 const ATTACK_COOLDOWN := 0.5
 const ATTACK_DURATION := 0.28
 const NORMAL_ATTACK_FRAME_COUNT := 8
@@ -197,6 +200,41 @@ var lobby_p2_ready: Button
 var ui_click_player: AudioStreamPlayer
 var menu_background: TextureRect
 @export var menu_layout: MenuLayoutData
+
+
+class NormalAttackHitArea:
+	var origin: Vector2
+	var facing: Vector2
+	var outer_range: float
+	var half_angle: float
+
+	func _init(area_origin: Vector2, area_facing: Vector2, area_outer_range: float, area_half_angle: float) -> void:
+		origin = area_origin
+		facing = area_facing.normalized()
+		outer_range = area_outer_range
+		half_angle = area_half_angle
+
+	func intersects_player_hitbox(target_center: Vector2, radius_x: float, radius_y: float) -> bool:
+		if contains_point(target_center) or is_point_inside_ellipse(origin, target_center, radius_x, radius_y):
+			return true
+		# 楕円外周を十分細かくサンプリングし、実際の扇形内へ入る点だけを命中として扱う。
+		# 通常攻撃開始時だけ呼ばれるため、見た目と一致する判定を優先する。
+		const ELLIPSE_SAMPLE_COUNT := 64
+		for sample_index in range(ELLIPSE_SAMPLE_COUNT):
+			var angle := TAU * float(sample_index) / float(ELLIPSE_SAMPLE_COUNT)
+			var ellipse_point := target_center + Vector2(cos(angle) * radius_x, sin(angle) * radius_y)
+			if contains_point(ellipse_point):
+				return true
+		return false
+
+	func contains_point(point: Vector2) -> bool:
+		var offset := point - origin
+		var forward_distance := facing.dot(offset)
+		return forward_distance >= 0.0 and offset.length_squared() <= outer_range * outer_range and absf(facing.cross(offset)) <= forward_distance * tan(half_angle)
+
+	func is_point_inside_ellipse(point: Vector2, ellipse_center: Vector2, radius_x: float, radius_y: float) -> bool:
+		var offset := point - ellipse_center
+		return (offset.x * offset.x) / (radius_x * radius_x) + (offset.y * offset.y) / (radius_y * radius_y) <= 1.0
 
 
 func _ready() -> void:
@@ -428,11 +466,9 @@ func try_attack(player_id: int) -> void:
 	players[player_id] = player
 	var target_id := 2 if player_id == 1 else 1
 	var target: Dictionary = players[target_id]
-	var to_target: Vector2 = get_player_hitbox_center(target["position"]) - get_player_hitbox_center(player["position"])
-	var facing: Vector2 = player["attack_facing"]
-	var in_range: bool = to_target.length() >= SLASH_INNER_RANGE and to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
-	var in_front: bool = to_target.length_squared() > 0.0 and facing.dot(to_target.normalized()) >= cos(SLASH_ARC_HALF_ANGLE)
-	if in_range and in_front:
+	var hit_area := get_normal_attack_hit_area(player["position"], player["attack_facing"])
+	var target_center := get_player_hitbox_center(target["position"])
+	if hit_area.intersects_player_hitbox(target_center, PLAYER_HITBOX_RADIUS_X, PLAYER_HITBOX_RADIUS_Y):
 		apply_damage(target_id, int(player["normal_damage"]) + int(player.get("attack_damage_buff", 0)), "%sの斬撃" % player["name"])
 		status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
 		if target["hp"] <= 0:
@@ -810,6 +846,12 @@ func update_skill_projectiles(delta: float) -> void:
 
 func get_player_hitbox_center(player_position: Vector2) -> Vector2:
 	return player_position + PLAYER_HITBOX_OFFSET
+
+
+func get_normal_attack_hit_area(player_position: Vector2, attack_facing: Vector2) -> NormalAttackHitArea:
+	var normalized_facing := attack_facing.normalized()
+	var attack_origin := get_player_hitbox_center(player_position) + normalized_facing * NORMAL_ATTACK_HAND_OFFSET
+	return NormalAttackHitArea.new(attack_origin, normalized_facing, NORMAL_ATTACK_OUTER_RANGE, SLASH_ARC_HALF_ANGLE)
 
 
 func is_point_in_player_hitbox(point: Vector2, player_position: Vector2, padding: float = 0.0) -> bool:
@@ -2128,22 +2170,26 @@ func get_normal_attack_particle_texture(visual_id: String) -> Texture2D:
 
 func draw_normal_attack_effect(player: Dictionary, position_value: Vector2, facing: Vector2) -> void:
 	var progress := clampf(1.0 - float(player["attack_time"]) / ATTACK_DURATION, 0.0, 1.0)
+	var hit_area := get_normal_attack_hit_area(position_value, facing)
 	var visual_id := str(player.get("visual_id", "typist"))
 	var weapon_texture := get_normal_attack_weapon_texture(visual_id)
 	var particle_texture := get_normal_attack_particle_texture(visual_id)
 	var particle_size := 28.75 if visual_id == "arithmetician" else (43.7 if visual_id == "chanter" else 34.5)
 	var particle_count := 28 if visual_id == "arithmetician" else (40 if visual_id == "chanter" else 24)
 	var source_size := weapon_texture.get_size()
-	# 武器画像ごとの縦横比は維持しつつ、最長辺を共通サイズへ揃える。
-	var weapon_canvas_size := 118.0
 	var source_longest_edge := float(maxi(source_size.x, source_size.y))
-	var weapon_size := Vector2(source_size) * (weapon_canvas_size / source_longest_edge)
-	var hand_pivot := position_value + facing * 10.0 + Vector2(0.0, -15.0)
-	# 元画像は「左下の柄尻→右上の武器先端」。柄尻をpivotにして、前方を横切るように回転する。
+	var normalized_source_size := Vector2(source_size) / source_longest_edge
+	var normalized_tip_offset := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * normalized_source_size
+	var hand_to_tip_distance := hit_area.outer_range
+	var weapon_canvas_size := hand_to_tip_distance / normalized_tip_offset.length()
+	var weapon_size := normalized_source_size * weapon_canvas_size
+	var hand_pivot := hit_area.origin
+	# 素材の柄尻と先端をUVで定義し、先端が攻撃扇形の外周をなぞるようにする。
 	var swing_angle := facing.angle() + lerpf(PI * 0.5, -PI * 0.5, progress)
-	var swing_rotation := swing_angle + PI * 0.25
-	var weapon_rect := Rect2(Vector2(-weapon_size.x * 0.07, -weapon_size.y * 0.94), weapon_size)
-	var weapon_tip_distance := weapon_canvas_size * 0.84
+	var weapon_tip_local := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * weapon_size
+	var swing_rotation := swing_angle - weapon_tip_local.angle()
+	var weapon_rect := Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size)
+	var weapon_tip_distance := hand_to_tip_distance
 
 	# 進行済みの「武器先端」の位置にだけ粒子を残し、密度の高い扇状の軌跡を作る。
 	for trail_index in range(particle_count):
@@ -2167,26 +2213,20 @@ func draw_normal_attack_effect(player: Dictionary, position_value: Vector2, faci
 
 
 func draw_debug_normal_attack_hit_area(position_value: Vector2, facing: Vector2) -> void:
-	# 通常攻撃は対象の中心が内側の死角より外、かつ射程内にある場合に命中させる。
-	# デバッグ表示も同じドーナツ状扇形を、赤いドットの輪郭だけで示す。
+	# 実際の命中判定と同じ形状データを使用する。内側の死角は持たない。
 	const DOT_SPACING := 8.0
 	const DOT_RADIUS := 1.5
-	var attack_origin := get_player_hitbox_center(position_value)
-	var min_distance := SLASH_INNER_RANGE
-	var max_distance := SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
-	var start_angle := facing.angle() - SLASH_ARC_HALF_ANGLE
-	var end_angle := facing.angle() + SLASH_ARC_HALF_ANGLE
+	var hit_area := get_normal_attack_hit_area(position_value, facing)
+	var attack_origin := hit_area.origin
+	var max_distance := hit_area.outer_range
+	var start_angle := hit_area.facing.angle() - hit_area.half_angle
+	var end_angle := hit_area.facing.angle() + hit_area.half_angle
 	var debug_color := Color(1.0, 0.20, 0.24, 0.90)
-	var edge_steps := ceili((max_distance - min_distance) / DOT_SPACING)
+	var edge_steps := ceili(max_distance / DOT_SPACING)
 	for edge_index in range(edge_steps + 1):
-		var distance := minf(min_distance + float(edge_index) * DOT_SPACING, max_distance)
+		var distance := minf(float(edge_index) * DOT_SPACING, max_distance)
 		draw_circle(attack_origin + Vector2.from_angle(start_angle) * distance, DOT_RADIUS, debug_color, true)
 		draw_circle(attack_origin + Vector2.from_angle(end_angle) * distance, DOT_RADIUS, debug_color, true)
-	var inner_arc_steps := ceili((end_angle - start_angle) * min_distance / DOT_SPACING)
-	for arc_index in range(inner_arc_steps + 1):
-		var ratio := float(arc_index) / float(inner_arc_steps)
-		var direction := Vector2.from_angle(lerpf(start_angle, end_angle, ratio))
-		draw_circle(attack_origin + direction * min_distance, DOT_RADIUS, debug_color, true)
 	var outer_arc_steps := ceili((end_angle - start_angle) * max_distance / DOT_SPACING)
 	for arc_index in range(outer_arc_steps + 1):
 		var ratio := float(arc_index) / float(outer_arc_steps)
@@ -2254,8 +2294,7 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
 		draw_normal_attack_effect(player, position_value, facing)
-		if network_mode == "local":
-			draw_debug_normal_attack_hit_area(position_value, facing)
+		draw_debug_normal_attack_hit_area(position_value, facing)
 	var health_ratio: float = float(player["hp"]) / 100.0
 	var health_rect := Rect2(position_value + Vector2(-30, -54), Vector2(60, 7))
 	draw_rect(health_rect, Color("070b14"), true)
