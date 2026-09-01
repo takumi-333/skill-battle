@@ -98,6 +98,12 @@ const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chan
 const TYPIST_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist.png")
 const ARITHMETICIAN_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician.png")
 const CHANTER_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter.png")
+const TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_weapon.png")
+const ARITHMETICIAN_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_weapon.png")
+const CHANTER_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_weapon.png")
+const TYPIST_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_particle.png")
+const ARITHMETICIAN_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_particle.png")
+const CHANTER_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_particle.png")
 
 var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
@@ -1893,25 +1899,58 @@ func get_normal_attack_texture(visual_id: String) -> Texture2D:
 	return TYPIST_NORMAL_ATTACK_TEXTURE
 
 
+func get_normal_attack_weapon_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_NORMAL_ATTACK_WEAPON_TEXTURE
+	if visual_id == "chanter":
+		return CHANTER_NORMAL_ATTACK_WEAPON_TEXTURE
+	return TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE
+
+
+func get_normal_attack_particle_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_NORMAL_ATTACK_PARTICLE_TEXTURE
+	if visual_id == "chanter":
+		return CHANTER_NORMAL_ATTACK_PARTICLE_TEXTURE
+	return TYPIST_NORMAL_ATTACK_PARTICLE_TEXTURE
+
+
 func draw_normal_attack_effect(player: Dictionary, position_value: Vector2, facing: Vector2) -> void:
 	var progress := clampf(1.0 - float(player["attack_time"]) / ATTACK_DURATION, 0.0, 1.0)
-	var frame_index := mini(NORMAL_ATTACK_FRAME_COUNT - 1, int(floor(progress * NORMAL_ATTACK_FRAME_COUNT)))
 	var visual_id := str(player.get("visual_id", "typist"))
-	var texture := get_normal_attack_texture(visual_id)
-	var source_rect := Rect2(frame_index * 64.0, 0.0, 64.0, 64.0)
-	var effect_distance := 26.0 + sin(progress * PI * 0.88) * 34.0
-	var effect_center := position_value + facing * effect_distance
-	var scale_strength := 1.25 + sin(progress * PI) * 0.18
-	var opacity := 1.0
-	var rotation_offset := lerpf(-0.26, 0.24, progress)
-	if visual_id == "arithmetician":
-		effect_center = position_value + facing * (40.0 + progress * 24.0)
-		scale_strength = 1.12 + sin(progress * PI) * 0.10
-		opacity = clampf(sin(progress * PI) * 1.25, 0.28, 1.0)
-		rotation_offset = 0.0
-	# 元素材の斜め軌跡を水平方向に反転し、正面方向へ振り抜く見た目にする。
-	draw_set_transform(effect_center, facing.angle() + rotation_offset, Vector2(-scale_strength, scale_strength))
-	draw_texture_rect_region(texture, Rect2(-32.0, -32.0, 64.0, 64.0), source_rect, Color(1.0, 1.0, 1.0, opacity))
+	var weapon_texture := get_normal_attack_weapon_texture(visual_id)
+	var particle_texture := get_normal_attack_particle_texture(visual_id)
+	var particle_size := 28.75 if visual_id == "arithmetician" else (43.7 if visual_id == "chanter" else 34.5)
+	var particle_count := 28 if visual_id == "arithmetician" else (40 if visual_id == "chanter" else 24)
+	var source_size := weapon_texture.get_size()
+	# 武器画像ごとの縦横比は維持しつつ、最長辺を共通サイズへ揃える。
+	var weapon_canvas_size := 118.0
+	var source_longest_edge := float(maxi(source_size.x, source_size.y))
+	var weapon_size := Vector2(source_size) * (weapon_canvas_size / source_longest_edge)
+	var hand_pivot := position_value + facing * 10.0 + Vector2(0.0, -15.0)
+	# 元画像は「左下の柄尻→右上の武器先端」。柄尻をpivotにして、前方を横切るように回転する。
+	var swing_angle := facing.angle() + lerpf(PI * 0.5, -PI * 0.5, progress)
+	var swing_rotation := swing_angle + PI * 0.25
+	var weapon_rect := Rect2(Vector2(-weapon_size.x * 0.07, -weapon_size.y * 0.94), weapon_size)
+	var weapon_tip_distance := weapon_canvas_size * 0.84
+
+	# 進行済みの「武器先端」の位置にだけ粒子を残し、密度の高い扇状の軌跡を作る。
+	for trail_index in range(particle_count):
+		var trail_progress := maxf(0.0, progress - float(trail_index) * (1.05 / float(particle_count)))
+		if trail_progress >= progress and progress < 0.04:
+			continue
+		var trail_angle := facing.angle() + lerpf(PI * 0.5, -PI * 0.5, trail_progress)
+		var trail_direction := Vector2.from_angle(trail_angle)
+		var trail_age_ratio := float(trail_index) / float(maxi(particle_count - 1, 1))
+		var trail_side_offset := trail_direction.orthogonal() * sin(float(trail_index) * 2.17) * (1.5 + float(trail_index) * 0.35)
+		var particle_position := hand_pivot + trail_direction * weapon_tip_distance + trail_side_offset
+		var particle_alpha := (0.44 * pow(1.0 - trail_age_ratio, 1.3) + 0.08) * sin(trail_progress * PI)
+		var particle_scale := particle_size * (1.0 - trail_age_ratio * 0.46)
+		draw_set_transform(particle_position, trail_angle + float(trail_index) * 0.22, Vector2.ONE)
+		draw_texture_rect(particle_texture, Rect2(-particle_scale * 0.5, -particle_scale * 0.5, particle_scale, particle_scale), false, Color(1.0, 1.0, 1.0, particle_alpha))
+
+	draw_set_transform(hand_pivot, swing_rotation, Vector2.ONE)
+	draw_texture_rect(weapon_texture, weapon_rect, false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
