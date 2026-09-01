@@ -27,7 +27,7 @@ class SpriteEditorTest(unittest.TestCase):
     def test_editor_defines_pixel_editing_and_direct_overwrite(self) -> None:
         html = HTML.read_text(encoding="utf-8")
         for required in (
-            'id="sheetMode"', 'id="cellMode"', 'id="pencil"', 'id="eraser"', 'id="fill"',
+            'id="sheetMode"', 'id="cellMode"', 'id="cellWidth"', 'id="cellHeight"', 'id="pencil"', 'id="eraser"', 'id="fill"',
             'id="transparent"', 'id="save"', 'const CELL=64', 'showOpenFilePicker',
             'createWritable()', "requestPermission({mode:'readwrite'})", 'image-rendering:pixelated',
         ):

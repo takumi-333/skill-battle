@@ -26,8 +26,14 @@ DEFAULTS = {
 
 def cleanup_config(spec: dict[str, Any] | None) -> dict[str, Any]:
     value = dict(DEFAULTS)
-    if isinstance(spec, dict) and isinstance(spec.get("artifact_cleanup"), dict):
-        value.update(spec["artifact_cleanup"])
+    if isinstance(spec, dict):
+        configured = spec.get("artifact_cleanup")
+        if isinstance(configured, dict):
+            value.update(configured)
+        # エフェクトや飛翔体の分離粒子は表現要素であり、人物用cleanupの対象ではない。
+        # 必要な場合だけartifact_cleanup.enabled=trueを明示して有効にする。
+        elif spec.get("profile") in ("effect", "projectile"):
+            value["enabled"] = False
     for key in DEFAULTS:
         if not isinstance(value[key], (int, bool)) or isinstance(value[key], bool) != isinstance(DEFAULTS[key], bool):
             raise ValueError(f"artifact_cleanup.{key} has an invalid value")

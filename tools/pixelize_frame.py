@@ -56,7 +56,9 @@ def main() -> int:
     parser.add_argument("output", type=Path)
     parser.add_argument("--spec", type=Path)
     parser.add_argument("--palette", type=Path, help="RGB配列または {colors: [...]} を含むJSON")
-    parser.add_argument("--size", type=int, default=64)
+    parser.add_argument("--size", type=int, default=64, help="互換用の正方形出力サイズ")
+    parser.add_argument("--width", type=int, help="出力幅。指定時は--sizeを上書きする")
+    parser.add_argument("--height", type=int, help="出力高。指定時は--sizeを上書きする")
     parser.add_argument("--colors", type=int, default=32, help="固定パレット未指定時の互換fallback用")
     parser.add_argument("--alpha-threshold", type=int)
     parser.add_argument("--binary-alpha-threshold", type=int)
@@ -68,8 +70,13 @@ def main() -> int:
     normalization = spec.get("normalization", {})
     alpha_threshold = args.alpha_threshold if args.alpha_threshold is not None else normalization.get("alpha_bbox_threshold", 8)
     binary_alpha_threshold = args.binary_alpha_threshold if args.binary_alpha_threshold is not None else normalization.get("binary_alpha_threshold", alpha_threshold)
-    target_visible_height = args.content_height if args.content_height is not None else normalization.get("target_visible_height", 48)
-    max_visible_width = args.max_visible_width if args.max_visible_width is not None else normalization.get("max_visible_width", args.size - 4)
+    output_width = args.width if args.width is not None else args.size
+    output_height = args.height if args.height is not None else args.size
+    if output_width <= 0 or output_height <= 0:
+        raise ValueError("--size, --width, and --height must be greater than zero")
+    default_content_height = max(1, output_height - max(2, output_height // 4))
+    target_visible_height = args.content_height if args.content_height is not None else normalization.get("target_visible_height", default_content_height)
+    max_visible_width = args.max_visible_width if args.max_visible_width is not None else normalization.get("max_visible_width", output_width - 4)
     palette = load_palette(spec, args.palette)
 
     source = Image.open(args.input).convert("RGBA")
@@ -83,12 +90,12 @@ def main() -> int:
     # 安全上限に引っかかり、目標身体高さへ届かなくなる。
     crop = source.crop(bbox)
     desired_scale = min(target_visible_height / visible_height, max_visible_width / visible_width)
-    fit_scale = min((args.size - 2) / crop.width, (args.size - 2) / crop.height)
+    fit_scale = min((output_width - 2) / crop.width, (output_height - 2) / crop.height)
     scale = min(desired_scale, fit_scale)
     target_size = (max(1, round(crop.width * scale)), max(1, round(crop.height * scale)))
     resized_crop = crop.resize(target_size, Image.Resampling.LANCZOS)
-    resized = Image.new("RGBA", (args.size, args.size), (0, 0, 0, 0))
-    resized.alpha_composite(resized_crop, ((args.size - target_size[0]) // 2, (args.size - target_size[1]) // 2))
+    resized = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
+    resized.alpha_composite(resized_crop, ((output_width - target_size[0]) // 2, (output_height - target_size[1]) // 2))
 
     alpha = alpha_mask(resized, binary_alpha_threshold)
     if palette is not None:
@@ -110,7 +117,7 @@ def main() -> int:
         "max_visible_width": max_visible_width,
         "content_size": target_size,
         "result_visible_size": [result_bbox[2] - result_bbox[0], result_bbox[3] - result_bbox[1]],
-        "pixel_grid": [args.size, args.size],
+        "pixel_grid": [output_width, output_height],
         "resample": "LANCZOS",
         "alpha": "binary",
         "alpha_threshold": binary_alpha_threshold,
