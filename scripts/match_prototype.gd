@@ -36,13 +36,6 @@ class TraceCanvas extends Control:
 		draw_rect(Rect2(Vector2.ZERO, size), Color("7386b8"), false, 2.0)
 		if target_points.size() >= 2:
 			draw_polyline(target_points, Color("8fa8e888"), 12.0, true)
-			draw_circle(target_points[0], 13.0, Color("71d6ba"))
-			draw_circle(target_points[0], 6.0, Color("10233a"))
-			var end_point := target_points[target_points.size() - 1]
-			var previous_point := target_points[target_points.size() - 2]
-			var direction := (end_point - previous_point).normalized()
-			var side := direction.orthogonal() * 10.0
-			draw_colored_polygon(PackedVector2Array([end_point, end_point - direction * 24.0 + side, end_point - direction * 24.0 - side]), Color("ffc45e"))
 		if input_points.size() >= 2:
 			draw_polyline(input_points, Color("fff2b0"), 5.0, true)
 		for point in input_points:
@@ -70,9 +63,13 @@ const SKILL_PROJECTILE_RADIUS := 10.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const INTERRUPT_DISPLAY_SPEED := 180.0
 const BIG_CHALLENGE_LIMIT := 10.0
+const BIG_TYPING_CHALLENGE_LIMIT := 20.0
 const BIG_PASSING_SCORE := 70
 const ARITHMETIC_CHALLENGE_LIMIT := 7.0
 const TRACE_CHALLENGE_LIMIT := 8.0
+const CHALLENGE_MISS_TIME_PENALTY := 1.8
+const TYPING_PROJECTILE_INTERVAL := 0.5
+const CHANTER_ZONE_DELAY := 0.2
 const ZONE_DURATION := 5.0
 const NETWORK_PORT := 7000
 const STATE_SYNC_INTERVAL := 0.05
@@ -104,6 +101,7 @@ var players: Dictionary = match_state.players
 var status_text := "開始！ 距離を取りながら相手に通常攻撃を当てよう。"
 var skill_projectiles: Array[Dictionary] = []
 var magic_zones: Array[Dictionary] = []
+var decoys: Array[Dictionary] = []
 var phase: String = "lobby"
 var screen: String = "title"
 var countdown_remaining: float = 0.0
@@ -115,6 +113,12 @@ var challenge_owner: int = 0
 var challenge_skill: String = ""
 var challenge_prompt: String = ""
 var challenge_answer: String = ""
+var challenge_definition: ChallengeDefinition
+var challenge_typing_index: int = 0
+var challenge_miss_flash: float = 0.0
+var challenge_shake: float = 0.0
+var challenge_typed_characters: String = ""
+var challenge_base_position := Vector2(250.0, 185.0)
 var challenge_score: int = 0
 var challenge_trace_points: PackedVector2Array = PackedVector2Array()
 var challenge_target_points: PackedVector2Array = PackedVector2Array()
@@ -240,31 +244,37 @@ func play_ui_click() -> void:
 func create_challenge_definitions() -> void:
 	var small_typing: ChallengeDefinition = ChallengeDefinition.new()
 	small_typing.challenge_type = "typing"
-	small_typing.prompt = "blade"
+	small_typing.candidates = PackedStringArray(["Track", "Chase", "Trace", "Trail", "Stalk"])
 	small_typing.time_limit_seconds = TYPING_CHALLENGE_LIMIT
 	small_typing.passing_score = 0
 	challenge_definitions["blade_small"] = small_typing
 	var big_typing: ChallengeDefinition = ChallengeDefinition.new()
 	big_typing.challenge_type = "typing"
-	big_typing.prompt = "the blade returns at dawn"
-	big_typing.time_limit_seconds = BIG_CHALLENGE_LIMIT
+	big_typing.candidates = PackedStringArray(["Hammer Down and Shatter the Ground", "Smash the Earth with a Crushing Blow", "Break the Ground with a Mighty Hammer", "Slam the Hammer and Split the Earth", "Crush the Floor with a Thunderous Strike", "Strike the Ground and Tear It Apart", "Bring the Hammer Down and Crack the Land"])
+	big_typing.time_limit_seconds = BIG_TYPING_CHALLENGE_LIMIT
 	big_typing.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_big"] = big_typing
 	var small_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	small_arithmetic.challenge_type = "arithmetic"
-	small_arithmetic.prompt = "7 + 8 = ?"
+	small_arithmetic.candidates = arithmetic_candidates()
 	small_arithmetic.time_limit_seconds = ARITHMETIC_CHALLENGE_LIMIT
 	challenge_definitions["arithmetic_small"] = small_arithmetic
 	var big_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	big_arithmetic.challenge_type = "arithmetic"
-	big_arithmetic.prompt = "12 × 7 = ?"
+	big_arithmetic.candidates = arithmetic_candidates()
 	big_arithmetic.time_limit_seconds = BIG_CHALLENGE_LIMIT
 	big_arithmetic.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["arithmetic_big"] = big_arithmetic
 
 
+func arithmetic_candidates() -> PackedStringArray:
+	return PackedStringArray(["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255", "18 + 5 * 14", "7 + 6 * 8 + 15", "21 + 22 + 23 + 24", "176 + 248", "32 + 7 * 11", "9 + 5 * 12 + 18", "14 + 16 + 18 + 20", "187 + 326", "25 + 6 * 13", "8 + 9 * 7 + 14", "15 + 17 + 19 + 21"])
+
+
 func _process(delta: float) -> void:
 	character_animation_elapsed += delta
+	challenge_miss_flash = maxf(0.0, challenge_miss_flash - delta)
+	challenge_shake = maxf(0.0, challenge_shake - delta)
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
 		if screen == "title":
 			title_animation_elapsed += delta
@@ -311,6 +321,7 @@ func _process(delta: float) -> void:
 	update_typing_challenge(delta)
 	update_skill_projectiles(delta)
 	update_magic_zones(delta)
+	update_decoys(delta)
 	if network_mode == "host":
 		sync_network_state(delta)
 
@@ -375,6 +386,12 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	player["small_cooldown"] = maxf(0.0, float(player["small_cooldown"]) - delta)
 	player["big_cooldown"] = maxf(0.0, float(player["big_cooldown"]) - delta)
 	player["buff_time"] = maxf(0.0, float(player["buff_time"]) - delta)
+	if float(player["buff_time"]) <= 0.0:
+		player["attack_damage_buff"] = 0
+	player["invisible_time"] = maxf(0.0, float(player.get("invisible_time", 0.0)) - delta)
+	player["invisible_flicker"] = maxf(0.0, float(player.get("invisible_flicker", 0.0)) - delta)
+	if float(player["invisible_time"]) > 0.0 and float(player["invisible_flicker"]) <= 0.0:
+		player["invisible_flicker"] = 2.5
 	var shown_gauge: float = float(player["interrupt_gauge_display"])
 	var target_gauge: float = float(player["interrupt_gauge"])
 	player["interrupt_gauge_display"] = move_toward(shown_gauge, target_gauge, INTERRUPT_DISPLAY_SPEED * delta)
@@ -399,7 +416,7 @@ func try_attack(player_id: int) -> void:
 	var in_range: bool = to_target.length() >= SLASH_INNER_RANGE and to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 	var in_front: bool = to_target.length_squared() > 0.0 and facing.dot(to_target.normalized()) >= cos(SLASH_ARC_HALF_ANGLE)
 	if in_range and in_front:
-		apply_damage(target_id, int(player["normal_damage"]), "%sの斬撃" % player["name"])
+		apply_damage(target_id, int(player["normal_damage"]) + int(player.get("attack_damage_buff", 0)), "%sの斬撃" % player["name"])
 		status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
 		if target["hp"] <= 0:
 			finish_match(player_id)
@@ -428,26 +445,25 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_owner = owner_id
 	challenge_skill = "big" if is_big else "small"
 	challenge_trace_points.clear()
+	challenge_typing_index = 0
+	challenge_typed_characters = ""
+	challenge_definition = null
 	if character_id == "blade":
 		var typing_definition: ChallengeDefinition = challenge_definitions["blade_big" if is_big else "blade_small"]
-		challenge_prompt = typing_definition.prompt
+		challenge_definition = typing_definition
+		challenge_prompt = typing_definition.candidates[randi_range(0, typing_definition.candidates.size() - 1)]
 		challenge_answer = challenge_prompt
 		challenge_skill = "big_typing" if is_big else "small_typing"
 	elif character_id == "arithmetic":
 		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_big" if is_big else "arithmetic_small"]
-		challenge_prompt = arithmetic_definition.prompt
-		if is_big:
-			var factor_a: int = randi_range(8, 15)
-			var factor_b: int = randi_range(4, 9)
-			challenge_prompt = "%d × %d = ?" % [factor_a, factor_b]
-			challenge_answer = str(factor_a * factor_b)
-		else:
-			var add_a: int = randi_range(4, 18)
-			var add_b: int = randi_range(3, 16)
-			challenge_prompt = "%d + %d = ?" % [add_a, add_b]
-			challenge_answer = str(add_a + add_b)
+		challenge_definition = arithmetic_definition
+		challenge_prompt = arithmetic_definition.candidates[randi_range(0, arithmetic_definition.candidates.size() - 1)] + " = ?"
+		challenge_answer = str(evaluate_arithmetic(challenge_prompt.trim_suffix(" = ?")))
 		challenge_skill = "big_arithmetic" if is_big else "small_arithmetic"
 	else:
+		challenge_definition = ChallengeDefinition.new()
+		challenge_definition.challenge_type = "tracing"
+		challenge_definition.no_time_limit = true
 		challenge_prompt = "星形をなぞってください" if is_big else "右向きの線をなぞってください"
 		challenge_answer = ""
 		challenge_skill = "big_trace" if is_big else "small_trace"
@@ -458,21 +474,54 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	player["interrupt_gauge"] = player["interrupt_gauge_max"]
 	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	players[owner_id] = player
+	challenge_miss_flash = 0.0
+	challenge_shake = 0.0
 	var show_local_challenge: bool = network_mode != "host" or owner_id == 1
 	challenge_dimmer.visible = show_local_challenge
 	challenge_panel.visible = show_local_challenge
 	typing_input.visible = not challenge_skill.ends_with("trace")
+	challenge_trace_canvas.visible = challenge_skill.ends_with("trace")
 	typing_input.text = ""
 	if typing_input.visible and show_local_challenge:
 		typing_input.grab_focus()
+	apply_challenge_layout(character_id)
 	status_text = "%sが%sの集中を開始！" % [player["name"], "スキル2" if is_big else "スキル1"]
 	update_challenge_ui(0.0)
 	update_trace_canvas()
 
 
+func evaluate_arithmetic(expression: String) -> int:
+	var total := 0
+	for add_term in expression.split("+"):
+		var product := 1
+		for factor in add_term.strip_edges().split("*"):
+			product *= int(factor.strip_edges())
+		total += product
+	return total
+
+
+func apply_challenge_layout(character_id: String) -> void:
+	match character_id:
+		"blade":
+			challenge_base_position = Vector2(320.0, 465.0)
+			challenge_panel.size = Vector2(640.0, 240.0)
+		"arithmetic":
+			challenge_base_position = Vector2(55.0, 410.0)
+			challenge_panel.size = Vector2(300.0, 290.0)
+		_:
+			challenge_base_position = Vector2(250.0, 185.0)
+			challenge_panel.size = Vector2(780.0, 400.0)
+	challenge_panel.position = challenge_base_position
+
+
 func make_trace_target(is_big: bool) -> PackedVector2Array:
 	if not is_big:
-		return PackedVector2Array([Vector2(120, 110), Vector2(560, 110)])
+		var circle_center := Vector2(340, 118)
+		var circle_points := PackedVector2Array()
+		for index in range(49):
+			var angle := float(index) * TAU / 48.0
+			circle_points.append(circle_center + Vector2.from_angle(angle) * 92.0)
+		return circle_points
 	var center := Vector2(340, 118)
 	var points := PackedVector2Array()
 	for index in range(11):
@@ -497,7 +546,9 @@ func update_typing_challenge(delta: float) -> void:
 	player["challenge_elapsed"] = elapsed
 	players[challenge_owner] = player
 	update_challenge_ui(elapsed)
-	var limit: float = BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
+	var limit: float = get_challenge_time_limit()
+	if limit <= 0.0:
+		return
 	if elapsed >= limit:
 		end_active_challenge(false, 0, "時間切れ。課題は失敗した。")
 
@@ -513,15 +564,32 @@ func _on_typing_submitted(submitted_text: String) -> void:
 	var player: Dictionary = players[challenge_owner]
 	if not bool(player["focused"]):
 		return
-	if submitted_text.strip_edges().to_lower() != challenge_answer.to_lower():
+	if submitted_text != challenge_answer:
 		player["challenge_errors"] = int(player["challenge_errors"]) + 1
+		player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
 		players[challenge_owner] = player
-		end_active_challenge(false, 0, "誤入力。課題は失敗した。")
+		challenge_miss_flash = 0.22
+		challenge_shake = 0.22
+		typing_input.text = ""
+		status_text = "入力ミス！ 残り時間が減少した。"
+		update_challenge_ui(float(player["challenge_elapsed"]))
+		return
 		return
 	var elapsed: float = float(player["challenge_elapsed"])
-	var limit: float = BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT)
+	var limit: float = get_challenge_time_limit()
 	var score: int = clampi(roundi(100.0 - elapsed / limit * 40.0), 0, 100)
-	end_active_challenge(score >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 0), score, "")
+	if challenge_skill.ends_with("typing"):
+		challenge_typed_characters = submitted_text
+	var typing_success := challenge_skill == "big_typing" or not challenge_skill.begins_with("big")
+	end_active_challenge(typing_success or score >= BIG_PASSING_SCORE, score, "")
+
+
+func get_challenge_time_limit() -> float:
+	if challenge_skill.ends_with("trace") or (challenge_definition != null and challenge_definition.no_time_limit):
+		return 0.0
+	if challenge_skill == "big_typing":
+		return BIG_TYPING_CHALLENGE_LIMIT
+	return BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
 
 
 func end_active_challenge(success: bool, score: int, failure_message: String) -> void:
@@ -556,6 +624,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 		status_text = failure_message
 	challenge_owner = 0
 	challenge_skill = ""
+	challenge_trace_points.clear()
 	challenge_target_points.clear()
 	update_trace_canvas()
 
@@ -582,28 +651,41 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 	var owner: Dictionary = players[owner_id]
 	var character_id: String = str(owner["character_id"])
 	if character_id == "blade":
-		var count: int = 2 if is_big else 1
-		for shot in range(count):
-			spawn_projectile(owner_id, score, is_big, float(shot - (count - 1) * 0.5) * 0.16)
-	elif character_id == "arithmetic":
-		if is_big:
-			spawn_zone(owner_id, score, owner["position"] + owner["facing"] * 150.0)
+		if not is_big:
+			for index in range(challenge_typed_characters.length()):
+				spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_PROJECTILE_INTERVAL, challenge_typed_characters[index])
 		else:
-			owner["buff_time"] = 5.0
+			for angle in [-PI / 3.0, 0.0, PI / 3.0]:
+				spawn_projectile(owner_id, score, true, angle)
+	elif character_id == "arithmetic":
+		if not is_big:
+			for index in range(30):
+				var angle := TAU * float(index) / 30.0 + randf_range(-0.18, 0.18)
+				var radius := randf_range(60.0, 620.0)
+				var decoy_origin := clamp_to_arena(owner["position"] + Vector2.from_angle(angle) * radius)
+				decoys.append({"owner_id": owner_id, "visual_id": owner.get("visual_id", "arithmetician"), "facing": owner.get("facing", Vector2.DOWN), "position": decoy_origin, "origin": decoy_origin, "lifetime": lerpf(20.0, 30.0, float(score) / 100.0), "sway_timer": randf_range(2.0, 3.0)})
+			owner["buff_time"] = lerpf(20.0, 30.0, float(score) / 100.0)
+			owner["attack_damage_buff"] = 8
 			players[owner_id] = owner
-			status_text = "%sの計算強化で移動速度が上がった！" % owner["name"]
+		else:
+			owner["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
+			owner["attack_damage_buff"] = 10
+			owner["invisible_time"] = owner["buff_time"]
+			owner["invisible_flicker"] = 0.0
+			players[owner_id] = owner
+			status_text = "%sが最適解へ収束した！" % owner["name"]
 	else:
-		var target_id: int = 2 if owner_id == 1 else 1
-		var target: Dictionary = players[target_id]
-		var owner_position: Vector2 = owner["position"]
-		var target_position: Vector2 = target["position"]
-		if not is_big and is_point_in_player_hitbox(get_player_hitbox_center(owner_position), target_position, 170.0):
-			apply_damage(target_id, 18 + roundi(float(score) * 0.08), "詠唱者の衝撃波")
-		elif is_big:
-			spawn_zone(owner_id, score, owner["position"] + owner["facing"] * 110.0)
+		if not is_big:
+			for index in range(3):
+				var active_duration := 2.5 if index == 2 else 2.0
+				spawn_zone(owner_id, score, Vector2.ZERO, 1.5 * float(index), 0.3, active_duration)
+		else:
+			for cycle in range(3):
+				for shot in range(16):
+					spawn_projectile(owner_id, score, true, TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08)
 
 
-func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: float) -> void:
+func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: float, delay: float = 0.0, chip: String = "") -> void:
 	var owner: Dictionary = players[owner_id]
 	var owner_facing: Vector2 = owner["facing"]
 	var facing: Vector2 = owner_facing.rotated(angle_offset)
@@ -614,35 +696,77 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 		"damage": (24 if is_big else 10) + roundi(float(score) * (0.12 if is_big else 0.1)),
 		"lifetime": 2.0 if is_big else 1.6,
 		"piercing": is_big,
+		"delay": delay,
+		"chip": chip,
+		"launched": false,
 	})
 
 
-func spawn_zone(owner_id: int, score: int, zone_position: Vector2) -> void:
-	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": ZONE_DURATION, "damage_timer": 0.0, "damage": 8 + roundi(float(score) * 0.06)})
+func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, damage_delay: float = 0.0, active_duration: float = 1.0) -> void:
+	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "damage_timer": damage_delay, "damage": 8 + roundi(float(score) * 0.06), "spawned": false, "damage_started": false, "damage_flash": 0.0, "pulse_time": 0.0, "damage_applied": false})
 
 
 func update_magic_zones(delta: float) -> void:
 	for index in range(magic_zones.size() - 1, -1, -1):
 		var zone: Dictionary = magic_zones[index]
-		zone["lifetime"] = float(zone["lifetime"]) - delta
-		zone["damage_timer"] = float(zone["damage_timer"]) - delta
-		if float(zone["damage_timer"]) <= 0.0:
+		zone["delay"] = maxf(0.0, float(zone.get("delay", 0.0)) - delta)
+		if not bool(zone.get("spawned", false)) and float(zone["delay"]) <= 0.0:
 			var target_id: int = 2 if int(zone["owner_id"]) == 1 else 1
 			var target: Dictionary = players[target_id]
-			var target_position: Vector2 = target["position"]
-			var zone_position: Vector2 = zone["position"]
-			if is_point_in_player_hitbox(zone_position, target_position, 80.0):
-				apply_damage(target_id, int(zone["damage"]), "魔法陣")
-			zone["damage_timer"] = 0.8
-		if float(zone["lifetime"]) <= 0.0:
+			zone["position"] = clamp_to_arena(target["position"])
+			zone["spawned"] = true
+			zone["lifetime"] = float(zone.get("active_duration", 1.0))
+			zone["damage_timer"] = 0.3
+		if bool(zone.get("spawned", false)):
+			zone["lifetime"] = float(zone["lifetime"]) - delta
+			zone["damage_timer"] = float(zone["damage_timer"]) - delta
+			zone["damage_flash"] = maxf(0.0, float(zone.get("damage_flash", 0.0)) - delta)
+			zone["pulse_time"] = float(zone.get("pulse_time", 0.0)) + delta
+			if float(zone["damage_timer"]) <= 0.0 and not bool(zone.get("damage_started", false)):
+				zone["damage_started"] = true
+				zone["damage_flash"] = 0.18
+			if bool(zone.get("damage_started", false)) and not bool(zone.get("damage_applied", false)):
+				var target_id: int = 2 if int(zone["owner_id"]) == 1 else 1
+				var target: Dictionary = players[target_id]
+				if is_point_in_player_hitbox(zone["position"], target["position"], 80.0):
+					apply_damage(target_id, int(zone["damage"]), "魔法陣")
+				zone["damage_applied"] = true
+		if bool(zone.get("spawned", false)) and float(zone["lifetime"]) <= 0.0:
 			magic_zones.remove_at(index)
 		else:
 			magic_zones[index] = zone
 
 
+func update_decoys(delta: float) -> void:
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		decoy["lifetime"] = float(decoy["lifetime"]) - delta
+		decoy["sway_timer"] = float(decoy["sway_timer"]) - delta
+		if float(decoy["sway_timer"]) <= 0.0:
+			decoy["sway_timer"] = randf_range(2.0, 3.0)
+			decoy["position"] = decoy["origin"] + Vector2(randf_range(-24.0, 24.0), randf_range(-18.0, 18.0))
+		if float(decoy["lifetime"]) <= 0.0:
+			decoys.remove_at(index)
+		else:
+			decoys[index] = decoy
+
+
 func update_skill_projectiles(delta: float) -> void:
 	for index in range(skill_projectiles.size() - 1, -1, -1):
 		var projectile: Dictionary = skill_projectiles[index]
+		projectile["delay"] = maxf(0.0, float(projectile.get("delay", 0.0)) - delta)
+		if float(projectile["delay"]) > 0.0:
+			skill_projectiles[index] = projectile
+			continue
+		if str(projectile.get("chip", "")) != "" and not bool(projectile.get("launched", false)):
+			var launch_owner_id := int(projectile["owner_id"])
+			var launch_target_id := 2 if launch_owner_id == 1 else 1
+			var launch_origin: Vector2 = players[launch_owner_id]["position"]
+			var launch_target: Vector2 = players[launch_target_id]["position"]
+			var launch_direction := (launch_target - launch_origin).normalized()
+			projectile["position"] = launch_origin
+			projectile["velocity"] = launch_direction * 500.0
+			projectile["launched"] = true
 		var position_value: Vector2 = projectile["position"] + projectile["velocity"] * delta
 		projectile["position"] = position_value
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
@@ -1290,6 +1414,7 @@ func return_to_home() -> void:
 	typing_input.release_focus()
 	skill_projectiles.clear()
 	magic_zones.clear()
+	decoys.clear()
 	match_state.reset()
 	players = match_state.players
 	phase = "lobby"
@@ -1484,6 +1609,7 @@ func make_network_state() -> Dictionary:
 		"status_text": status_text,
 		"skill_projectiles": skill_projectiles,
 		"magic_zones": magic_zones,
+		"decoys": decoys,
 		"challenge_owner": challenge_owner,
 		"challenge_skill": challenge_skill,
 		"challenge_prompt": challenge_prompt,
@@ -1523,8 +1649,13 @@ func receive_network_state(state: Dictionary) -> void:
 	status_text = str(state["status_text"])
 	skill_projectiles = state["skill_projectiles"]
 	magic_zones = state["magic_zones"]
-	challenge_owner = int(state["challenge_owner"])
-	challenge_skill = str(state["challenge_skill"])
+	decoys = state.get("decoys", [])
+	var incoming_challenge_owner := int(state["challenge_owner"])
+	var incoming_challenge_skill := str(state["challenge_skill"])
+	if challenge_owner != incoming_challenge_owner or challenge_skill != incoming_challenge_skill:
+		challenge_trace_points.clear()
+	challenge_owner = incoming_challenge_owner
+	challenge_skill = incoming_challenge_skill
 	challenge_prompt = str(state["challenge_prompt"])
 	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if challenge_skill.ends_with("trace") else PackedVector2Array()
 	update_client_ui_from_state()
@@ -1556,12 +1687,15 @@ func update_client_ui_from_state() -> void:
 	challenge_dimmer.visible = player_is_challenging
 	challenge_panel.visible = player_is_challenging
 	if player_is_challenging:
+		apply_challenge_layout(str(players[local_player_id]["character_id"]))
 		challenge_prompt_label.text = challenge_prompt
 		typing_input.visible = not challenge_skill.ends_with("trace")
+		challenge_trace_canvas.visible = challenge_skill.ends_with("trace")
 		update_challenge_ui(float(players[local_player_id]["challenge_elapsed"]))
 		if typing_input.visible and not typing_input.has_focus():
 			typing_input.grab_focus()
 	else:
+		challenge_trace_canvas.visible = false
 		typing_input.release_focus()
 
 
@@ -1688,6 +1822,7 @@ func get_idle_texture(visual_id: String) -> Texture2D:
 
 
 func begin_match() -> void:
+	reset_match_runtime_state()
 	phase = "match"
 	screen = "match"
 	menu_background.visible = false
@@ -1699,6 +1834,28 @@ func begin_match() -> void:
 	configure_player(1, p1_selection)
 	configure_player(2, p2_selection)
 	status_text = "開始！ 通常攻撃と課題スキルを使い分けよう。"
+
+
+func reset_match_runtime_state() -> void:
+	skill_projectiles.clear()
+	magic_zones.clear()
+	decoys.clear()
+	challenge_owner = 0
+	challenge_skill = ""
+	challenge_prompt = ""
+	challenge_answer = ""
+	challenge_typed_characters = ""
+	challenge_trace_points.clear()
+	challenge_target_points.clear()
+	challenge_miss_flash = 0.0
+	challenge_shake = 0.0
+	if challenge_panel:
+		challenge_panel.visible = false
+	if challenge_dimmer:
+		challenge_dimmer.visible = false
+	if typing_input:
+		typing_input.text = ""
+		typing_input.release_focus()
 
 
 func configure_player(player_id: int, selection: int) -> void:
@@ -1713,6 +1870,20 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["color"] = colors[selection]
 	player["normal_damage"] = 12 if selection == 0 else (10 if selection == 1 else 11)
 	player["hp"] = 100
+	player["focused"] = false
+	player["challenge_elapsed"] = 0.0
+	player["attack_cooldown"] = 0.0
+	player["attack_time"] = 0.0
+	player["hit_time"] = 0.0
+	player["buff_time"] = 0.0
+	player["attack_damage_buff"] = 0
+	player["invisible_time"] = 0.0
+	player["invisible_flicker"] = 0.0
+	player["small_cooldown"] = 0.0
+	player["big_cooldown"] = 0.0
+	player["interrupt_gauge"] = 0.0
+	player["interrupt_gauge_max"] = 0.0
+	player["interrupt_gauge_display"] = 0.0
 	player["position"] = Vector2(300, 390) if player_id == 1 else Vector2(980, 390)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
 	players[player_id] = player
@@ -1797,9 +1968,16 @@ func update_challenge_ui(elapsed: float) -> void:
 	var skill_name := "スキル２" if challenge_skill.begins_with("big") else "スキル１"
 	challenge_title_label.text = "%s　発動！！" % skill_name
 	challenge_prompt_label.text = challenge_prompt
-	var limit: float = BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
-	challenge_progress_label.text = "残り %.1f秒　|　Esc: 中止" % maxf(0.0, limit - elapsed)
-	challenge_time_bar.value = clampf(1.0 - elapsed / limit, 0.0, 1.0)
+	var limit: float = get_challenge_time_limit()
+	if limit <= 0.0:
+		challenge_progress_label.text = "時間制限なし　|　ボタンを離して判定　|　Esc: 中止"
+		challenge_time_bar.value = 1.0
+	else:
+		challenge_progress_label.text = "残り %.1f秒　|　Esc: 中止" % maxf(0.0, limit - elapsed)
+		challenge_time_bar.value = clampf(1.0 - elapsed / limit, 0.0, 1.0)
+	if challenge_panel:
+		challenge_panel.modulate = Color(1.0, 0.38, 0.38) if challenge_miss_flash > 0.0 else Color.WHITE
+		challenge_panel.position = challenge_base_position + (Vector2(sin(challenge_shake * 180.0) * 6.0, 0.0) if challenge_shake > 0.0 else Vector2.ZERO)
 	update_trace_canvas()
 
 
@@ -1854,9 +2032,17 @@ func _draw() -> void:
 		draw_player(player_id, players[player_id])
 	for projectile in skill_projectiles:
 		draw_skill_projectile(projectile)
+	for decoy in decoys:
+		var decoy_owner_id := int(decoy["owner_id"])
+		var alpha := 0.22 if decoy_owner_id == local_player_id else 0.72
+		draw_decoy(decoy, alpha)
 	for zone in magic_zones:
-		var zone_ratio: float = clampf(float(zone["lifetime"]) / ZONE_DURATION, 0.0, 1.0)
-		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, 0.12 + zone_ratio * 0.10))
+		if not bool(zone.get("spawned", false)):
+			continue
+		var zone_alpha: float = 0.18
+		if bool(zone.get("damage_started", false)):
+			zone_alpha = 0.95 if float(zone.get("damage_flash", 0.0)) > 0.0 else 0.44 + sin(float(zone.get("pulse_time", 0.0)) * 9.0) * 0.16
+		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, zone_alpha))
 		draw_arc(zone["position"], 80.0, 0.0, TAU, 32, Color("c7a6ff"), 3.0, true)
 
 
@@ -1984,6 +2170,8 @@ func draw_menu_backdrop() -> void:
 func draw_player(player_id: int, player: Dictionary) -> void:
 	var position_value: Vector2 = player["position"]
 	var facing: Vector2 = player["facing"]
+	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id != local_player_id and float(player.get("invisible_flicker", 0.0)) < 2.3 and float(player["attack_time"]) <= 0.0:
+		return
 	if bool(player["focused"]):
 		var focus_center := get_player_hitbox_center(position_value)
 		draw_arc(focus_center, PLAYER_HITBOX_RADIUS_Y + 15.0, 0.0, TAU, 28, Color("ffd0a1"), 2.5, true)
@@ -1994,6 +2182,8 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	var source_rect := Rect2(sprite_column * 64.0, sprite_row * 64.0, 64.0, 64.0)
 	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
 	var sprite_tint := Color(4.0, 4.0, 4.0, 1.0) if float(player["hit_time"]) > 0.0 else Color.WHITE
+	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id == local_player_id:
+		sprite_tint.a = 0.35
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
 	if network_mode in ["host", "client"] and player_id == local_player_id:
 		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
@@ -2019,6 +2209,17 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 	draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 5.0, Color("ffca7055"))
 	draw_line(position_value - direction * 14.0, position_value + direction * 8.0, Color("fff0b5"), 5.0)
 	draw_circle(position_value + direction * 9.0, 5.0, Color("ffbd5f"))
+	if str(projectile.get("chip", "")) != "":
+		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-5.0, 5.0), str(projectile["chip"]), HORIZONTAL_ALIGNMENT_CENTER, 10.0, 10, Color("17213d"))
+
+
+func draw_decoy(decoy: Dictionary, alpha: float) -> void:
+	var visual_id := str(decoy.get("visual_id", "arithmetician"))
+	var facing: Vector2 = decoy.get("facing", Vector2.DOWN)
+	var texture := get_character_texture(visual_id)
+	var source_rect := Rect2(get_sprite_direction_column(facing) * 64.0, 0.0, 64.0, 64.0)
+	var position_value: Vector2 = decoy["position"]
+	draw_texture_rect_region(texture, Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0)), source_rect, Color(1.0, 1.0, 1.0, alpha))
 
 
 func _input(event: InputEvent) -> void:
@@ -2030,6 +2231,21 @@ func _input(event: InputEvent) -> void:
 	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
+		if challenge_owner != 0 and not challenge_skill.ends_with("trace") and challenge_owner == local_player_id:
+			if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+				_on_typing_submitted(typing_input.text)
+				get_viewport().set_input_as_handled()
+				return
+			if event.keycode == KEY_BACKSPACE:
+				typing_input.text = typing_input.text.left(maxi(0, typing_input.text.length() - 1))
+				typing_input.caret_column = typing_input.text.length()
+				get_viewport().set_input_as_handled()
+				return
+			if event.unicode > 0:
+				typing_input.text += String.chr(event.unicode)
+				typing_input.caret_column = typing_input.text.length()
+				get_viewport().set_input_as_handled()
+				return
 		if event.keycode == KEY_ESCAPE and phase == "match" and challenge_owner == 0 and network_mode in ["practice", "local"]:
 			return_to_home()
 			return
@@ -2092,8 +2308,6 @@ func _input(event: InputEvent) -> void:
 func evaluate_trace() -> int:
 	if challenge_trace_points.size() < 2 or challenge_target_points.size() < 2:
 		return 0
-	var start_score := clampf(100.0 - challenge_trace_points[0].distance_to(challenge_target_points[0]) * 0.8, 0.0, 100.0)
-	var end_score := clampf(100.0 - challenge_trace_points[challenge_trace_points.size() - 1].distance_to(challenge_target_points[challenge_target_points.size() - 1]) * 0.8, 0.0, 100.0)
 	var distance_total := 0.0
 	for point in challenge_trace_points:
 		distance_total += distance_to_trace_target(point)
@@ -2113,6 +2327,10 @@ func evaluate_trace() -> int:
 					covered += 1
 					break
 	var coverage_score := 0.0 if sample_count == 0 else float(covered) / float(sample_count) * 100.0
+	if challenge_skill == "small_trace":
+		return roundi(distance_score * 0.45 + coverage_score * 0.55)
+	var start_score := clampf(100.0 - challenge_trace_points[0].distance_to(challenge_target_points[0]) * 0.8, 0.0, 100.0)
+	var end_score := clampf(100.0 - challenge_trace_points[challenge_trace_points.size() - 1].distance_to(challenge_target_points[challenge_target_points.size() - 1]) * 0.8, 0.0, 100.0)
 	return roundi(start_score * 0.20 + end_score * 0.20 + distance_score * 0.25 + coverage_score * 0.35)
 
 
