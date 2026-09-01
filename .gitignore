@@ -5,6 +5,8 @@
 **/*.import
 project.godot
 
+**/__pycache__/
+
 # Asset generation workspace.
 # Raw images, normalized frames, candidate sheets, and validation reports are
 # local working files. Keep the directory marker so Godot ignores the same

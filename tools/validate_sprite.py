@@ -10,6 +10,8 @@ from typing import Any
 
 from PIL import Image
 
+from cleanup_frame_artifacts import analyze_artifacts, cleanup_config
+
 
 def alpha_mask(image: Image.Image, threshold: int) -> Image.Image:
     return image.getchannel("A").point(lambda value: 255 if value >= threshold else 0)
@@ -86,6 +88,7 @@ def main() -> int:
 
     anchor = spec["foot_anchor"]
     normalization = spec.get("normalization", {})
+    artifact_settings = cleanup_config(spec)
     alpha_threshold = normalization.get("alpha_bbox_threshold", 8)
     target_visible_height = normalization.get("target_visible_height")
     height_tolerance = normalization.get("height_tolerance", 0)
@@ -147,6 +150,9 @@ def main() -> int:
                 idle_heights.append(visible_height)
             else:
                 walk_heights.append(visible_height)
+            artifact_report = analyze_artifacts(cell, artifact_settings)
+            if artifact_report.get("status") != "disabled" and (artifact_report.get("status") != "pass" or artifact_report.get("candidates")):
+                errors.append(f"{frame_id}: artifact cleanup required before promotion")
             cells[frame_id] = {
                 "bbox": bbox,
                 "center_x": center_x,
@@ -156,6 +162,7 @@ def main() -> int:
                 "occupancy": occupancy,
                 "root": root_result,
                 "contact_point": contact_result,
+                "artifact_cleanup": artifact_report,
             }
 
     idle_walk_ratio = None
