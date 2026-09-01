@@ -41,7 +41,7 @@ class TraceCanvas extends Control:
 		for point in input_points:
 			draw_circle(point, 3.0, Color("fff2b0"))
 
-const ARENA := Rect2(40, 100, 1200, 580)
+const ARENA := Rect2(0, 0, 2520, 1160)
 ## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
 ## アンカーから少し上にずらした縦長の楕円を当たり判定として使う。
 const PLAYER_HITBOX_RADIUS_X := 20.0
@@ -363,7 +363,11 @@ func _process(delta: float) -> void:
 func update_player(player_id: int, delta: float, left_key, right_key, up_key, down_key) -> void:
 	var player: Dictionary = players[player_id]
 	var direction := Vector2.ZERO
-	if network_mode == "local" and player_id != debug_controlled_player_id:
+	var is_attacking := float(player["attack_time"]) > 0.0
+	if is_attacking:
+		# 通常攻撃は開始時の位置と向きで完了まで固定する。
+		player["is_moving"] = false
+	elif network_mode == "local" and player_id != debug_controlled_player_id:
 		direction = Vector2.ZERO
 	elif network_mode == "host" and player_id == 2:
 		direction = remote_input["move"]
@@ -371,7 +375,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		direction.x = float(Input.is_key_pressed(right_key)) - float(Input.is_key_pressed(left_key))
 		direction.y = float(Input.is_key_pressed(down_key)) - float(Input.is_key_pressed(up_key))
 	var moved := false
-	if direction.length_squared() > 0.0:
+	if not is_attacking and direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		player["facing"] = direction
 		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * (1.25 if float(player["buff_time"]) > 0.0 else 1.0)
@@ -379,7 +383,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		if can_move_player_to(player_id, next_position):
 			player["position"] = next_position
 			moved = true
-	player["is_moving"] = moved
+	player["is_moving"] = moved if not is_attacking else false
 	player["attack_cooldown"] = maxf(0.0, player["attack_cooldown"] - delta)
 	player["attack_time"] = maxf(0.0, player["attack_time"] - delta)
 	player["hit_time"] = maxf(0.0, player["hit_time"] - delta)
@@ -408,11 +412,18 @@ func try_attack(player_id: int) -> void:
 		return
 	player["attack_cooldown"] = ATTACK_COOLDOWN
 	player["attack_time"] = ATTACK_DURATION
+	var attack_facing: Vector2 = player["facing"]
+	if attack_facing.length_squared() <= 0.0:
+		attack_facing = Vector2.RIGHT
+	else:
+		attack_facing = attack_facing.normalized()
+	player["attack_facing"] = attack_facing
+	player["facing"] = attack_facing
 	players[player_id] = player
 	var target_id := 2 if player_id == 1 else 1
 	var target: Dictionary = players[target_id]
 	var to_target: Vector2 = get_player_hitbox_center(target["position"]) - get_player_hitbox_center(player["position"])
-	var facing: Vector2 = player["facing"]
+	var facing: Vector2 = player["attack_facing"]
 	var in_range: bool = to_target.length() >= SLASH_INNER_RANGE and to_target.length() <= SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 	var in_front: bool = to_target.length_squared() > 0.0 and facing.dot(to_target.normalized()) >= cos(SLASH_ARC_HALF_ANGLE)
 	if in_range and in_front:
@@ -1884,8 +1895,9 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
 	player["interrupt_gauge_display"] = 0.0
-	player["position"] = Vector2(300, 390) if player_id == 1 else Vector2(980, 390)
+	player["position"] = Vector2(300, 390) if player_id == 1 else Vector2(2260, 390)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
+	player["attack_facing"] = player["facing"]
 	players[player_id] = player
 
 
@@ -2025,6 +2037,7 @@ func _draw() -> void:
 		return
 	if screen != "match":
 		return
+	draw_set_transform(get_world_draw_offset())
 	draw_arena()
 	# 条件式の配列リテラルは未型付きArrayになるため、ここでは推論型で受ける。
 	var draw_player_ids := [1] if network_mode == "practice" else [1, 2]
@@ -2044,6 +2057,18 @@ func _draw() -> void:
 			zone_alpha = 0.95 if float(zone.get("damage_flash", 0.0)) > 0.0 else 0.44 + sin(float(zone.get("pulse_time", 0.0)) * 9.0) * 0.16
 		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, zone_alpha))
 		draw_arc(zone["position"], 80.0, 0.0, TAU, 32, Color("c7a6ff"), 3.0, true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func get_world_draw_offset() -> Vector2:
+	var camera_player_id := 1
+	if network_mode == "local":
+		camera_player_id = debug_controlled_player_id
+	elif network_mode != "practice":
+		camera_player_id = local_player_id
+	if not players.has(camera_player_id):
+		return Vector2.ZERO
+	return get_viewport_rect().size * 0.5 - Vector2(players[camera_player_id]["position"])
 
 
 func draw_arena() -> void:
@@ -2096,9 +2121,11 @@ func draw_normal_attack_effect(player: Dictionary, position_value: Vector2, faci
 		opacity = clampf(sin(progress * PI) * 1.25, 0.28, 1.0)
 		rotation_offset = 0.0
 	# 元素材の斜め軌跡を水平方向に反転し、正面方向へ振り抜く見た目にする。
-	draw_set_transform(effect_center, facing.angle() + rotation_offset, Vector2(-scale_strength, scale_strength))
+	draw_set_transform(effect_center + get_world_draw_offset(), facing.angle() + rotation_offset, Vector2(-scale_strength, scale_strength))
 	draw_texture_rect_region(texture, Rect2(-32.0, -32.0, 64.0, 64.0), source_rect, Color(1.0, 1.0, 1.0, opacity))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# `_draw()` が設定したカメラ変換へ戻す。原点へ戻すと、以降のHPバーや
+	# 相手キャラクターがワールド座標のまま描かれて画面外へ消えてしまう。
+	draw_set_transform(get_world_draw_offset())
 
 
 func draw_debug_normal_attack_hit_area(position_value: Vector2, facing: Vector2) -> void:
@@ -2169,7 +2196,7 @@ func draw_menu_backdrop() -> void:
 
 func draw_player(player_id: int, player: Dictionary) -> void:
 	var position_value: Vector2 = player["position"]
-	var facing: Vector2 = player["facing"]
+	var facing: Vector2 = player["attack_facing"] if float(player["attack_time"]) > 0.0 else player["facing"]
 	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id != local_player_id and float(player.get("invisible_flicker", 0.0)) < 2.3 and float(player["attack_time"]) <= 0.0:
 		return
 	if bool(player["focused"]):
