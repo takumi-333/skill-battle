@@ -21,6 +21,134 @@ class StatusIcon extends Control:
 		else:
 			draw_arc(center, 14.0, spinner_angle, spinner_angle + PI * 1.45, 20, Color("ffc45e"), 4.0, true)
 
+class SkillDiamondWidget extends Control:
+	const WIDGET_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
+	const SPACE_KEY_TEXTURE: Texture2D = preload("res://assets/ui/skill_icons/skill_key_space.png")
+	var frame_texture: Texture2D
+	var key_text: String = ""
+	var cooldown_remaining: float = 0.0
+	var cooldown_duration: float = 1.0
+	var unavailable: bool = false
+	var icon_material: ShaderMaterial
+	var icon_rect: TextureRect
+	var frame_rect: TextureRect
+	var key_label: Label
+	var key_icon: TextureRect
+	var badge_disc: BadgeDisc
+
+	func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_texture: Texture2D, hole_mask: Texture2D, hole_center: Vector2, badge_center: Vector2, badge_radius: float) -> void:
+		frame_texture = texture
+		key_text = binding
+		custom_minimum_size = widget_size
+		size = widget_size
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_rect = TextureRect.new()
+		# アイコンはウィジェット全面へ描き、フレーム画像から抽出した
+		# 中央の透明領域だけをシェーダーで残す。
+		icon_rect.position = Vector2.ZERO
+		icon_rect.size = size
+		icon_rect.texture = icon_texture
+		icon_rect.z_index = 0
+		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var icon_shader := Shader.new()
+		icon_shader.code = """
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"""
+		icon_material = ShaderMaterial.new()
+		icon_material.shader = icon_shader
+		icon_material.set_shader_parameter("hole_mask", hole_mask)
+		icon_material.set_shader_parameter("hole_center", hole_center)
+		icon_rect.material = icon_material
+		add_child(icon_rect)
+		badge_disc = BadgeDisc.new()
+		badge_disc.position = Vector2.ZERO
+		badge_disc.size = size
+		badge_disc.center_ratio = badge_center
+		badge_disc.radius_ratio = badge_radius
+		badge_disc.z_index = 1
+		badge_disc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(badge_disc)
+		frame_rect = TextureRect.new()
+		frame_rect.position = Vector2.ZERO
+		frame_rect.size = size
+		frame_rect.texture = frame_texture
+		frame_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		frame_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		frame_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		frame_rect.z_index = 3
+		add_child(frame_rect)
+		key_label = Label.new()
+		# 下部プレートの実測中心にラベルの中心を一致させる。
+		key_label.position = Vector2(size.x * 0.5 - 36.0, size.y * badge_center.y - 13.0)
+		key_label.size = Vector2(72.0, 26.0)
+		key_label.text = "" if key_text == "␣" else key_text
+		key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		key_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		key_label.add_theme_font_override("font", WIDGET_FONT)
+		key_label.add_theme_font_size_override("font_size", 15)
+		key_label.add_theme_color_override("font_color", Color("fff2b0"))
+		key_label.add_theme_constant_override("outline_size", 2)
+		key_label.add_theme_color_override("font_outline_color", Color("fff2b0"))
+		key_label.z_index = 2
+		key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(key_label)
+		if key_text == "␣":
+			key_icon = TextureRect.new()
+			key_icon.position = Vector2(size.x * 0.5 - 25.0, size.y * badge_center.y - 25.0)
+			key_icon.size = Vector2(50.0, 50.0)
+			key_icon.texture = SPACE_KEY_TEXTURE
+			key_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			key_icon.stretch_mode = TextureRect.STRETCH_SCALE
+			key_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			key_icon.z_index = 2
+			add_child(key_icon)
+		queue_redraw()
+
+	func set_cooldown(remaining: float, duration: float, is_unavailable: bool = false) -> void:
+		cooldown_remaining = maxf(0.0, remaining)
+		cooldown_duration = maxf(0.001, duration)
+		unavailable = is_unavailable
+		if icon_material:
+			icon_material.set_shader_parameter("progress", 0.0 if unavailable else clampf(1.0 - cooldown_remaining / cooldown_duration, 0.0, 1.0))
+			icon_material.set_shader_parameter("unavailable", unavailable)
+		queue_redraw()
+
+	func _process(_delta: float) -> void:
+		if is_visible_in_tree():
+			queue_redraw()
+
+	func _draw() -> void:
+		if frame_texture == null:
+			return
+		# フレームとキー表示は子ノードとしてアイコンより前面に固定する。
+
+class BadgeDisc extends Control:
+	var center_ratio := Vector2(0.5, 0.78)
+	var radius_ratio := 0.06
+
+	func _draw() -> void:
+		draw_circle(Vector2(size.x * center_ratio.x, size.y * center_ratio.y), size.x * radius_ratio, Color("05050a"))
+
 class TraceCanvas extends Control:
 	var target_points: PackedVector2Array = PackedVector2Array()
 	var input_points: PackedVector2Array = PackedVector2Array()
@@ -88,6 +216,13 @@ const UI_CARD_CHARACTER: Texture2D = preload("res://assets/ui/card_character.png
 const UI_INPUT_INVITE_CODE: Texture2D = preload("res://assets/ui/input_invite_code.png")
 const UI_BUTTON_READY: Texture2D = preload("res://assets/ui/button_ready.png")
 const UI_MENU_BACKGROUND: Texture2D = preload("res://assets/ui/menu_background.png")
+const SKILL_DIAMOND_SMALL: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_small_ready.png")
+const SKILL_DIAMOND_MEDIUM: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_medium_ready.png")
+const SKILL_DIAMOND_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_ready.png")
+const SKILL_HOLE_MASK_SMALL: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_small_hole_mask.png")
+const SKILL_HOLE_MASK_MEDIUM: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png")
+const SKILL_HOLE_MASK_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png")
+const SKILL_PLACEHOLDER_ICON: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const ChallengeLayerData = preload("res://scripts/challenge_layer.gd")
@@ -164,6 +299,8 @@ var result_lobby_button: Button
 var network_back_button: Button
 var lobby_home_button: Button
 var gameplay_home_button: Button
+var hp_bar: ProgressBar
+var skill_widgets: Array[SkillDiamondWidget] = []
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
@@ -371,24 +508,24 @@ func _process(delta: float) -> void:
 
 	if network_mode == "local":
 		if Input.is_key_pressed(KEY_1):
-			start_small_skill(debug_controlled_player_id)
-		if Input.is_key_pressed(KEY_2):
-			start_big_skill(debug_controlled_player_id)
-		if Input.is_key_pressed(KEY_SPACE):
 			try_attack(debug_controlled_player_id)
+		if Input.is_key_pressed(KEY_2):
+			start_small_skill(debug_controlled_player_id)
+		if Input.is_key_pressed(KEY_3):
+			start_big_skill(debug_controlled_player_id)
 	else:
 		if Input.is_key_pressed(KEY_1):
-			start_small_skill(1)
+			try_attack(1)
 		if Input.is_key_pressed(KEY_2):
+			start_small_skill(1)
+		if Input.is_key_pressed(KEY_3):
 			start_big_skill(1)
 		if network_mode != "host" and Input.is_key_pressed(KEY_1):
-			start_small_skill(2)
-		if network_mode != "host" and Input.is_key_pressed(KEY_2):
-			start_big_skill(2)
-		if Input.is_key_pressed(KEY_SPACE):
-			try_attack(1)
-		if network_mode != "host" and Input.is_key_pressed(KEY_SPACE):
 			try_attack(2)
+		if network_mode != "host" and Input.is_key_pressed(KEY_2):
+			start_small_skill(2)
+		if network_mode != "host" and Input.is_key_pressed(KEY_3):
+			start_big_skill(2)
 	if network_mode == "host":
 		if bool(remote_input["attack"]):
 			try_attack(2)
@@ -994,8 +1131,32 @@ func create_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 
-	player_one_label = make_hud_label(Vector2(40, 28), HORIZONTAL_ALIGNMENT_LEFT)
+	player_one_label = make_hud_label(Vector2(282, 47), HORIZONTAL_ALIGNMENT_LEFT)
+	player_one_label.size = Vector2(90, 30)
+	player_one_label.text = "HP 100"
+	player_one_label.add_theme_font_size_override("font_size", 20)
 	player_two_label = make_hud_label(Vector2(820, 28), HORIZONTAL_ALIGNMENT_RIGHT)
+	player_two_label.visible = false
+	hp_bar = ProgressBar.new()
+	hp_bar.position = Vector2(40, 52)
+	hp_bar.size = Vector2(230, 14)
+	hp_bar.min_value = 0.0
+	hp_bar.max_value = 100.0
+	hp_bar.value = 100.0
+	hp_bar.show_percentage = false
+	var hp_background := StyleBoxFlat.new()
+	hp_background.bg_color = Color("070b14")
+	hp_background.border_color = Color("39435f")
+	hp_background.set_border_width_all(2)
+	var hp_fill := StyleBoxFlat.new()
+	hp_fill.bg_color = Color("52d6ad")
+	hp_fill.corner_radius_top_left = 3
+	hp_fill.corner_radius_top_right = 3
+	hp_fill.corner_radius_bottom_left = 3
+	hp_fill.corner_radius_bottom_right = 3
+	hp_bar.add_theme_stylebox_override("background", hp_background)
+	hp_bar.add_theme_stylebox_override("fill", hp_fill)
+	get_child(0).add_child(hp_bar)
 	timer_label = make_hud_label(Vector2(500, 28), HORIZONTAL_ALIGNMENT_CENTER)
 	timer_label.size = Vector2(280, 44)
 	status_label = make_hud_label(Vector2(160, 690), HORIZONTAL_ALIGNMENT_CENTER)
@@ -1004,7 +1165,7 @@ func create_hud() -> void:
 
 	controls_label = make_hud_label(Vector2(760, 68), HORIZONTAL_ALIGNMENT_RIGHT)
 	controls_label.size = Vector2(470, 48)
-	controls_label.text = "移動: 矢印キー  通常攻撃: Space\nスキル1/2: 1・2  課題中止: Esc"
+	controls_label.text = "移動: 矢印キー  通常攻撃: 1\nスキル1/2/3: 2・3・4  課題中止: Esc"
 	controls_label.add_theme_font_size_override("font_size", 15)
 	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
 	gameplay_home_button = Button.new()
@@ -1014,16 +1175,35 @@ func create_hud() -> void:
 	gameplay_home_button.add_theme_font_size_override("font_size", 18)
 	gameplay_home_button.pressed.connect(return_to_home)
 	get_child(0).add_child(gameplay_home_button)
+	create_skill_hud()
 	create_challenge_ui(layer)
+
+
+func create_skill_hud() -> void:
+	var definitions := [
+		{"texture": SKILL_DIAMOND_SMALL, "mask": SKILL_HOLE_MASK_SMALL, "center": Vector2(0.5, 0.427), "badge": Vector2(0.5, 0.765), "badge_radius": 0.053, "binding": "1", "position": Vector2(32, 548), "size": Vector2(112, 112)},
+		{"texture": SKILL_DIAMOND_MEDIUM, "mask": SKILL_HOLE_MASK_MEDIUM, "center": Vector2(0.5, 0.437), "badge": Vector2(0.5, 0.785), "badge_radius": 0.062, "binding": "2", "position": Vector2(145, 520), "size": Vector2(142, 142)},
+		{"texture": SKILL_DIAMOND_LARGE, "mask": SKILL_HOLE_MASK_LARGE, "center": Vector2(0.5, 0.401), "badge": Vector2(0.5, 0.775), "badge_radius": 0.081, "binding": "3", "position": Vector2(285, 482), "size": Vector2(180, 180)},
+		{"texture": SKILL_DIAMOND_LARGE, "mask": SKILL_HOLE_MASK_LARGE, "center": Vector2(0.5, 0.401), "badge": Vector2(0.5, 0.775), "badge_radius": 0.081, "binding": "4", "position": Vector2(462, 482), "size": Vector2(180, 180)},
+	]
+	for definition in definitions:
+		var widget := SkillDiamondWidget.new()
+		widget.position = definition["position"]
+		widget.configure(definition["texture"], definition["binding"], definition["size"], SKILL_PLACEHOLDER_ICON, definition["mask"], definition["center"], definition["badge"], definition["badge_radius"])
+		get_child(0).add_child(widget)
+		skill_widgets.append(widget)
 
 
 func set_gameplay_hud_visible(is_visible: bool) -> void:
 	player_one_label.visible = is_visible
-	player_two_label.visible = is_visible and network_mode == "local"
+	player_two_label.visible = false
+	hp_bar.visible = is_visible
 	timer_label.visible = is_visible
 	status_label.visible = false
 	controls_label.visible = is_visible and network_mode == "practice"
 	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local"]
+	for widget in skill_widgets:
+		widget.visible = is_visible
 	if not is_visible:
 		challenge_panel.visible = false
 		challenge_dimmer.visible = false
@@ -1636,9 +1816,9 @@ func process_client_network_input(_delta: float) -> void:
 	move.y = float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP))
 	pending_client_input = {
 		"move": move.normalized() if move.length_squared() > 0.0 else Vector2.ZERO,
-		"attack": Input.is_key_pressed(KEY_SPACE),
-		"small": Input.is_key_pressed(KEY_1),
-		"big": Input.is_key_pressed(KEY_2),
+		"attack": Input.is_key_pressed(KEY_1),
+		"small": Input.is_key_pressed(KEY_2),
+		"big": Input.is_key_pressed(KEY_3),
 	}
 	rpc_id(1, "receive_remote_input", pending_client_input)
 
@@ -2053,14 +2233,18 @@ func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> 
 
 
 func update_hud() -> void:
-	if network_mode == "local":
-		player_one_label.text = format_debug_hud_player(1)
-		player_two_label.text = format_debug_hud_player(2)
-		player_two_label.visible = true
-	else:
-		var own_player: Dictionary = players[local_player_id]
-		var focus_suffix := "  集中中" if bool(own_player["focused"]) else ""
-		player_one_label.text = "自分  %s  HP %d%s\n通常 %.1fs  スキル1 %.1fs  スキル2 %.1fs" % [own_player["name"], own_player["hp"], focus_suffix, float(own_player["attack_cooldown"]), float(own_player["small_cooldown"]), float(own_player["big_cooldown"])]
+	var hud_player_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	if not players.has(hud_player_id):
+		return
+	var own_player: Dictionary = players[hud_player_id]
+	player_one_label.text = "HP %d" % int(own_player["hp"])
+	hp_bar.value = int(own_player["hp"])
+	if skill_widgets.size() >= 4:
+		var is_focused := bool(own_player["focused"])
+		skill_widgets[0].set_cooldown(float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
+		skill_widgets[1].set_cooldown(float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
+		skill_widgets[2].set_cooldown(float(own_player["big_cooldown"]), TYPING_SKILL_COOLDOWN * 2.0, is_focused)
+		skill_widgets[3].set_cooldown(1.0, 1.0, true)
 	timer_label.text = "残り %02d秒" % ceili(match_state.time_remaining)
 
 
