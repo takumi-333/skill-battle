@@ -17,18 +17,18 @@
 MatchPrototype
 ├─ World                  # 対戦フィールド・キャラクター
 ├─ UIRoot (CanvasLayer)   # 通常の画面UI
-│  ├─ MenuBackground
-│  ├─ Title / Home
-│  ├─ Practice / Debug
-│  ├─ Lobby / Connection / Result
-│  └─ HUD
+│  ├─ MenuBackground (scenes/ui/menu_background.tscn)
+│  ├─ Title / Home (scenes/ui/*_screen.tscn)
+│  ├─ Practice / Debug (scenes/ui/*_screen.tscn)
+│  ├─ Lobby / Connection / Result (scenes/ui/*_screen.tscn)
+│  └─ HUD (scenes/ui/hud.tscn)
 └─ ChallengeLayer         # スキル発動中の課題UI（UIRootより前面）
    ├─ ChallengeDimmer
    └─ Challenge
       └─ Content
 ```
 
-- 画面単位の固定部品（ボタン、ラベル、パネル、入力欄、スキル枠）はシーンに定義する。
+- 画面単位の固定部品（ボタン、ラベル、パネル、入力欄、スキル枠）は画面ごとの `.tscn` に定義し、`main.tscn` はインスタンスを保持する。
 - スキルアイコンのクールダウンや軌跡など、状態によって変わる描画は専用スクリプトに残す。
 - 課題ウィンドウは `ChallengeLayer` に置き、フィールドを薄暗くする `ChallengeDimmer` とパネルを分離する。
 
@@ -43,7 +43,7 @@ MatchPrototype
 
 - 背景テクスチャはUI部品より背面（負の `z_index`）に置き、`mouse_filter = IGNORE` にする。
 - 操作部品は背景より前面に置き、`mouse_filter = STOP` を基本とする。
-- 親 `Control` が非表示だと子を表示しても描画されないため、画面切り替えでは親と子の両方を状態更新する。
+- 親 `Control` が非表示だと子を表示しても描画されない。画面親の表示は `apply_screen_state()` を正とし、子部品の更新処理で親の可視性を変更しない。
 - 課題ウィンドウはパネルをディマーより前面に置き、パネル自身は入力を受け付ける。
 - ボタン素材を `TextureRect` として重ねる場合、素材は必ずボタンの背面に置く。ボタン本体を不透明な既定StyleBoxのまま重ねない。
 
@@ -57,12 +57,15 @@ MatchPrototype
 
 ## 6. 画面遷移
 
-画面遷移関数は、次の順序を守る。
+画面親の表示・非表示は `MatchPrototype.apply_screen_state()` だけが担当する。画面遷移関数は、画面固有の状態更新を行った後、この関数へ画面識別子を渡す。
 
-1. `screen` / `phase` などの状態を更新する。
-2. `hide_menu_panels()` で不要な画面を隠す。
-3. 遷移先の親パネルを表示する。
-4. 背景、HUD、課題パネル、入力フォーカスを遷移先に合わせて更新する。
+`apply_screen_state()` は次をまとめて更新する。
+
+1. タイトル、ホーム、練習、デバッグ、接続、ロビー、結果の画面親をすべて非表示にする。
+2. 遷移先の画面親だけを表示する。対戦中はHUDを画面親として表示する。
+3. メニュー背景、タイトルロゴ、HUDの子部品、課題オーバーレイと入力フォーカスを画面種別に合わせて更新する。
+
+`phase` は試合進行とネットワーク同期、`screen` は表示状態を表す。クライアントは受信した `phase` から表示対象を決め、必ず `apply_screen_state()` を経由して反映する。ロビー内の操作ボタンや課題種別ごとの入力欄など、画面内の子部品だけは各画面更新処理が表示を制御してよい。
 
 ホーム、練習、デバッグ、オンライン接続、ロビー、リザルトの各画面は、遷移先のボタンが常にシーンツリー上に存在することを前提とする。
 
@@ -78,7 +81,7 @@ MatchPrototype
 
 - シーンツリーに固定部品が存在し、インスペクターで位置・サイズ・文言を変更できる。
 - 保存してGodotを再起動しても、ボタンの画面遷移が動作する。
-- ホーム、練習、デバッグ、オンライン、ロビー、リザルトの主要遷移を確認する。
+- ホーム、練習、デバッグ、オンライン、ロビー、対戦、リザルトの主要遷移で、遷移先以外の画面親とHUDが残らないことを確認する。
 - スキル発動時に課題パネルの中身・入力欄・残り時間バーが表示される。
 - ボタンの文字が見え、背景素材が入力を遮らない。
 - `godot --headless --path . --quit-after 3` とエディタ起動でエラーがない。

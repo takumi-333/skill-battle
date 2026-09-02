@@ -1,0 +1,764 @@
+[gd_scene format=3 uid="uid://bimgye7r4idai"]
+
+[ext_resource type="Texture2D" uid="uid://8d2ebausavrn" path="res://assets/ui/skill_diamond_frames/skill_diamond_small_hole_mask.png" id="1_h022r"]
+[ext_resource type="Texture2D" uid="uid://bahovt536cmlo" path="res://assets/ui/skill_icons/skill_placeholder_square.png" id="2_4jqwt"]
+[ext_resource type="Texture2D" uid="uid://nbcqn8t0nxh6" path="res://assets/ui/skill_diamond_frames/skill_diamond_small_ready.png" id="3_kicr4"]
+[ext_resource type="FontFile" uid="uid://c8d817j5ldnte" path="res://resources/DotGothic16/DotGothic16-Regular.ttf" id="4_mj13f"]
+[ext_resource type="Texture2D" uid="uid://s3d4gi32nk8f" path="res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png" id="5_0h1do"]
+[ext_resource type="Texture2D" uid="uid://8u4udnaltlir" path="res://assets/ui/skill_diamond_frames/skill_diamond_medium_ready.png" id="6_4d46k"]
+[ext_resource type="Texture2D" uid="uid://dvikb31et2vun" path="res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png" id="7_erw67"]
+[ext_resource type="Texture2D" uid="uid://booxe07v1p745" path="res://assets/ui/skill_diamond_frames/skill_diamond_large_ready.png" id="8_gonto"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yc10j"]
+bg_color = Color(0.02745098, 0.043137256, 0.078431375, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.22352941, 0.2627451, 0.37254903, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jscy8"]
+bg_color = Color(0.32156864, 0.8392157, 0.6784314, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_pm3ni"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_y6deb"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_og1vs"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2wyq8"]
+
+[sub_resource type="Shader" id="Shader_fv21b"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tel4y"]
+shader = SubResource("Shader_fv21b")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("1_h022r")
+shader_parameter/hole_center = Vector2(0.5, 0.427)
+
+[sub_resource type="Shader" id="Shader_2f3dj"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_yq6so"]
+shader = SubResource("Shader_2f3dj")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("1_h022r")
+shader_parameter/hole_center = Vector2(0.5, 0.427)
+
+[sub_resource type="Shader" id="Shader_5q0nq"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dgi5k"]
+shader = SubResource("Shader_5q0nq")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("5_0h1do")
+shader_parameter/hole_center = Vector2(0.5, 0.437)
+
+[sub_resource type="Shader" id="Shader_tel4y"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_qkpxi"]
+shader = SubResource("Shader_tel4y")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("5_0h1do")
+shader_parameter/hole_center = Vector2(0.5, 0.437)
+
+[sub_resource type="Shader" id="Shader_j8jky"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_kmb1v"]
+shader = SubResource("Shader_j8jky")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("7_erw67")
+shader_parameter/hole_center = Vector2(0.5, 0.401)
+
+[sub_resource type="Shader" id="Shader_dgi5k"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_j8jky"]
+shader = SubResource("Shader_dgi5k")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("7_erw67")
+shader_parameter/hole_center = Vector2(0.5, 0.401)
+
+[sub_resource type="Shader" id="Shader_fuf3a"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_pibwh"]
+shader = SubResource("Shader_fuf3a")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("7_erw67")
+shader_parameter/hole_center = Vector2(0.5, 0.401)
+
+[sub_resource type="Shader" id="Shader_kmb1v"]
+code = "
+		shader_type canvas_item;
+		uniform float progress = 1.0;
+		uniform bool unavailable = false;
+		uniform sampler2D hole_mask;
+		uniform vec2 hole_center = vec2(0.5, 0.43);
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			vec2 point = UV - hole_center;
+			vec4 source = texture(TEXTURE, UV);
+			float clockwise_angle = atan(point.x, -point.y);
+			if (clockwise_angle < 0.0) {
+				clockwise_angle += 6.28318530718;
+			}
+			float lit = step(clockwise_angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		}
+		"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fuf3a"]
+shader = SubResource("Shader_kmb1v")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("7_erw67")
+shader_parameter/hole_center = Vector2(0.5, 0.401)
+
+[node name="HUD" type="Control" unique_id=141761890]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+
+[node name="PlayerOneLabel" type="Label" parent="." unique_id=1993157830]
+layout_mode = 0
+offset_left = 282.0
+offset_top = 47.0
+offset_right = 372.0
+offset_bottom = 77.0
+theme_override_font_sizes/font_size = 20
+text = "HP 100"
+
+[node name="PlayerTwoLabel" type="Label" parent="." unique_id=1286318997]
+visible = false
+layout_mode = 0
+offset_left = 820.0
+offset_top = 28.0
+offset_right = 1240.0
+offset_bottom = 58.0
+horizontal_alignment = 2
+
+[node name="HPBar" type="ProgressBar" parent="." unique_id=1922176511]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 52.0
+offset_right = 270.0
+offset_bottom = 66.0
+theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_jscy8")
+value = 100.0
+show_percentage = false
+
+[node name="Timer" type="Label" parent="." unique_id=1130374244]
+layout_mode = 0
+offset_left = 500.0
+offset_top = 28.0
+offset_right = 780.0
+offset_bottom = 72.0
+horizontal_alignment = 1
+
+[node name="Status" type="Label" parent="." unique_id=1965415097]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 690.0
+offset_right = 1120.0
+offset_bottom = 718.0
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+
+[node name="Controls" type="Label" parent="." unique_id=1833811283]
+layout_mode = 0
+offset_left = 760.0
+offset_top = 68.0
+offset_right = 1230.0
+offset_bottom = 116.0
+theme_override_colors/font_color = Color(0.7176471, 0.75686276, 0.84705883, 1)
+theme_override_font_sizes/font_size = 15
+text = "移動: 矢印キー  通常攻撃: 1
+スキル1/2/3: 2・3・4  課題中止: Esc"
+horizontal_alignment = 2
+
+[node name="HomeButton" type="Button" parent="." unique_id=1036284805]
+z_index = 10
+layout_mode = 0
+offset_left = 1040.0
+offset_top = 24.0
+offset_right = 1230.0
+offset_bottom = 64.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxEmpty_pm3ni")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_y6deb")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_og1vs")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_2wyq8")
+text = "ホームへ戻る"
+
+[node name="SkillNormal" type="Control" parent="." unique_id=667617463]
+anchors_preset = 0
+offset_left = 1052.0
+offset_top = 578.0
+offset_right = 1164.0
+offset_bottom = 690.0
+
+[node name="SkillDiamondWidget" type="Control" parent="SkillNormal" unique_id=1724171971]
+custom_minimum_size = Vector2(112, 112)
+anchors_preset = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+
+[node name="_TextureRect_58381" type="TextureRect" parent="SkillNormal/SkillDiamondWidget" unique_id=1590560675]
+material = SubResource("ShaderMaterial_tel4y")
+layout_mode = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_58382" type="Control" parent="SkillNormal/SkillDiamondWidget" unique_id=158870304]
+z_index = 1
+anchors_preset = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+
+[node name="_TextureRect_58383" type="TextureRect" parent="SkillNormal/SkillDiamondWidget" unique_id=1987543441]
+z_index = 3
+layout_mode = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+texture = ExtResource("3_kicr4")
+expand_mode = 1
+
+[node name="_Label_58384" type="Label" parent="SkillNormal/SkillDiamondWidget" unique_id=512599256]
+z_index = 2
+layout_mode = 0
+offset_left = 20.0
+offset_top = 72.68
+offset_right = 92.0
+offset_bottom = 98.68
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="_Control_64817" type="Control" parent="SkillNormal" unique_id=965466694]
+custom_minimum_size = Vector2(112, 112)
+anchors_preset = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+
+[node name="_TextureRect_64813" type="TextureRect" parent="SkillNormal/_Control_64817" unique_id=2074034901]
+material = SubResource("ShaderMaterial_yq6so")
+layout_mode = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_64814" type="Control" parent="SkillNormal/_Control_64817" unique_id=1785551461]
+z_index = 1
+anchors_preset = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+
+[node name="_TextureRect_64815" type="TextureRect" parent="SkillNormal/_Control_64817" unique_id=804736132]
+z_index = 3
+layout_mode = 0
+offset_right = 112.0
+offset_bottom = 112.0
+mouse_filter = 2
+texture = ExtResource("3_kicr4")
+expand_mode = 1
+
+[node name="_Label_64816" type="Label" parent="SkillNormal/_Control_64817" unique_id=223487138]
+z_index = 2
+layout_mode = 0
+offset_left = 20.0
+offset_top = 72.68
+offset_right = 92.0
+offset_bottom = 98.68
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillSmall" type="Control" parent="." unique_id=1236887090]
+anchors_preset = 0
+offset_left = 1114.0
+offset_top = 515.0
+offset_right = 1256.0
+offset_bottom = 657.0
+
+[node name="SkillDiamondWidget" type="Control" parent="SkillSmall" unique_id=1043151569]
+custom_minimum_size = Vector2(142, 142)
+anchors_preset = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+
+[node name="_TextureRect_58385" type="TextureRect" parent="SkillSmall/SkillDiamondWidget" unique_id=216374783]
+material = SubResource("ShaderMaterial_dgi5k")
+layout_mode = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_58386" type="Control" parent="SkillSmall/SkillDiamondWidget" unique_id=2145028704]
+z_index = 1
+anchors_preset = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+
+[node name="_TextureRect_58387" type="TextureRect" parent="SkillSmall/SkillDiamondWidget" unique_id=966818502]
+z_index = 3
+layout_mode = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+texture = ExtResource("6_4d46k")
+expand_mode = 1
+
+[node name="_Label_58388" type="Label" parent="SkillSmall/SkillDiamondWidget" unique_id=1075901083]
+z_index = 2
+layout_mode = 0
+offset_left = 35.0
+offset_top = 98.47
+offset_right = 107.0
+offset_bottom = 124.47
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="_Control_64822" type="Control" parent="SkillSmall" unique_id=370749898]
+custom_minimum_size = Vector2(142, 142)
+anchors_preset = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+
+[node name="_TextureRect_64818" type="TextureRect" parent="SkillSmall/_Control_64822" unique_id=922567874]
+material = SubResource("ShaderMaterial_qkpxi")
+layout_mode = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_64819" type="Control" parent="SkillSmall/_Control_64822" unique_id=428874737]
+z_index = 1
+anchors_preset = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+
+[node name="_TextureRect_64820" type="TextureRect" parent="SkillSmall/_Control_64822" unique_id=552516634]
+z_index = 3
+layout_mode = 0
+offset_right = 142.0
+offset_bottom = 142.0
+mouse_filter = 2
+texture = ExtResource("6_4d46k")
+expand_mode = 1
+
+[node name="_Label_64821" type="Label" parent="SkillSmall/_Control_64822" unique_id=1233007578]
+z_index = 2
+layout_mode = 0
+offset_left = 35.0
+offset_top = 98.47
+offset_right = 107.0
+offset_bottom = 124.47
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillBig" type="Control" parent="." unique_id=1904904450]
+anchors_preset = 0
+offset_left = 928.0
+offset_top = 501.0
+offset_right = 1108.0
+offset_bottom = 681.0
+
+[node name="SkillDiamondWidget" type="Control" parent="SkillBig" unique_id=45483183]
+custom_minimum_size = Vector2(180, 180)
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_58389" type="TextureRect" parent="SkillBig/SkillDiamondWidget" unique_id=1424312858]
+material = SubResource("ShaderMaterial_kmb1v")
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_58390" type="Control" parent="SkillBig/SkillDiamondWidget" unique_id=402574349]
+z_index = 1
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_58391" type="TextureRect" parent="SkillBig/SkillDiamondWidget" unique_id=677338084]
+z_index = 3
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("8_gonto")
+expand_mode = 1
+
+[node name="_Label_58392" type="Label" parent="SkillBig/SkillDiamondWidget" unique_id=1252669573]
+z_index = 2
+layout_mode = 0
+offset_left = 54.0
+offset_top = 126.49999
+offset_right = 126.0
+offset_bottom = 152.5
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="_Control_64827" type="Control" parent="SkillBig" unique_id=2119192355]
+custom_minimum_size = Vector2(180, 180)
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_64823" type="TextureRect" parent="SkillBig/_Control_64827" unique_id=422838958]
+material = SubResource("ShaderMaterial_j8jky")
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_64824" type="Control" parent="SkillBig/_Control_64827" unique_id=2113350743]
+z_index = 1
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_64825" type="TextureRect" parent="SkillBig/_Control_64827" unique_id=967838958]
+z_index = 3
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("8_gonto")
+expand_mode = 1
+
+[node name="_Label_64826" type="Label" parent="SkillBig/_Control_64827" unique_id=1196267856]
+z_index = 2
+layout_mode = 0
+offset_left = 54.0
+offset_top = 126.49999
+offset_right = 126.0
+offset_bottom = 152.5
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillBigAlt" type="Control" parent="." unique_id=1812304721]
+anchors_preset = 0
+offset_left = 1017.0
+offset_top = 410.0
+offset_right = 1197.0
+offset_bottom = 590.0
+
+[node name="SkillDiamondWidget" type="Control" parent="SkillBigAlt" unique_id=1385789086]
+custom_minimum_size = Vector2(180, 180)
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_58393" type="TextureRect" parent="SkillBigAlt/SkillDiamondWidget" unique_id=535248573]
+material = SubResource("ShaderMaterial_pibwh")
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_58394" type="Control" parent="SkillBigAlt/SkillDiamondWidget" unique_id=1301157878]
+z_index = 1
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_58395" type="TextureRect" parent="SkillBigAlt/SkillDiamondWidget" unique_id=1351636064]
+z_index = 3
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("8_gonto")
+expand_mode = 1
+
+[node name="_Label_58396" type="Label" parent="SkillBigAlt/SkillDiamondWidget" unique_id=1078186637]
+z_index = 2
+layout_mode = 0
+offset_left = 54.0
+offset_top = 126.49999
+offset_right = 126.0
+offset_bottom = 152.5
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "4"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="_Control_64832" type="Control" parent="SkillBigAlt" unique_id=575904465]
+custom_minimum_size = Vector2(180, 180)
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_64828" type="TextureRect" parent="SkillBigAlt/_Control_64832" unique_id=1906503788]
+material = SubResource("ShaderMaterial_fuf3a")
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("2_4jqwt")
+expand_mode = 1
+
+[node name="_Control_64829" type="Control" parent="SkillBigAlt/_Control_64832" unique_id=1204896131]
+z_index = 1
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="_TextureRect_64830" type="TextureRect" parent="SkillBigAlt/_Control_64832" unique_id=2013549315]
+z_index = 3
+layout_mode = 0
+offset_right = 180.0
+offset_bottom = 180.0
+mouse_filter = 2
+texture = ExtResource("8_gonto")
+expand_mode = 1
+
+[node name="_Label_64831" type="Label" parent="SkillBigAlt/_Control_64832" unique_id=606269215]
+z_index = 2
+layout_mode = 0
+offset_left = 54.0
+offset_top = 126.49999
+offset_right = 126.0
+offset_bottom = 152.5
+theme_override_colors/font_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_colors/font_outline_color = Color(1, 0.9490196, 0.6901961, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("4_mj13f")
+theme_override_font_sizes/font_size = 15
+text = "4"
+horizontal_alignment = 1
+vertical_alignment = 1

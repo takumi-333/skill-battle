@@ -1,0 +1,350 @@
+[gd_scene format=3 uid="uid://dryw4nkuq3y4u"]
+
+[ext_resource type="Texture2D" uid="uid://b61t6o12hkbo7" path="res://assets/ui/panel_frame.png" id="1_lyr5x"]
+[ext_resource type="Texture2D" uid="uid://dsjabll8fin6b" path="res://assets/ui/button_secondary.png" id="2_68i0r"]
+[ext_resource type="Texture2D" uid="uid://dmr80hkkao2i4" path="res://assets/ui/button_primary.png" id="2_n3fb4"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_m4o51"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(1, 0.76862746, 0.36862746, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_jp61a"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_esrwe"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4b36k"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_1v8b0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_683hg"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ow8of"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hj4tt"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_kqx4a"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_pfcs8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_50d7c"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ruytr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_la3dr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hcsi8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wi1le"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_o7pr5"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hyj2l"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vuqay"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wfmv0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wxrqn"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_n756u"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_k33j2"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2cjf7"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4e8e3"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_5gihh"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_407df"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4sqen"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_w6a6y"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_knlx5"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_pes4l"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_s5e0g"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_uya8e"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2tiby"]
+
+[node name="Debug" type="Panel" unique_id=12031905]
+offset_right = 1280.0
+offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_m4o51")
+metadata/ui_callbacks_bound = true
+
+[node name="PanelFrame" type="TextureRect" parent="." unique_id=1945890635]
+z_index = -1
+layout_mode = 0
+offset_left = 103.0
+offset_top = 55.0
+offset_right = 1227.0
+offset_bottom = 708.0
+mouse_filter = 2
+texture = ExtResource("1_lyr5x")
+expand_mode = 1
+
+[node name="Preview" type="Label" parent="." unique_id=1517102056]
+layout_mode = 0
+offset_left = 186.0
+offset_top = 147.0
+offset_right = 1156.0
+offset_bottom = 187.0
+theme_override_font_sizes/font_size = 25
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="P1Name" type="Label" parent="." unique_id=433168424]
+layout_mode = 0
+offset_left = 281.0
+offset_top = 166.0
+offset_right = 611.0
+offset_bottom = 202.0
+theme_override_font_sizes/font_size = 23
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="P2Name" type="Label" parent="." unique_id=1543171028]
+layout_mode = 0
+offset_left = 726.0
+offset_top = 169.0
+offset_right = 1056.0
+offset_bottom = 205.0
+theme_override_font_sizes/font_size = 23
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="P1Portrait" type="TextureRect" parent="." unique_id=374056524]
+layout_mode = 0
+offset_left = 259.0
+offset_top = 217.0
+offset_right = 585.0
+offset_bottom = 462.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="P2Portrait" type="TextureRect" parent="." unique_id=1472063478]
+layout_mode = 0
+offset_left = 672.0
+offset_top = 212.0
+offset_right = 1046.0
+offset_bottom = 470.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="P1PrevFrame" type="TextureRect" parent="." unique_id=1386390087]
+z_index = -1
+layout_mode = 0
+offset_left = 300.0
+offset_top = 465.0
+offset_right = 390.0
+offset_bottom = 515.0
+mouse_filter = 2
+texture = ExtResource("2_68i0r")
+expand_mode = 1
+
+[node name="P1Prev" type="Button" parent="." unique_id=70014876]
+z_index = 10
+layout_mode = 0
+offset_left = 300.0
+offset_top = 465.0
+offset_right = 390.0
+offset_bottom = 515.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_jp61a")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_esrwe")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_4b36k")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_1v8b0")
+text = "◀"
+
+[node name="P1NextFrame" type="TextureRect" parent="." unique_id=680567798]
+z_index = -1
+layout_mode = 0
+offset_left = 500.0
+offset_top = 465.0
+offset_right = 590.0
+offset_bottom = 515.0
+mouse_filter = 2
+texture = ExtResource("2_68i0r")
+expand_mode = 1
+
+[node name="P1Next" type="Button" parent="." unique_id=1866221419]
+z_index = 10
+layout_mode = 0
+offset_left = 500.0
+offset_top = 465.0
+offset_right = 590.0
+offset_bottom = 515.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_683hg")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_ow8of")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_hj4tt")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_kqx4a")
+text = "▶"
+
+[node name="P2PrevFrame" type="TextureRect" parent="." unique_id=1363549624]
+z_index = -1
+layout_mode = 0
+offset_left = 766.0
+offset_top = 460.0
+offset_right = 856.0
+offset_bottom = 510.0
+mouse_filter = 2
+texture = ExtResource("2_68i0r")
+expand_mode = 1
+
+[node name="P2Prev" type="Button" parent="." unique_id=1152362999]
+z_index = 10
+layout_mode = 0
+offset_left = 766.0
+offset_top = 460.0
+offset_right = 856.0
+offset_bottom = 510.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_pfcs8")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_50d7c")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_ruytr")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_la3dr")
+text = "◀"
+
+[node name="P2NextFrame" type="TextureRect" parent="." unique_id=950577237]
+z_index = -1
+layout_mode = 0
+offset_left = 985.0
+offset_top = 465.0
+offset_right = 1075.0
+offset_bottom = 515.0
+mouse_filter = 2
+texture = ExtResource("2_68i0r")
+expand_mode = 1
+
+[node name="P2Next" type="Button" parent="." unique_id=1149828888]
+z_index = 10
+layout_mode = 0
+offset_left = 985.0
+offset_top = 465.0
+offset_right = 1075.0
+offset_bottom = 515.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_hcsi8")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_wi1le")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_o7pr5")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_hyj2l")
+text = "▶"
+
+[node name="ControlP1" type="Button" parent="." unique_id=562627156]
+z_index = 10
+layout_mode = 0
+offset_left = 310.0
+offset_top = 530.0
+offset_right = 580.0
+offset_bottom = 580.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_vuqay")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_wfmv0")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_wxrqn")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_n756u")
+text = "P1を操作"
+metadata/ui_callback_bound = true
+
+[node name="ControlP2" type="Button" parent="." unique_id=718926263]
+z_index = 10
+layout_mode = 0
+offset_left = 810.0
+offset_top = 527.0
+offset_right = 1080.0
+offset_bottom = 577.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_k33j2")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_2cjf7")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_4e8e3")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_5gihh")
+text = "P2を操作"
+metadata/ui_callback_bound = true
+
+[node name="StartButton" type="Button" parent="." unique_id=226548310]
+z_index = 10
+layout_mode = 0
+offset_left = 470.0
+offset_top = 625.0
+offset_right = 810.0
+offset_bottom = 681.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_407df")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_4sqen")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_w6a6y")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_knlx5")
+text = "デバッグ対戦を開始"
+metadata/ui_callback_bound = true
+
+[node name="BackButton" type="Button" parent="." unique_id=1787750362]
+z_index = 10
+layout_mode = 0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 222.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_pes4l")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_s5e0g")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_uya8e")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_2tiby")
+text = "戻る"
+metadata/ui_callback_bound = true
+
+[node name="_TextureRect_64838" type="TextureRect" parent="." unique_id=1394519372]
+z_index = -1
+layout_mode = 0
+offset_left = 291.0
+offset_top = 521.0
+offset_right = 594.0
+offset_bottom = 589.0
+mouse_filter = 2
+texture = ExtResource("2_n3fb4")
+expand_mode = 1
+
+[node name="_TextureRect_64839" type="TextureRect" parent="." unique_id=268787004]
+z_index = -1
+layout_mode = 0
+offset_left = 803.0
+offset_top = 521.0
+offset_right = 1070.0
+offset_bottom = 589.0
+mouse_filter = 2
+texture = ExtResource("2_n3fb4")
+expand_mode = 1
+
+[node name="_TextureRect_64840" type="TextureRect" parent="." unique_id=1616465185]
+z_index = -1
+layout_mode = 0
+offset_left = 470.0
+offset_top = 625.0
+offset_right = 810.0
+offset_bottom = 681.0
+mouse_filter = 2
+texture = ExtResource("2_n3fb4")
+expand_mode = 1
+
+[node name="_TextureRect_64841" type="TextureRect" parent="." unique_id=1946862883]
+z_index = -1
+layout_mode = 0
+offset_left = 37.0
+offset_top = 10.0
+offset_right = 214.0
+offset_bottom = 92.0
+mouse_filter = 2
+texture = ExtResource("2_n3fb4")
+expand_mode = 1

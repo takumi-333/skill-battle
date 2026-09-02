@@ -1,0 +1,341 @@
+[gd_scene format=3 uid="uid://bqr00m77mt8tx"]
+
+[ext_resource type="Texture2D" uid="uid://b61t6o12hkbo7" path="res://assets/ui/panel_frame.png" id="1_ec1gl"]
+[ext_resource type="Texture2D" uid="uid://b1juehjx2sr7j" path="res://assets/ui/card_character.png" id="2_kvtbc"]
+[ext_resource type="Script" uid="uid://olfhf3o05hcq" path="res://scripts/ui_status_icon.gd" id="3_nr3vt"]
+[ext_resource type="Texture2D" uid="uid://1xroc5qye715" path="res://assets/ui/button_ready.png" id="4_avu5f"]
+[ext_resource type="Texture2D" uid="uid://dsjabll8fin6b" path="res://assets/ui/button_secondary.png" id="4_kvtbc"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pibwh"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_c6pm6"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_5he1u"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_5poiv"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2cjbq"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_chjal"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cjqg0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vchkt"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_txyw0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_bjg73"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_bu4jf"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_o7ddy"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_0loja"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ids8r"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dnhof"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_1v6qk"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_augu2"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tm6hj"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_kf5aa"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_t5ykj"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_e755i"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vc5cj"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_nvyfr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ty1g6"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_j2jfr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ro3en"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_od4ux"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xhfw6"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_1epgm"]
+
+[node name="Lobby" type="Panel" unique_id=1458327289]
+offset_right = 1280.0
+offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_pibwh")
+metadata/ui_callbacks_bound = true
+
+[node name="PanelFrame" type="TextureRect" parent="." unique_id=2074312511]
+layout_mode = 0
+offset_left = 55.0
+offset_top = 50.0
+offset_right = 1187.0
+offset_bottom = 665.0
+mouse_filter = 2
+texture = ExtResource("1_ec1gl")
+expand_mode = 1
+
+[node name="PlayerOneCard" type="TextureRect" parent="." unique_id=1031292369]
+layout_mode = 0
+offset_left = 199.0
+offset_top = 148.0
+offset_right = 599.0
+offset_bottom = 568.0
+mouse_filter = 2
+texture = ExtResource("2_kvtbc")
+expand_mode = 1
+
+[node name="PlayerTwoCard" type="TextureRect" parent="." unique_id=955862400]
+layout_mode = 0
+offset_left = 681.0
+offset_top = 148.0
+offset_right = 1081.0
+offset_bottom = 568.0
+mouse_filter = 2
+texture = ExtResource("2_kvtbc")
+expand_mode = 1
+
+[node name="Title" type="Label" parent="." unique_id=349913415]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 170.0
+offset_right = 1190.0
+offset_bottom = 218.0
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+
+[node name="PlayerOnePreview" type="TextureRect" parent="." unique_id=117460151]
+layout_mode = 0
+offset_left = 1192.0
+offset_top = 230.0
+offset_right = 1437.0
+offset_bottom = 440.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerTwoPreview" type="TextureRect" parent="." unique_id=1573346811]
+layout_mode = 0
+offset_left = 1276.0
+offset_top = 50.0
+offset_right = 1521.0
+offset_bottom = 260.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerOneInfo" type="Label" parent="." unique_id=766903822]
+layout_mode = 0
+offset_left = 290.0
+offset_top = 230.0
+offset_right = 610.0
+offset_bottom = 282.0
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerTwoInfo" type="Label" parent="." unique_id=1019448470]
+layout_mode = 0
+offset_left = 675.0
+offset_top = 230.0
+offset_right = 995.0
+offset_bottom = 282.0
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerOneStatus" type="Control" parent="." unique_id=1691566107]
+anchors_preset = 0
+offset_left = 555.0
+offset_top = 235.0
+offset_right = 603.0
+offset_bottom = 283.0
+script = ExtResource("3_nr3vt")
+
+[node name="PlayerTwoStatus" type="Control" parent="." unique_id=561997173]
+anchors_preset = 0
+offset_left = 940.0
+offset_top = 235.0
+offset_right = 988.0
+offset_bottom = 283.0
+script = ExtResource("3_nr3vt")
+
+[node name="PlayerOneLeftFrame" type="TextureRect" parent="." unique_id=153933344]
+z_index = -1
+layout_mode = 0
+offset_left = 300.0
+offset_top = 500.0
+offset_right = 390.0
+offset_bottom = 546.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerOneLeft" type="Button" parent="." unique_id=737602705]
+z_index = 10
+layout_mode = 0
+offset_left = 249.0
+offset_top = 476.0
+offset_right = 339.0
+offset_bottom = 522.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_c6pm6")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_5he1u")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_5poiv")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_2cjbq")
+text = "◀"
+
+[node name="PlayerOneRightFrame" type="TextureRect" parent="." unique_id=466335135]
+z_index = -1
+layout_mode = 0
+offset_left = 515.0
+offset_top = 500.0
+offset_right = 605.0
+offset_bottom = 546.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerOneRight" type="Button" parent="." unique_id=1322728296]
+z_index = 10
+layout_mode = 0
+offset_left = 469.0
+offset_top = 476.0
+offset_right = 559.0
+offset_bottom = 522.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_chjal")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_cjqg0")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_vchkt")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_txyw0")
+text = "▶"
+
+[node name="PlayerTwoLeftFrame" type="TextureRect" parent="." unique_id=94963022]
+z_index = -1
+layout_mode = 0
+offset_left = 685.0
+offset_top = 500.0
+offset_right = 775.0
+offset_bottom = 546.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerTwoLeft" type="Button" parent="." unique_id=587094037]
+z_index = 10
+layout_mode = 0
+offset_left = 730.0
+offset_top = 476.0
+offset_right = 820.0
+offset_bottom = 522.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_bjg73")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_bu4jf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
+text = "◀"
+
+[node name="PlayerTwoRightFrame" type="TextureRect" parent="." unique_id=307338389]
+z_index = -1
+layout_mode = 0
+offset_left = 900.0
+offset_top = 500.0
+offset_right = 990.0
+offset_bottom = 546.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="_TextureRect_64833" type="TextureRect" parent="." unique_id=294841029]
+z_index = -1
+layout_mode = 0
+offset_left = 320.0
+offset_top = 597.0
+offset_right = 570.0
+offset_bottom = 662.0
+mouse_filter = 2
+texture = ExtResource("4_avu5f")
+expand_mode = 1
+
+[node name="_TextureRect_64834" type="TextureRect" parent="." unique_id=468945609]
+z_index = -1
+layout_mode = 0
+offset_left = 643.0
+offset_top = 601.0
+offset_right = 893.0
+offset_bottom = 666.0
+mouse_filter = 2
+texture = ExtResource("4_avu5f")
+expand_mode = 1
+
+[node name="PlayerTwoRight" type="Button" parent="." unique_id=1990339313]
+z_index = 10
+layout_mode = 0
+offset_left = 943.0
+offset_top = 474.0
+offset_right = 1033.0
+offset_bottom = 520.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
+text = "▶"
+
+[node name="PlayerTwoReady" type="Button" parent="." unique_id=2002446452]
+z_index = 10
+layout_mode = 0
+offset_left = 649.0
+offset_top = 599.0
+offset_right = 899.0
+offset_bottom = 657.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_tm6hj")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_kf5aa")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_t5ykj")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_e755i")
+text = "準備完了"
+
+[node name="PlayerOneReady" type="Button" parent="." unique_id=146356369]
+z_index = 10
+layout_mode = 0
+offset_left = 328.0
+offset_top = 598.0
+offset_right = 578.0
+offset_bottom = 656.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_vc5cj")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_nvyfr")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_ty1g6")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_j2jfr")
+text = "準備完了"
+
+[node name="HomeButton" type="Button" parent="." unique_id=398506999]
+z_index = 10
+layout_mode = 0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 242.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ro3en")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_od4ux")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_xhfw6")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_1epgm")
+text = "ホームへ戻る"

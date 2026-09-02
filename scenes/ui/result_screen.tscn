@@ -1,0 +1,70 @@
+[gd_scene format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_152kg"]
+bg_color = Color(0.06666667, 0.105882354, 0.20392157, 0.9607843)
+border_color = Color(1, 0.76862746, 0.36862746, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_r4e17"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_y57op"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_mlv25"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_a82wo"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_gdvew"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_kjtvk"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xrs0c"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xljpf"]
+
+[node name="Result" type="Panel" unique_id=1656071126]
+offset_right = 1280.0
+offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_152kg")
+
+[node name="ResultText" type="Label" parent="." unique_id=1646772398]
+layout_mode = 0
+offset_left = 330.0
+offset_top = 170.0
+offset_right = 950.0
+offset_bottom = 440.0
+theme_override_font_sizes/font_size = 21
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RematchButton" type="Button" parent="." unique_id=1070298870]
+z_index = 10
+layout_mode = 0
+offset_left = 450.0
+offset_top = 440.0
+offset_right = 620.0
+offset_bottom = 476.0
+theme_override_styles/normal = SubResource("StyleBoxEmpty_r4e17")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_y57op")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_mlv25")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_a82wo")
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+text = "もう一度対戦"
+
+[node name="ReturnButton" type="Button" parent="." unique_id=219035750]
+z_index = 10
+layout_mode = 0
+offset_left = 660.0
+offset_top = 440.0
+offset_right = 830.0
+offset_bottom = 476.0
+theme_override_styles/normal = SubResource("StyleBoxEmpty_gdvew")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_kjtvk")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_xrs0c")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_xljpf")
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+text = "ロビーへ戻る"

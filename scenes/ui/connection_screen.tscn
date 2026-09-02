@@ -1,0 +1,175 @@
+[gd_scene format=3 uid="uid://8204ub3hvh2f"]
+
+[ext_resource type="Texture2D" uid="uid://dmr80hkkao2i4" path="res://assets/ui/button_primary.png" id="1_ni7ru"]
+[ext_resource type="Texture2D" uid="uid://b61t6o12hkbo7" path="res://assets/ui/panel_frame.png" id="1_sxcx5"]
+[ext_resource type="Texture2D" uid="uid://bq23340v21yqi" path="res://assets/ui/input_invite_code.png" id="2_lw472"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_j4bwh"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_input"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ksmap"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ygd8o"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2s0kr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xaipn"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ndrjj"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ih3m7"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_11yus"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_b6ruc"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_155or"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vtx2l"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_63lxy"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fjhjs"]
+
+[node name="Connection" type="Panel" unique_id=2103258824]
+offset_right = 1280.0
+offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_j4bwh")
+
+[node name="Title" type="Label" parent="." unique_id=2057799537]
+layout_mode = 0
+offset_left = 377.0
+offset_top = 37.0
+offset_right = 897.0
+offset_bottom = 82.0
+theme_override_font_sizes/font_size = 30
+text = "オンライン対戦"
+horizontal_alignment = 1
+
+[node name="_TextureRect_58397" type="TextureRect" parent="." unique_id=2072582020]
+z_index = -1
+layout_mode = 0
+offset_top = 55.0
+offset_right = 1220.0
+offset_bottom = 701.0
+mouse_filter = 2
+texture = ExtResource("1_sxcx5")
+expand_mode = 1
+
+[node name="AddressInputFrame" type="TextureRect" parent="." unique_id=1191922668]
+z_index = -1
+layout_mode = 0
+offset_left = 195.0
+offset_top = 166.0
+offset_right = 1009.0
+offset_bottom = 318.0
+mouse_filter = 2
+texture = ExtResource("2_lw472")
+expand_mode = 1
+
+[node name="AddressInput" type="LineEdit" parent="." unique_id=1316522400]
+layout_mode = 0
+offset_left = 273.0
+offset_top = 211.0
+offset_right = 937.0
+offset_bottom = 263.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_styles/normal = SubResource("StyleBoxEmpty_input")
+theme_override_styles/read_only = SubResource("StyleBoxEmpty_input")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_input")
+text = "127.0.0.1:7000"
+placeholder_text = "接続先 IP:ポート"
+
+[node name="HostButtonFrame" type="TextureRect" parent="." unique_id=529069943]
+z_index = -1
+layout_mode = 0
+offset_left = 194.0
+offset_top = 350.0
+offset_right = 474.0
+offset_bottom = 470.0
+mouse_filter = 2
+texture = ExtResource("1_ni7ru")
+expand_mode = 1
+
+[node name="HostButton" type="Button" parent="." unique_id=1754858644]
+z_index = 10
+layout_mode = 0
+offset_left = 218.0
+offset_top = 370.0
+offset_right = 458.0
+offset_bottom = 440.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 23
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ksmap")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_ygd8o")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_2s0kr")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_xaipn")
+text = "ルームを作成"
+
+[node name="JoinButtonFrame" type="TextureRect" parent="." unique_id=356575392]
+z_index = -1
+layout_mode = 0
+offset_left = 733.0
+offset_top = 351.0
+offset_right = 1013.0
+offset_bottom = 481.0
+mouse_filter = 2
+texture = ExtResource("1_ni7ru")
+expand_mode = 1
+
+[node name="JoinButton" type="Button" parent="." unique_id=1884841892]
+z_index = 10
+layout_mode = 0
+offset_left = 753.0
+offset_top = 376.0
+offset_right = 993.0
+offset_bottom = 446.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 23
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ndrjj")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_ih3m7")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_11yus")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_b6ruc")
+text = "ルームに参加"
+
+[node name="Status" type="Label" parent="." unique_id=1235855470]
+layout_mode = 0
+offset_left = 281.0
+offset_top = 501.0
+offset_right = 961.0
+offset_bottom = 541.0
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+
+[node name="BackButtonFrame" type="TextureRect" parent="." unique_id=1702541358]
+z_index = -1
+layout_mode = 0
+offset_left = 13.0
+offset_top = 13.0
+offset_right = 243.0
+offset_bottom = 107.0
+mouse_filter = 2
+texture = ExtResource("1_ni7ru")
+expand_mode = 1
+
+[node name="BackButton" type="Button" parent="." unique_id=1898240591]
+z_index = 10
+layout_mode = 0
+offset_left = 27.0
+offset_top = 30.0
+offset_right = 237.0
+offset_bottom = 82.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_155or")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_vtx2l")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_63lxy")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_fjhjs")
+text = "ホームへ戻る"

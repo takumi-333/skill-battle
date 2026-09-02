@@ -1,0 +1,156 @@
+[gd_scene format=3 uid="uid://b0p7ned1tbk0q"]
+
+[ext_resource type="Texture2D" uid="uid://dmr80hkkao2i4" path="res://assets/ui/button_primary.png" id="2_fl3wj"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_r4ag1"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_eh0nn"]
+load_path = "res://.godot/imported/panel_frame.png-a747b691dae10bab52354442c0a3ccbe.ctex"
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_v0wtd"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_sgvw8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_6nfnn"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4ue30"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_k42av"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_gr8w0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_673bd"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_akjxb"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_0tljd"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_mgpkq"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xmrkg"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wvlrk"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vrx01"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_1uevf"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tc087"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_73205"]
+
+[node name="Home" type="Panel" unique_id=2035756316]
+offset_right = 1280.0
+offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_r4ag1")
+
+[node name="PanelFrame" type="TextureRect" parent="." unique_id=1627262872]
+z_index = -1
+layout_mode = 0
+offset_left = 6.0
+offset_top = -33.0
+offset_right = 678.0
+offset_bottom = 783.0
+mouse_filter = 2
+texture = SubResource("CompressedTexture2D_eh0nn")
+expand_mode = 1
+
+[node name="OnlineButton" type="Button" parent="." unique_id=2000597100]
+z_index = 10
+layout_mode = 0
+offset_left = 43.0
+offset_top = 58.0
+offset_right = 643.0
+offset_bottom = 669.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 30
+theme_override_styles/normal = SubResource("StyleBoxEmpty_v0wtd")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_sgvw8")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_6nfnn")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_4ue30")
+text = "オンライン対戦"
+metadata/ui_callback_bound = true
+
+[node name="PracticeButton" type="Button" parent="." unique_id=1082743163]
+z_index = 10
+layout_mode = 0
+offset_left = 755.42
+offset_top = 59.16
+offset_right = 1199.4202
+offset_bottom = 193.16
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_k42av")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_gr8w0")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_673bd")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_akjxb")
+text = "練習"
+metadata/ui_callback_bound = true
+
+[node name="_TextureRect_64835" type="TextureRect" parent="." unique_id=843961639]
+z_index = -1
+layout_mode = 0
+offset_left = 708.0
+offset_top = -24.0
+offset_right = 1248.0
+offset_bottom = 276.0
+mouse_filter = 2
+texture = ExtResource("2_fl3wj")
+expand_mode = 1
+
+[node name="_TextureRect_64836" type="TextureRect" parent="." unique_id=1825109700]
+z_index = -1
+layout_mode = 0
+offset_left = 713.0
+offset_top = 222.0
+offset_right = 1253.0
+offset_bottom = 522.0
+mouse_filter = 2
+texture = ExtResource("2_fl3wj")
+expand_mode = 1
+
+[node name="_TextureRect_64837" type="TextureRect" parent="." unique_id=1923354536]
+z_index = -1
+layout_mode = 0
+offset_left = 719.0
+offset_top = 458.0
+offset_right = 1259.0
+offset_bottom = 758.0
+mouse_filter = 2
+texture = ExtResource("2_fl3wj")
+expand_mode = 1
+
+[node name="DebugButton" type="Button" parent="." unique_id=611248863]
+z_index = 10
+layout_mode = 0
+offset_left = 756.0
+offset_top = 539.0
+offset_right = 1156.0
+offset_bottom = 669.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_0tljd")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_mgpkq")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_xmrkg")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_wvlrk")
+text = "デバッグ"
+metadata/ui_callback_bound = true
+
+[node name="CharacterButton" type="Button" parent="." unique_id=1212860415]
+z_index = 10
+layout_mode = 0
+offset_left = 749.0
+offset_top = 296.0
+offset_right = 1229.0
+offset_bottom = 426.0
+tooltip_text = "キャラクター育成画面は準備中です"
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_vrx01")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_1uevf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_tc087")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_73205")
+text = "キャラクター"
+metadata/ui_callback_bound = true

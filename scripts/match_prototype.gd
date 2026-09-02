@@ -344,13 +344,15 @@ var lobby_p1_ready: Button
 var lobby_p2_left: Button
 var lobby_p2_right: Button
 var lobby_p2_ready: Button
-var ui_click_player: AudioStreamPlayer
+@onready var ui_click_player: AudioStreamPlayer = $UIAudioPlayer
 var menu_background: TextureRect
+var menu_background_root: Control
 @export var menu_layout: MenuLayoutData
 
 @onready var ui_root: CanvasLayer = $UIRoot
 @onready var hud_root: Control = $UIRoot/HUD
 @onready var challenge_layer: CanvasLayer = $ChallengeLayer
+@onready var screen_manager: Node = $UIScreenManager
 
 class NormalAttackHitArea:
 	var origin: Vector2
@@ -396,7 +398,6 @@ func _ready() -> void:
 	# can never suppress runtime navigation callbacks.
 	if not Engine.is_editor_hint():
 		clear_editor_ui_binding_metadata(self)
-	create_ui_sound_player()
 	create_menu_background()
 	get_tree().node_added.connect(_on_node_added)
 	create_challenge_definitions()
@@ -405,6 +406,17 @@ func _ready() -> void:
 	create_result_ui()
 	create_network_ui()
 	create_navigation_ui()
+	screen_manager.call("configure", {
+		"title": title_panel,
+		"home": home_panel,
+		"practice_select": practice_panel,
+		"debug_select": debug_panel,
+		"connection": network_panel,
+		"online_waiting": lobby_panel,
+		"debug_waiting": lobby_panel,
+		"result": result_panel,
+	}, menu_background_root, menu_background, title_logo, hud_root, challenge_dimmer, challenge_panel)
+	screen_manager.connect("screen_changed", _on_screen_changed)
 	if Engine.is_editor_hint():
 		adopt_editor_ui_nodes()
 		return
@@ -442,17 +454,10 @@ func adopt_editor_ui_node(node: Node, edited_root: Node) -> void:
 		adopt_editor_ui_node(child, edited_root)
 
 
-func create_ui_sound_player() -> void:
-	ui_click_player = AudioStreamPlayer.new()
-	ui_click_player.stream = UI_CLICK_SOUND
-	ui_click_player.volume_db = -7.0
-	add_child(ui_click_player)
-
-
 func create_menu_background() -> void:
-	var background_root := $UIRoot/MenuBackground as Control
-	background_root.visible = true
-	background_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_background_root = $UIRoot/MenuBackground as Control
+	menu_background_root.visible = true
+	menu_background_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_background = $UIRoot/MenuBackground/Texture
 	menu_background.visible = true
 	menu_background.z_index = -100
@@ -730,8 +735,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
 	var show_local_challenge: bool = network_mode != "host" or owner_id == 1
-	challenge_dimmer.visible = show_local_challenge
-	challenge_panel.visible = show_local_challenge
+	set_challenge_overlay_visible(show_local_challenge)
 	typing_input.visible = not challenge_skill.ends_with("trace")
 	challenge_trace_canvas.visible = challenge_skill.ends_with("trace")
 	typing_input.text = ""
@@ -866,9 +870,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 		player["challenge_score_total"] = int(player["challenge_score_total"]) + score
 		player["challenge_best_score"] = maxi(int(player["challenge_best_score"]), score)
 	players[owner_id] = player
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	typing_input.release_focus()
+	set_challenge_overlay_visible(false)
 	typing_input.visible = true
 	if success:
 		spawn_character_skill(owner_id, score, is_big)
@@ -1115,9 +1117,7 @@ func interrupt_active_challenge(player_id: int, attack_name: String) -> void:
 	player["interrupt_gauge_max"] = 0.0
 	player["small_cooldown"] = TYPING_SKILL_COOLDOWN
 	players[player_id] = player
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	typing_input.release_focus()
+	set_challenge_overlay_visible(false)
 	challenge_owner = 0
 	challenge_target_points.clear()
 	update_trace_canvas()
@@ -1127,9 +1127,7 @@ func interrupt_active_challenge(player_id: int, attack_name: String) -> void:
 func finish_match(winner_id: int) -> void:
 	match_state.match_over = true
 	match_state.winner_id = winner_id
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	typing_input.release_focus()
+	set_challenge_overlay_visible(false)
 	status_text = "%sの勝利！ Rキーで再戦できます。" % players[winner_id]["name"]
 	show_result(winner_id)
 
@@ -1152,11 +1150,11 @@ func reset_match() -> void:
 
 func show_result(winner_id: int) -> void:
 	phase = "result"
-	result_panel.visible = true
 	var result_title: String = "引き分け" if winner_id == 0 else "%sの勝利" % players[winner_id]["name"]
 	var first: Dictionary = players[1]
 	var second: Dictionary = players[2]
 	result_label.text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [result_title, first["name"], first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], second["name"], second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	apply_screen_state("result")
 	if network_mode == "host":
 		rpc("receive_network_state", make_network_state())
 
@@ -1165,7 +1163,6 @@ func rematch_from_result() -> void:
 	match_state.reset()
 	players = match_state.players
 	begin_match()
-	result_panel.visible = false
 
 
 func request_rematch() -> void:
@@ -1254,10 +1251,8 @@ func create_skill_hud() -> void:
 
 
 func set_gameplay_hud_visible(is_visible: bool) -> void:
-	# The HUD is a scene-authored Control. Toggle the parent as well as its
-	# children; otherwise children can be visible while the parent remains
-	# hidden (which made practice/debug battles appear to have no UI).
-	hud_root.visible = is_visible
+	# The screen-state coordinator owns the HUD parent. This function only
+	# controls HUD-specific child state.
 	hud_root.z_index = 100
 	player_one_label.visible = is_visible
 	player_two_label.visible = false
@@ -1268,9 +1263,26 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local"]
 	for widget in skill_widgets:
 		widget.visible = is_visible
+
+
+func set_challenge_overlay_visible(is_visible: bool) -> void:
+	challenge_dimmer.visible = is_visible
+	challenge_panel.visible = is_visible
 	if not is_visible:
-		challenge_panel.visible = false
-		challenge_dimmer.visible = false
+		challenge_trace_canvas.visible = false
+		typing_input.release_focus()
+
+
+func apply_screen_state(next_screen: String) -> void:
+	screen = next_screen
+	screen_manager.call("show_screen", next_screen)
+
+
+func _on_screen_changed(next_screen: String) -> void:
+	var is_gameplay_screen := next_screen in ["match", "countdown"]
+	set_gameplay_hud_visible(is_gameplay_screen)
+	if not is_gameplay_screen:
+		set_challenge_overlay_visible(false)
 
 
 func create_lobby_ui() -> void:
@@ -1300,8 +1312,6 @@ func create_lobby_ui() -> void:
 	lobby_home_button = $UIRoot/Lobby/HomeButton
 	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_home_button]:
 		style_menu_button(button)
-	add_menu_texture(lobby_panel, UI_BUTTON_READY, Vector2(390, 620), Vector2(250, 58))
-	add_menu_texture(lobby_panel, UI_BUTTON_READY, Vector2(640, 620), Vector2(250, 58))
 	if not lobby_panel.has_meta("ui_callbacks_bound"):
 		lobby_p1_left.pressed.connect(func(): set_lobby_selection(1, -1))
 		lobby_p1_right.pressed.connect(func(): set_lobby_selection(1, 1))
@@ -1412,7 +1422,6 @@ func create_network_ui() -> void:
 	style.corner_radius_bottom_left = 12
 	style.corner_radius_bottom_right = 12
 	network_panel.add_theme_stylebox_override("panel", style)
-	add_menu_texture(network_panel, UI_PANEL_FRAME, menu_layout.online_panel_position, menu_layout.online_panel_size)
 	network_address_input = $UIRoot/Connection/AddressInput
 	network_status_label = $UIRoot/Connection/Status
 	var host_button: Button = $UIRoot/Connection/HostButton
@@ -1505,7 +1514,6 @@ func add_menu_panel_button(parent: Control, text_value: String, button_position:
 
 func create_navigation_ui() -> void:
 	title_panel = make_menu_panel(NodePath("UIRoot/Title"), Color("71d6ba"))
-	# ロゴはNode2D側で描画するため、このパネルは枠だけにして覆い隠さない。
 	var title_panel_style := StyleBoxFlat.new()
 	title_panel_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
 	title_panel_style.border_color = Color("71d6ba")
@@ -1516,48 +1524,46 @@ func create_navigation_ui() -> void:
 	title_logo.texture = UI_LOGO
 	title_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title_logo.stretch_mode = TextureRect.STRETCH_SCALE
-	title_logo.position = Vector2(260, 85)
-	title_logo.size = Vector2(760, 460)
-	# ロゴはNode2Dの_drawで固定矩形へ描画する。TextureRectには描画を任せない。
 	title_logo.visible = false
 	title_prompt = $UIRoot/Title/Prompt
 	title_prompt.text = "Press Space / Enter / Click to Start"
-	title_prompt.position = Vector2(200, 565)
-	title_prompt.size = Vector2(880, 48)
 	title_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_prompt.add_theme_font_size_override("font_size", 28)
 
 	home_panel = make_menu_panel(NodePath("UIRoot/Home"), Color("8fa8e8"))
-	add_menu_texture(home_panel, UI_PANEL_FRAME, Vector2(165, 235), Vector2(470, 345))
-	add_menu_panel_button(home_panel, "オンライン対戦", Vector2(205, 280), Vector2(390, 250), show_online_menu)
-	make_menu_button(home_panel, "練習", Vector2(680, 235), Vector2(400, 130), show_practice_select)
-	var character_button := make_menu_button(home_panel, "キャラクター", Vector2(680, 355), Vector2(400, 130), show_character_unavailable)
+	var online_button := $UIRoot/Home/OnlineButton as Button
+	var practice_button := $UIRoot/Home/PracticeButton as Button
+	var character_button := $UIRoot/Home/CharacterButton as Button
+	var home_debug_button := $UIRoot/Home/DebugButton as Button
+	for button in [online_button, practice_button, character_button, home_debug_button]:
+		style_menu_button(button, 30 if button == online_button else 20)
+	connect_button_once(online_button, show_online_menu)
+	connect_button_once(practice_button, show_practice_select)
+	connect_button_once(character_button, show_character_unavailable)
+	connect_button_once(home_debug_button, show_debug_select)
 	character_button.tooltip_text = "キャラクター育成画面は準備中です"
-	make_menu_button(home_panel, "デバッグ", Vector2(680, 475), Vector2(400, 130), show_debug_select)
 
 	practice_panel = make_menu_panel(NodePath("UIRoot/Practice"), Color("71d6ba"))
-	add_menu_texture(practice_panel, UI_PANEL_FRAME, Vector2(280, 205), Vector2(720, 385))
 	practice_preview = $UIRoot/Practice/Preview
-	practice_preview.position = Vector2(370, 195)
-	practice_preview.size = Vector2(540, 42)
 	practice_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	practice_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	practice_preview.add_theme_font_size_override("font_size", 28)
 	practice_portrait = $UIRoot/Practice/Portrait
-	for button in [$UIRoot/Practice/PrevButton, $UIRoot/Practice/NextButton, $UIRoot/Practice/StartButton, $UIRoot/Practice/BackButton]:
+	var practice_prev_button := $UIRoot/Practice/PrevButton as Button
+	var practice_next_button := $UIRoot/Practice/NextButton as Button
+	var practice_start_button := $UIRoot/Practice/StartButton as Button
+	var practice_back_button := $UIRoot/Practice/BackButton as Button
+	for button in [practice_prev_button, practice_next_button, practice_start_button, practice_back_button]:
 		style_menu_button(button)
 	if not practice_panel.has_meta("ui_callbacks_bound"):
-		$UIRoot/Practice/PrevButton.pressed.connect(func(): change_practice_selection(-1))
-		$UIRoot/Practice/NextButton.pressed.connect(func(): change_practice_selection(1))
-		$UIRoot/Practice/StartButton.pressed.connect(start_practice)
-		$UIRoot/Practice/BackButton.pressed.connect(show_home)
+		practice_prev_button.pressed.connect(func(): change_practice_selection(-1))
+		practice_next_button.pressed.connect(func(): change_practice_selection(1))
+		practice_start_button.pressed.connect(start_practice)
+		practice_back_button.pressed.connect(show_home)
 		practice_panel.set_meta("ui_callbacks_bound", true)
 
 	debug_panel = make_menu_panel(NodePath("UIRoot/Debug"), Color("ffc45e"))
-	add_menu_texture(debug_panel, UI_PANEL_FRAME, Vector2(245, 190), Vector2(790, 405))
 	debug_preview = $UIRoot/Debug/Preview
-	debug_preview.position = Vector2(155, 182)
-	debug_preview.size = Vector2(970, 40)
 	debug_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	debug_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	debug_preview.add_theme_font_size_override("font_size", 25)
@@ -1565,22 +1571,28 @@ func create_navigation_ui() -> void:
 	debug_p2_name = $UIRoot/Debug/P2Name
 	debug_p1_portrait = $UIRoot/Debug/P1Portrait
 	debug_p2_portrait = $UIRoot/Debug/P2Portrait
-	for button in [$UIRoot/Debug/P1Prev, $UIRoot/Debug/P1Next, $UIRoot/Debug/P2Prev, $UIRoot/Debug/P2Next]:
+	var debug_p1_prev_button := $UIRoot/Debug/P1Prev as Button
+	var debug_p1_next_button := $UIRoot/Debug/P1Next as Button
+	var debug_p2_prev_button := $UIRoot/Debug/P2Prev as Button
+	var debug_p2_next_button := $UIRoot/Debug/P2Next as Button
+	for button in [debug_p1_prev_button, debug_p1_next_button, debug_p2_prev_button, debug_p2_next_button]:
 		style_menu_button(button)
 	if not debug_panel.has_meta("ui_callbacks_bound"):
-		$UIRoot/Debug/P1Prev.pressed.connect(func(): change_debug_selection(1, -1))
-		$UIRoot/Debug/P1Next.pressed.connect(func(): change_debug_selection(1, 1))
-		$UIRoot/Debug/P2Prev.pressed.connect(func(): change_debug_selection(2, -1))
-		$UIRoot/Debug/P2Next.pressed.connect(func(): change_debug_selection(2, 1))
+		debug_p1_prev_button.pressed.connect(func(): change_debug_selection(1, -1))
+		debug_p1_next_button.pressed.connect(func(): change_debug_selection(1, 1))
+		debug_p2_prev_button.pressed.connect(func(): change_debug_selection(2, -1))
+		debug_p2_next_button.pressed.connect(func(): change_debug_selection(2, 1))
 		debug_panel.set_meta("ui_callbacks_bound", true)
-	debug_control_p1_button = make_menu_button(debug_panel, "P1を操作", Vector2(310, 530), Vector2(270, 50), func(): set_debug_controlled_player(1))
-	debug_control_p2_button = make_menu_button(debug_panel, "P2を操作", Vector2(700, 530), Vector2(270, 50), func(): set_debug_controlled_player(2))
-	make_menu_button(debug_panel, "デバッグ対戦を開始", Vector2(470, 625), Vector2(340, 56), start_debug_match)
-	make_menu_button(debug_panel, "戻る", Vector2(32, 24), Vector2(190, 52), show_home)
-	title_panel.visible = false
-	home_panel.visible = false
-	practice_panel.visible = false
-	debug_panel.visible = false
+	debug_control_p1_button = $UIRoot/Debug/ControlP1
+	debug_control_p2_button = $UIRoot/Debug/ControlP2
+	var debug_start_button := $UIRoot/Debug/StartButton as Button
+	var debug_back_button := $UIRoot/Debug/BackButton as Button
+	for button in [debug_control_p1_button, debug_control_p2_button, debug_start_button, debug_back_button]:
+		style_menu_button(button)
+	connect_button_once(debug_control_p1_button, func(): set_debug_controlled_player(1))
+	connect_button_once(debug_control_p2_button, func(): set_debug_controlled_player(2))
+	connect_button_once(debug_start_button, start_debug_match)
+	connect_button_once(debug_back_button, show_home)
 
 
 func character_names() -> Array[String]:
@@ -1626,26 +1638,10 @@ func update_selection_labels() -> void:
 			debug_control_p2_button.text = "P2を操作 ✓" if debug_controlled_player_id == 2 else "P2を操作"
 
 
-func hide_menu_panels() -> void:
-	title_panel.visible = false
-	home_panel.visible = false
-	practice_panel.visible = false
-	debug_panel.visible = false
-
-
 func show_title() -> void:
-	screen = "title"
 	title_animation_elapsed = 0.0
-	hide_menu_panels()
-	title_panel.visible = true
-	# 背景TextureRectより前面のUIレイヤーでロゴを表示する。
-	title_logo.visible = true
-	menu_background.visible = true
 	title_prompt.modulate.a = 1.0
-	network_panel.visible = false
-	lobby_panel.visible = false
-	result_panel.visible = false
-	set_gameplay_hud_visible(false)
+	apply_screen_state("title")
 
 
 func update_title_prompt_blink() -> void:
@@ -1656,23 +1652,14 @@ func update_title_prompt_blink() -> void:
 
 
 func show_home() -> void:
-	screen = "home"
-	hide_menu_panels()
-	home_panel.visible = true
-	menu_background.visible = true
-	network_panel.visible = false
-	lobby_panel.visible = false
-	result_panel.visible = false
-	set_gameplay_hud_visible(false)
+	apply_screen_state("home")
 
 
 func return_to_home() -> void:
 	if challenge_owner != 0:
 		end_active_challenge(false, 0, "課題を中止した。")
 	challenge_owner = 0
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	typing_input.release_focus()
+	set_challenge_overlay_visible(false)
 	skill_projectiles.clear()
 	magic_zones.clear()
 	decoys.clear()
@@ -1691,24 +1678,17 @@ func return_to_home() -> void:
 
 
 func show_online_menu() -> void:
-	screen = "connection"
 	show_connection()
 
 
 func show_practice_select() -> void:
-	screen = "practice_select"
-	hide_menu_panels()
-	practice_panel.visible = true
 	update_selection_labels()
-	set_gameplay_hud_visible(false)
+	apply_screen_state("practice_select")
 
 
 func show_debug_select() -> void:
-	screen = "debug_select"
-	hide_menu_panels()
-	debug_panel.visible = true
 	update_selection_labels()
-	set_gameplay_hud_visible(false)
+	apply_screen_state("debug_select")
 
 
 func show_character_unavailable() -> void:
@@ -1739,8 +1719,6 @@ func start_practice() -> void:
 	p1_selection = practice_selection
 	p2_selection = practice_selection
 	begin_match()
-	screen = "match"
-	hide_menu_panels()
 
 
 func start_debug_match() -> void:
@@ -1749,23 +1727,13 @@ func start_debug_match() -> void:
 	p1_selection = debug_p1_selection
 	p2_selection = debug_p2_selection
 	begin_match()
-	screen = "match"
-	hide_menu_panels()
 
 
 func show_connection() -> void:
 	phase = "connection"
-	screen = "connection"
-	hide_menu_panels()
-	network_panel.visible = true
-	menu_background.visible = true
-	lobby_panel.visible = false
-	result_panel.visible = false
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	set_gameplay_hud_visible(false)
 	network_status_label.text = "ホスト作成、またはIP:ポートを入力して参加してください。"
 	network_back_button.visible = true
+	apply_screen_state("connection")
 
 
 func start_local_debug() -> void:
@@ -1781,7 +1749,6 @@ func start_host() -> void:
 	multiplayer.multiplayer_peer = peer
 	network_mode = "host"
 	local_player_id = 1
-	network_panel.visible = false
 	show_lobby()
 	status_text = "ルームを作成しました。参加者を待っています。"
 
@@ -1808,9 +1775,8 @@ func _on_peer_connected(peer_id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
-	network_panel.visible = false
 	phase = "lobby"
-	screen = "online_waiting"
+	apply_screen_state("online_waiting")
 	rpc_id(1, "request_lobby_state")
 
 
@@ -1898,10 +1864,6 @@ func receive_network_state(state: Dictionary) -> void:
 	match_state.match_over = bool(state["match_over"])
 	match_state.winner_id = int(state["winner_id"])
 	phase = str(state["phase"])
-	if phase == "lobby":
-		screen = "online_waiting"
-	elif phase == "match" or phase == "countdown" or phase == "result":
-		screen = "match"
 	p1_selection = int(state["p1_selection"])
 	p2_selection = int(state["p2_selection"])
 	p1_ready = bool(state["p1_ready"])
@@ -1935,18 +1897,19 @@ func interpolate_network_players(delta: float) -> void:
 
 
 func update_client_ui_from_state() -> void:
-	set_gameplay_hud_visible(phase == "match" or phase == "countdown")
-	lobby_panel.visible = phase == "lobby"
 	if phase == "lobby":
+		apply_screen_state("online_waiting")
 		refresh_lobby_label()
+	elif phase == "countdown":
+		apply_screen_state("match")
+	elif phase == "match":
+		apply_screen_state("match")
 	if phase == "result":
-		if not result_panel.visible:
+		if screen != "result":
 			show_result(match_state.winner_id)
 		return
-	result_panel.visible = false
 	var player_is_challenging: bool = challenge_owner == local_player_id and phase == "match"
-	challenge_dimmer.visible = player_is_challenging
-	challenge_panel.visible = player_is_challenging
+	set_challenge_overlay_visible(player_is_challenging)
 	if player_is_challenging:
 		apply_challenge_layout(str(players[local_player_id]["character_id"]))
 		challenge_prompt_label.text = challenge_prompt
@@ -1957,7 +1920,6 @@ func update_client_ui_from_state() -> void:
 			typing_input.grab_focus()
 	else:
 		challenge_trace_canvas.visible = false
-		typing_input.release_focus()
 
 
 @rpc("any_peer", "reliable")
@@ -2017,8 +1979,6 @@ func receive_remote_result_action(action: String) -> void:
 
 func show_lobby() -> void:
 	phase = "lobby"
-	screen = "online_waiting" if network_mode in ["host", "client"] else "debug_waiting"
-	set_gameplay_hud_visible(false)
 	match_state.reset()
 	players = match_state.players
 	p1_ready = false
@@ -2026,12 +1986,9 @@ func show_lobby() -> void:
 	challenge_owner = 0
 	skill_projectiles.clear()
 	magic_zones.clear()
-	challenge_panel.visible = false
-	challenge_dimmer.visible = false
-	lobby_panel.visible = true
 	lobby_home_button.visible = network_mode in ["host", "client"]
-	result_panel.visible = false
 	status_text = "キャラクターを選択してください。"
+	apply_screen_state("online_waiting" if network_mode in ["host", "client"] else "debug_waiting")
 	update_lobby(0.0)
 
 
@@ -2040,8 +1997,8 @@ func update_lobby(_delta: float) -> void:
 	if p1_ready and p2_ready:
 		phase = "countdown"
 		countdown_remaining = 3.0
-		lobby_panel.visible = false
 		status_text = "試合開始まで 3"
+		apply_screen_state("match")
 
 
 func refresh_lobby_label() -> void:
@@ -2085,11 +2042,7 @@ func get_idle_texture(visual_id: String) -> Texture2D:
 func begin_match() -> void:
 	reset_match_runtime_state()
 	phase = "match"
-	screen = "match"
-	menu_background.visible = false
-	lobby_panel.visible = false
-	network_panel.visible = false
-	set_gameplay_hud_visible(true)
+	apply_screen_state("match")
 	match_state.match_over = false
 	match_state.time_remaining = MATCH_DURATION
 	configure_player(1, p1_selection)
@@ -2110,10 +2063,8 @@ func reset_match_runtime_state() -> void:
 	challenge_target_points.clear()
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
-	if challenge_panel:
-		challenge_panel.visible = false
-	if challenge_dimmer:
-		challenge_dimmer.visible = false
+	if challenge_panel and challenge_dimmer:
+		set_challenge_overlay_visible(false)
 	if typing_input:
 		typing_input.text = ""
 		typing_input.release_focus()
