@@ -14,6 +14,7 @@
 [ext_resource type="PackedScene" uid="uid://b0p7ned1tbk0q" path="res://scenes/ui/home_screen.tscn" id="23_j8jky"]
 [ext_resource type="PackedScene" uid="uid://ivc74gheh83m" path="res://scenes/ui/practice_screen.tscn" id="25_kmb1v"]
 [ext_resource type="PackedScene" uid="uid://dryw4nkuq3y4u" path="res://scenes/ui/debug_screen.tscn" id="26_fuf3a"]
+[ext_resource type="PackedScene" path="res://scenes/ui/character_screen.tscn" id="27_character"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a8y0u"]
 bg_color = Color(0, 0, 0, 0)
@@ -117,6 +118,8 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_0ld40")
 [node name="Debug" parent="UIRoot" unique_id=12031905 instance=ExtResource("26_fuf3a")]
 visible = false
 theme_override_styles/panel = SubResource("StyleBoxFlat_gqmmt")
+
+[node name="Character" parent="UIRoot" instance=ExtResource("27_character")]
 
 [node name="ChallengeLayer" type="CanvasLayer" parent="." unique_id=470598353]
 layer = 2

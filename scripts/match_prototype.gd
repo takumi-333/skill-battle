@@ -24,7 +24,7 @@ class StatusIcon extends Control:
 
 class SkillDiamondWidget extends Control:
 	const WIDGET_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
-	const SPACE_KEY_TEXTURE: Texture2D = preload("res://assets/ui/skill_icons/skill_key_space.png")
+	const SPACE_KEY_TEXTURE: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
 	var frame_texture: Texture2D
 	var key_text: String = ""
 	var cooldown_remaining: float = 0.0
@@ -234,6 +234,12 @@ const SKILL_HOLE_MASK_SMALL: Texture2D = preload("res://assets/ui/skill_diamond_
 const SKILL_HOLE_MASK_MEDIUM: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png")
 const SKILL_HOLE_MASK_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png")
 const SKILL_PLACEHOLDER_ICON: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
+const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
+const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
+const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/chanter_background.png")
+const TYPIST_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/typist_save_button.png")
+const ARITHMETICIAN_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/arithmetician_save_button.png")
+const CHANTER_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/chanter_save_button.png")
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
@@ -319,6 +325,17 @@ var title_prompt: Label
 var home_panel: Panel
 var practice_panel: Panel
 var debug_panel: Panel
+var character_panel: Panel
+var character_background: TextureRect
+var character_portrait: TextureRect
+var character_name_label: Label
+var character_description_label: Label
+var character_saved_label: Label
+var character_save_texture: TextureRect
+var character_save_button: Button
+var character_skill_rows: Array[HBoxContainer] = []
+var character_skill_selection: Dictionary = {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]}
+var character_selection: int = 0
 var title_logo: TextureRect
 var practice_selection: int = 0
 var debug_p1_selection: int = 0
@@ -406,11 +423,13 @@ func _ready() -> void:
 	create_result_ui()
 	create_network_ui()
 	create_navigation_ui()
+	create_character_ui()
 	screen_manager.call("configure", {
 		"title": title_panel,
 		"home": home_panel,
 		"practice_select": practice_panel,
 		"debug_select": debug_panel,
+		"character": character_panel,
 		"connection": network_panel,
 		"online_waiting": lobby_panel,
 		"debug_waiting": lobby_panel,
@@ -1539,9 +1558,9 @@ func create_navigation_ui() -> void:
 		style_menu_button(button, 30 if button == online_button else 20)
 	connect_button_once(online_button, show_online_menu)
 	connect_button_once(practice_button, show_practice_select)
-	connect_button_once(character_button, show_character_unavailable)
+	connect_button_once(character_button, show_character_screen)
 	connect_button_once(home_debug_button, show_debug_select)
-	character_button.tooltip_text = "キャラクター育成画面は準備中です"
+	character_button.tooltip_text = "Open character customization"
 
 	practice_panel = make_menu_panel(NodePath("UIRoot/Practice"), Color("71d6ba"))
 	practice_preview = $UIRoot/Practice/Preview
@@ -1692,7 +1711,108 @@ func show_debug_select() -> void:
 
 
 func show_character_unavailable() -> void:
-	status_text = "キャラクター画面は準備中です。"
+	show_character_screen()
+
+
+func show_character_screen() -> void:
+	update_character_screen()
+	apply_screen_state("character")
+
+
+func create_character_ui() -> void:
+	character_panel = $UIRoot/Character as Panel
+	character_background = $UIRoot/Character/Background as TextureRect
+	character_portrait = $UIRoot/Character/Portrait as TextureRect
+	character_name_label = $UIRoot/Character/Name as Label
+	character_description_label = $UIRoot/Character/Description as Label
+	character_saved_label = $UIRoot/Character/Saved as Label
+	character_save_texture = $UIRoot/Character/SaveTexture as TextureRect
+	character_save_button = $UIRoot/Character/SaveButton as Button
+	character_skill_rows.clear()
+	for skill_index in 3:
+		var row := character_panel.get_node("Skill%dScroll/Items" % (skill_index + 1)) as HBoxContainer
+		character_skill_rows.append(row)
+	var home_button := $UIRoot/Character/HomeButton as Button
+	style_menu_button(home_button, 20)
+	style_menu_button(character_save_button, 22)
+	var selector_buttons: Array[Button] = [
+		$UIRoot/Character/Selector/Items/Typist,
+		$UIRoot/Character/Selector/Items/Arithmetician,
+		$UIRoot/Character/Selector/Items/Chanter,
+	]
+	for index in selector_buttons.size():
+		var selector_button := selector_buttons[index]
+		selector_button.add_theme_font_size_override("font_size", 16)
+		if not selector_button.pressed.is_connected(select_character):
+			selector_button.pressed.connect(func(): select_character(index))
+	for skill_index in 3:
+		for candidate_index in 5:
+			var skill_button := character_skill_rows[skill_index].get_child(candidate_index) as Button
+			skill_button.add_theme_font_size_override("font_size", 14)
+			if not skill_button.pressed.is_connected(select_skill):
+				skill_button.pressed.connect(func(): select_skill(skill_index, candidate_index))
+	connect_button_once($UIRoot/Character/HomeButton as Button, show_home)
+	connect_button_once(character_save_button, save_character_skills)
+	update_character_screen()
+
+
+func character_visual_id() -> String:
+	return ["typist", "arithmetician", "chanter"][character_selection]
+
+
+func character_background_texture(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_ROOM_BACKGROUND
+	if visual_id == "chanter":
+		return CHANTER_ROOM_BACKGROUND
+	return TYPIST_ROOM_BACKGROUND
+
+
+func character_save_texture_for(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_SAVE_BUTTON
+	if visual_id == "chanter":
+		return CHANTER_SAVE_BUTTON
+	return TYPIST_SAVE_BUTTON
+
+
+func update_character_screen() -> void:
+	if character_panel == null:
+		return
+	var visual_id := character_visual_id()
+	character_background.texture = character_background_texture(visual_id)
+	character_portrait.texture = get_idle_texture(visual_id)
+	character_name_label.text = character_names()[character_selection]
+	var descriptions: Array[String] = ["Type faster to charge skills and release attacks.", "Solve patterns and equations to shape powerful spells.", "Trace rhythms and chants to control lingering magic."]
+	character_description_label.text = descriptions[character_selection]
+	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
+	character_save_texture.texture = character_save_texture_for(visual_id)
+	for skill_index in 3:
+		var selected_index: int = character_skill_selection[visual_id][skill_index]
+		for candidate_index in 5:
+			var button := character_skill_rows[skill_index].get_child(candidate_index) as Button
+			button.modulate = Color("fff0c9") if candidate_index == selected_index else Color("71809e")
+
+
+func select_character(index: int) -> void:
+	character_selection = posmod(index, 3)
+	update_character_screen()
+
+
+func select_skill(skill_index: int, candidate_index: int) -> void:
+	var visual_id := character_visual_id()
+	var selections: Array = character_skill_selection[visual_id]
+	selections[skill_index] = candidate_index
+	character_skill_selection[visual_id] = selections
+	update_character_screen()
+
+
+func save_character_skills() -> void:
+	var visual_id := character_visual_id()
+	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
+	var press_tween := create_tween()
+	press_tween.tween_property(character_save_button, "scale", Vector2(0.92, 0.92), 0.07)
+	press_tween.tween_property(character_save_button, "scale", Vector2.ONE, 0.12)
 
 
 func change_practice_selection(step: int) -> void:
@@ -2384,7 +2504,7 @@ func get_sprite_direction_column(facing: Vector2) -> int:
 
 
 func draw_menu_backdrop() -> void:
-	# 理想画像の地下アーケードを、画面装飾として軽量に再現する。
+	# 理想画像の地下ストリートを、画面装飾として軽量に再現する。
 	var screen_rect := Rect2(Vector2.ZERO, Vector2(1280, 720))
 	draw_rect(screen_rect, Color("090817"), true)
 	for y in range(0, 520, 38):
