@@ -1,3 +1,4 @@
+@tool
 extends MatchController
 
 class StatusIcon extends Control:
@@ -42,6 +43,16 @@ class SkillDiamondWidget extends Control:
 		custom_minimum_size = widget_size
 		size = widget_size
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if icon_rect != null:
+			icon_rect.texture = icon_texture
+			icon_rect.size = size
+			frame_rect.texture = frame_texture
+			frame_rect.size = size
+			badge_disc.center_ratio = badge_center
+			badge_disc.radius_ratio = badge_radius
+			icon_material.set_shader_parameter("hole_mask", hole_mask)
+			icon_material.set_shader_parameter("hole_center", hole_center)
+			return
 		icon_rect = TextureRect.new()
 		# アイコンはウィジェット全面へ描き、フレーム画像から抽出した
 		# 中央の透明領域だけをシェーダーで残す。
@@ -225,7 +236,6 @@ const SKILL_HOLE_MASK_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_
 const SKILL_PLACEHOLDER_ICON: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
 
 const MatchStateData = preload("res://scripts/match_state.gd")
-const ChallengeLayerData = preload("res://scripts/challenge_layer.gd")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
@@ -288,7 +298,7 @@ var challenge_prompt_label: Label
 var challenge_progress_label: Label
 var challenge_dimmer: ColorRect
 var challenge_time_bar: ProgressBar
-var challenge_trace_canvas: TraceCanvas
+var challenge_trace_canvas: Control
 var typing_input: LineEdit
 var lobby_panel: Panel
 var lobby_label: Label
@@ -326,8 +336,8 @@ var lobby_p1_preview: TextureRect
 var lobby_p2_preview: TextureRect
 var lobby_p1_info: Label
 var lobby_p2_info: Label
-var lobby_p1_status_icon: StatusIcon
-var lobby_p2_status_icon: StatusIcon
+var lobby_p1_status_icon: Control
+var lobby_p2_status_icon: Control
 var lobby_p1_left: Button
 var lobby_p1_right: Button
 var lobby_p1_ready: Button
@@ -337,6 +347,10 @@ var lobby_p2_ready: Button
 var ui_click_player: AudioStreamPlayer
 var menu_background: TextureRect
 @export var menu_layout: MenuLayoutData
+
+@onready var ui_root: CanvasLayer = $UIRoot
+@onready var hud_root: Control = $UIRoot/HUD
+@onready var challenge_layer: CanvasLayer = $ChallengeLayer
 
 class NormalAttackHitArea:
 	var origin: Vector2
@@ -376,6 +390,12 @@ class NormalAttackHitArea:
 func _ready() -> void:
 	if menu_layout == null:
 		menu_layout = MenuLayoutData.new()
+	# @tool runs in the editor and its connection guards use metadata so the
+	# scene can be safely reloaded there.  Godot serializes that metadata when
+	# the scene is saved; clear it in a real game instance so saved editor state
+	# can never suppress runtime navigation callbacks.
+	if not Engine.is_editor_hint():
+		clear_editor_ui_binding_metadata(self)
 	create_ui_sound_player()
 	create_menu_background()
 	get_tree().node_added.connect(_on_node_added)
@@ -385,12 +405,41 @@ func _ready() -> void:
 	create_result_ui()
 	create_network_ui()
 	create_navigation_ui()
+	if Engine.is_editor_hint():
+		adopt_editor_ui_nodes()
+		return
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	show_title()
 	queue_redraw()
+
+
+func clear_editor_ui_binding_metadata(node: Node) -> void:
+	for key in ["ui_callback_bound", "ui_callbacks_bound"]:
+		if node.has_meta(key):
+			node.remove_meta(key)
+	for child in node.get_children():
+		clear_editor_ui_binding_metadata(child)
+
+
+## @tool実行時に生成したControlをローカルシーンツリーへ表示し、
+## Inspectorで編集・保存できるようにする。ゲーム実行時は何もしない。
+func adopt_editor_ui_nodes() -> void:
+	var edited_root := get_tree().edited_scene_root
+	if edited_root == null:
+		return
+	adopt_editor_ui_node(self, edited_root)
+	if has_node("UIRoot"):
+		get_node("UIRoot").set_meta("editor_ui_preview", true)
+
+
+func adopt_editor_ui_node(node: Node, edited_root: Node) -> void:
+	for child in node.get_children():
+		if child.owner == null:
+			child.owner = edited_root
+		adopt_editor_ui_node(child, edited_root)
 
 
 func create_ui_sound_player() -> void:
@@ -401,20 +450,35 @@ func create_ui_sound_player() -> void:
 
 
 func create_menu_background() -> void:
-	menu_background = TextureRect.new()
-	menu_background.texture = UI_MENU_BACKGROUND
-	menu_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	menu_background.stretch_mode = TextureRect.STRETCH_SCALE
-	menu_background.position = Vector2.ZERO
-	menu_background.size = Vector2(1280, 720)
-	menu_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	menu_background.z_index = -1
-	add_child(menu_background)
+	var background_root := $UIRoot/MenuBackground as Control
+	background_root.visible = true
+	background_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_background = $UIRoot/MenuBackground/Texture
+	menu_background.visible = true
+	menu_background.z_index = -100
 
 
 func _on_node_added(node: Node) -> void:
-	if node is Button:
+	if node is Button and not (node as Button).pressed.is_connected(play_ui_click):
 		node.pressed.connect(play_ui_click)
+
+
+func style_menu_button(button: Button, font_size: int = 20) -> void:
+	# Asset TextureRects are deliberately placed behind the actual Button so
+	# their art cannot hide the label or consume mouse input.
+	button.z_index = 10
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_color_override("font_color", Color("fff0c9"))
+	button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+func connect_button_once(button: Button, callback: Callable) -> void:
+	if not button.pressed.is_connected(callback):
+		button.pressed.connect(callback)
 
 
 func play_ui_click() -> void:
@@ -1127,16 +1191,12 @@ func average_score(player: Dictionary) -> float:
 
 
 func create_hud() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-
-	player_one_label = make_hud_label(Vector2(282, 47), HORIZONTAL_ALIGNMENT_LEFT)
-	player_one_label.size = Vector2(90, 30)
+	player_one_label = $UIRoot/HUD/PlayerOneLabel
 	player_one_label.text = "HP 100"
 	player_one_label.add_theme_font_size_override("font_size", 20)
-	player_two_label = make_hud_label(Vector2(820, 28), HORIZONTAL_ALIGNMENT_RIGHT)
+	player_two_label = $UIRoot/HUD/PlayerTwoLabel
 	player_two_label.visible = false
-	hp_bar = ProgressBar.new()
+	hp_bar = $UIRoot/HUD/HPBar
 	hp_bar.position = Vector2(40, 52)
 	hp_bar.size = Vector2(230, 14)
 	hp_bar.min_value = 0.0
@@ -1155,27 +1215,21 @@ func create_hud() -> void:
 	hp_fill.corner_radius_bottom_right = 3
 	hp_bar.add_theme_stylebox_override("background", hp_background)
 	hp_bar.add_theme_stylebox_override("fill", hp_fill)
-	get_child(0).add_child(hp_bar)
-	timer_label = make_hud_label(Vector2(500, 28), HORIZONTAL_ALIGNMENT_CENTER)
-	timer_label.size = Vector2(280, 44)
-	status_label = make_hud_label(Vector2(160, 690), HORIZONTAL_ALIGNMENT_CENTER)
-	status_label.size = Vector2(960, 28)
+	timer_label = $UIRoot/HUD/Timer
+	status_label = $UIRoot/HUD/Status
 	status_label.add_theme_font_size_override("font_size", 16)
 
-	controls_label = make_hud_label(Vector2(760, 68), HORIZONTAL_ALIGNMENT_RIGHT)
-	controls_label.size = Vector2(470, 48)
+	controls_label = $UIRoot/HUD/Controls
 	controls_label.text = "移動: 矢印キー  通常攻撃: 1\nスキル1/2/3: 2・3・4  課題中止: Esc"
 	controls_label.add_theme_font_size_override("font_size", 15)
 	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
-	gameplay_home_button = Button.new()
-	gameplay_home_button.text = "ホームへ戻る"
-	gameplay_home_button.position = Vector2(1040, 24)
-	gameplay_home_button.size = Vector2(190, 40)
+	gameplay_home_button = $UIRoot/HUD/HomeButton
+	style_menu_button(gameplay_home_button)
 	gameplay_home_button.add_theme_font_size_override("font_size", 18)
-	gameplay_home_button.pressed.connect(return_to_home)
-	get_child(0).add_child(gameplay_home_button)
+	if not gameplay_home_button.pressed.is_connected(return_to_home):
+		gameplay_home_button.pressed.connect(return_to_home)
 	create_skill_hud()
-	create_challenge_ui(layer)
+	create_challenge_ui()
 
 
 func create_skill_hud() -> void:
@@ -1186,14 +1240,25 @@ func create_skill_hud() -> void:
 		{"texture": SKILL_DIAMOND_LARGE, "mask": SKILL_HOLE_MASK_LARGE, "center": Vector2(0.5, 0.401), "badge": Vector2(0.5, 0.775), "badge_radius": 0.081, "binding": "4", "position": Vector2(462, 482), "size": Vector2(180, 180)},
 	]
 	for definition in definitions:
-		var widget := SkillDiamondWidget.new()
-		widget.position = definition["position"]
+		var slot_name: String = ["SkillNormal", "SkillSmall", "SkillBig", "SkillBigAlt"][skill_widgets.size()]
+		var slot := hud_root.get_node(slot_name) as Control
+		var widget := slot.get_node_or_null("SkillDiamondWidget") as SkillDiamondWidget
+		if widget == null:
+			widget = SkillDiamondWidget.new()
+			widget.name = "SkillDiamondWidget"
+			widget.position = Vector2.ZERO
 		widget.configure(definition["texture"], definition["binding"], definition["size"], SKILL_PLACEHOLDER_ICON, definition["mask"], definition["center"], definition["badge"], definition["badge_radius"])
-		get_child(0).add_child(widget)
+		if widget.get_parent() == null:
+			slot.add_child(widget)
 		skill_widgets.append(widget)
 
 
 func set_gameplay_hud_visible(is_visible: bool) -> void:
+	# The HUD is a scene-authored Control. Toggle the parent as well as its
+	# children; otherwise children can be visible while the parent remains
+	# hidden (which made practice/debug battles appear to have no UI).
+	hud_root.visible = is_visible
+	hud_root.z_index = 100
 	player_one_label.visible = is_visible
 	player_two_label.visible = false
 	hp_bar.visible = is_visible
@@ -1209,9 +1274,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 
 
 func create_lobby_ui() -> void:
-	lobby_panel = Panel.new()
-	lobby_panel.position = Vector2.ZERO
-	lobby_panel.size = Vector2(1280, 720)
+	lobby_panel = $UIRoot/Lobby
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
 	style.border_color = Color("8fa8e8")
@@ -1221,39 +1284,33 @@ func create_lobby_ui() -> void:
 	style.corner_radius_bottom_left = 12
 	style.corner_radius_bottom_right = 12
 	lobby_panel.add_theme_stylebox_override("panel", style)
-	get_child(0).add_child(lobby_panel)
-	add_menu_texture(lobby_panel, UI_PANEL_FRAME, Vector2(220, 175), Vector2(840, 420))
-	add_menu_texture(lobby_panel, UI_CARD_CHARACTER, Vector2(280, 220), Vector2(340, 360))
-	add_menu_texture(lobby_panel, UI_CARD_CHARACTER, Vector2(660, 220), Vector2(340, 360))
-	lobby_label = Label.new()
-	lobby_label.position = Vector2(20, 170)
-	lobby_label.size = Vector2(1170, 48)
-	lobby_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lobby_label.add_theme_font_size_override("font_size", 28)
-	lobby_panel.add_child(lobby_label)
-	lobby_p1_preview = TextureRect.new()
-	lobby_p1_preview.position = Vector2(325, 285)
-	lobby_p1_preview.size = Vector2(245, 210)
-	lobby_p1_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	lobby_p1_preview.stretch_mode = TextureRect.STRETCH_SCALE
-	lobby_panel.add_child(lobby_p1_preview)
-	lobby_p2_preview = TextureRect.new()
-	lobby_p2_preview.position = Vector2(710, 285)
-	lobby_p2_preview.size = Vector2(245, 210)
-	lobby_p2_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	lobby_p2_preview.stretch_mode = TextureRect.STRETCH_SCALE
-	lobby_panel.add_child(lobby_p2_preview)
-	lobby_p1_info = make_lobby_info(Vector2(290, 230), Vector2(320, 52))
-	lobby_p2_info = make_lobby_info(Vector2(675, 230), Vector2(320, 52))
-	lobby_p1_status_icon = make_status_icon(Vector2(555, 235))
-	lobby_p2_status_icon = make_status_icon(Vector2(940, 235))
-	lobby_p1_left = make_lobby_button("◀", Vector2(300, 500), func(): set_lobby_selection(1, -1))
-	lobby_p1_right = make_lobby_button("▶", Vector2(515, 500), func(): set_lobby_selection(1, 1))
-	lobby_p1_ready = make_lobby_button("準備完了", Vector2(390, 620), func(): toggle_lobby_ready(1), Vector2(250, 58))
-	lobby_p2_left = make_lobby_button("◀", Vector2(685, 500), func(): set_lobby_selection(2, -1))
-	lobby_p2_right = make_lobby_button("▶", Vector2(900, 500), func(): set_lobby_selection(2, 1))
-	lobby_p2_ready = make_lobby_button("準備完了", Vector2(640, 620), func(): toggle_lobby_ready(2), Vector2(250, 58))
-	lobby_home_button = make_lobby_button("ホームへ戻る", Vector2(32, 24), return_to_home, Vector2(210, 52))
+	lobby_label = $UIRoot/Lobby/Title
+	lobby_p1_preview = $UIRoot/Lobby/PlayerOnePreview
+	lobby_p2_preview = $UIRoot/Lobby/PlayerTwoPreview
+	lobby_p1_info = $UIRoot/Lobby/PlayerOneInfo
+	lobby_p2_info = $UIRoot/Lobby/PlayerTwoInfo
+	lobby_p1_status_icon = $UIRoot/Lobby/PlayerOneStatus
+	lobby_p2_status_icon = $UIRoot/Lobby/PlayerTwoStatus
+	lobby_p1_left = $UIRoot/Lobby/PlayerOneLeft
+	lobby_p1_right = $UIRoot/Lobby/PlayerOneRight
+	lobby_p1_ready = $UIRoot/Lobby/PlayerOneReady
+	lobby_p2_left = $UIRoot/Lobby/PlayerTwoLeft
+	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
+	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
+	lobby_home_button = $UIRoot/Lobby/HomeButton
+	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_home_button]:
+		style_menu_button(button)
+	add_menu_texture(lobby_panel, UI_BUTTON_READY, Vector2(390, 620), Vector2(250, 58))
+	add_menu_texture(lobby_panel, UI_BUTTON_READY, Vector2(640, 620), Vector2(250, 58))
+	if not lobby_panel.has_meta("ui_callbacks_bound"):
+		lobby_p1_left.pressed.connect(func(): set_lobby_selection(1, -1))
+		lobby_p1_right.pressed.connect(func(): set_lobby_selection(1, 1))
+		lobby_p1_ready.pressed.connect(func(): toggle_lobby_ready(1))
+		lobby_p2_left.pressed.connect(func(): set_lobby_selection(2, -1))
+		lobby_p2_right.pressed.connect(func(): set_lobby_selection(2, 1))
+		lobby_p2_ready.pressed.connect(func(): toggle_lobby_ready(2))
+		lobby_home_button.pressed.connect(return_to_home)
+		lobby_panel.set_meta("ui_callbacks_bound", true)
 
 
 func make_lobby_info(info_position: Vector2, info_size: Vector2) -> Label:
@@ -1324,9 +1381,7 @@ func toggle_lobby_ready(player_id: int) -> void:
 
 
 func create_result_ui() -> void:
-	result_panel = Panel.new()
-	result_panel.position = Vector2.ZERO
-	result_panel.size = Vector2(1280, 720)
+	result_panel = $UIRoot/Result
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("111b34f5")
 	style.border_color = Color("ffc45e")
@@ -1336,33 +1391,18 @@ func create_result_ui() -> void:
 	style.corner_radius_bottom_left = 12
 	style.corner_radius_bottom_right = 12
 	result_panel.add_theme_stylebox_override("panel", style)
-	get_child(0).add_child(result_panel)
-	result_label = Label.new()
-	result_label.position = Vector2(330, 170)
-	result_label.size = Vector2(620, 270)
-	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	result_label.add_theme_font_size_override("font_size", 21)
-	result_panel.add_child(result_label)
-	result_rematch_button = Button.new()
-	result_rematch_button.text = "もう一度対戦"
-	result_rematch_button.position = Vector2(450, 440)
-	result_rematch_button.size = Vector2(170, 36)
-	result_rematch_button.pressed.connect(request_rematch)
-	result_panel.add_child(result_rematch_button)
-	result_lobby_button = Button.new()
-	result_lobby_button.text = "ロビーへ戻る"
-	result_lobby_button.position = Vector2(660, 440)
-	result_lobby_button.size = Vector2(170, 36)
-	result_lobby_button.pressed.connect(request_return_to_lobby)
-	result_panel.add_child(result_lobby_button)
+	result_label = $UIRoot/Result/ResultText
+	result_rematch_button = $UIRoot/Result/RematchButton
+	style_menu_button(result_rematch_button)
+	connect_button_once(result_rematch_button, request_rematch)
+	result_lobby_button = $UIRoot/Result/ReturnButton
+	style_menu_button(result_lobby_button)
+	connect_button_once(result_lobby_button, request_return_to_lobby)
 	result_panel.visible = false
 
 
 func create_network_ui() -> void:
-	network_panel = Panel.new()
-	network_panel.position = Vector2.ZERO
-	network_panel.size = Vector2(1280, 720)
+	network_panel = $UIRoot/Connection
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
 	style.border_color = Color("71d6ba")
@@ -1372,55 +1412,27 @@ func create_network_ui() -> void:
 	style.corner_radius_bottom_left = 12
 	style.corner_radius_bottom_right = 12
 	network_panel.add_theme_stylebox_override("panel", style)
-	get_child(0).add_child(network_panel)
 	add_menu_texture(network_panel, UI_PANEL_FRAME, menu_layout.online_panel_position, menu_layout.online_panel_size)
-	var title := Label.new()
-	title.text = "オンライン対戦"
-	title.position = menu_layout.online_title_position
-	title.size = menu_layout.online_title_size
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", Color("ff78b8"))
-	network_panel.add_child(title)
-	add_menu_texture(network_panel, UI_INPUT_INVITE_CODE, menu_layout.online_address_frame_position, menu_layout.online_address_frame_size)
-	network_address_input = LineEdit.new()
-	network_address_input.text = "127.0.0.1:7000"
-	network_address_input.placeholder_text = "接続先 IP:ポート"
-	network_address_input.position = menu_layout.online_address_input_position
-	network_address_input.size = menu_layout.online_address_input_size
-	network_panel.add_child(network_address_input)
-	var host_button := add_menu_asset_button(network_panel, "ルームを作成", menu_layout.online_host_button_position, menu_layout.online_action_button_size, start_host, true)
-	host_button.add_theme_font_size_override("font_size", 23)
-	var join_button := add_menu_asset_button(network_panel, "ルームに参加", menu_layout.online_join_button_position, menu_layout.online_action_button_size, join_host, false)
-	join_button.add_theme_font_size_override("font_size", 23)
-	var local_button := Button.new()
-	local_button.text = "同一PCデバッグで開始"
-	local_button.position = Vector2(530, 355)
-	local_button.size = Vector2(220, 34)
-	local_button.pressed.connect(start_local_debug)
-	local_button.visible = false
-	network_panel.add_child(local_button)
-	network_status_label = Label.new()
-	network_status_label.position = menu_layout.online_status_position
-	network_status_label.size = menu_layout.online_status_size
-	network_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	network_status_label.add_theme_color_override("font_color", Color("b7c1d8"))
-	network_status_label.add_theme_font_size_override("font_size", 20)
-	network_panel.add_child(network_status_label)
-	network_back_button = add_menu_asset_button(network_panel, "ホームへ戻る", Vector2(32, 24), Vector2(210, 52), return_to_home, false)
+	network_address_input = $UIRoot/Connection/AddressInput
+	network_status_label = $UIRoot/Connection/Status
+	var host_button: Button = $UIRoot/Connection/HostButton
+	var join_button: Button = $UIRoot/Connection/JoinButton
+	network_back_button = $UIRoot/Connection/BackButton
+	for button in [host_button, join_button, network_back_button]:
+		style_menu_button(button, 23 if button != network_back_button else 20)
+	connect_button_once(host_button, start_host)
+	connect_button_once(join_button, join_host)
+	connect_button_once(network_back_button, return_to_home)
 
 
-func make_menu_panel(panel_position: Vector2, panel_size: Vector2, border_color: Color) -> Panel:
-	var panel := Panel.new()
-	panel.position = Vector2.ZERO
-	panel.size = Vector2(1280, 720)
+func make_menu_panel(node_path: NodePath, border_color: Color) -> Panel:
+	var panel := get_node(node_path) as Panel
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
 	style.border_color = border_color
 	style.set_border_width_all(0)
 	style.set_corner_radius_all(0)
 	panel.add_theme_stylebox_override("panel", style)
-	get_child(0).add_child(panel)
 	return panel
 
 
@@ -1429,6 +1441,11 @@ func make_menu_button(parent: Control, text_value: String, button_position: Vect
 
 
 func add_menu_texture(parent: Control, texture: Texture2D, texture_position: Vector2, texture_size: Vector2) -> TextureRect:
+	for existing in parent.get_children():
+		if existing is TextureRect and (existing as TextureRect).texture == texture and (existing as Control).position.is_equal_approx(texture_position):
+			(existing as TextureRect).z_index = -1
+			(existing as TextureRect).mouse_filter = Control.MOUSE_FILTER_IGNORE
+			return existing as TextureRect
 	var image := TextureRect.new()
 	image.texture = texture
 	# expand_mode の変更時にTextureRectが素材の原寸へ戻るため、先にモードを固定する。
@@ -1436,6 +1453,7 @@ func add_menu_texture(parent: Control, texture: Texture2D, texture_position: Vec
 	image.stretch_mode = TextureRect.STRETCH_SCALE
 	image.position = texture_position
 	image.size = texture_size
+	image.z_index = -1
 	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(image)
 	return image
@@ -1446,41 +1464,47 @@ func add_menu_logo(parent: Control, logo_position: Vector2, logo_size: Vector2) 
 
 
 func add_menu_asset_button(parent: Control, text_value: String, button_position: Vector2, button_size: Vector2, callback: Callable, primary: bool) -> Button:
+	for existing in parent.get_children():
+		if existing is Button and (existing as Button).text == text_value and (existing as Control).position.is_equal_approx(button_position):
+			add_menu_texture(parent, UI_BUTTON_PRIMARY if primary else UI_BUTTON_SECONDARY, button_position, button_size)
+			style_menu_button(existing as Button)
+			if not existing.has_meta("ui_callback_bound"):
+				existing.pressed.connect(callback)
+				existing.set_meta("ui_callback_bound", true)
+			return existing as Button
 	add_menu_texture(parent, UI_BUTTON_PRIMARY if primary else UI_BUTTON_SECONDARY, button_position, button_size)
 	var button := Button.new()
 	button.text = text_value
 	button.position = button_position
 	button.size = button_size
-	button.add_theme_font_size_override("font_size", 20)
-	button.add_theme_color_override("font_color", Color("fff0c9"))
-	button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	style_menu_button(button)
 	button.pressed.connect(callback)
 	parent.add_child(button)
 	return button
 
 
 func add_menu_panel_button(parent: Control, text_value: String, button_position: Vector2, button_size: Vector2, callback: Callable) -> Button:
+	for existing in parent.get_children():
+		if existing is Button and (existing as Button).text == text_value and (existing as Control).position.is_equal_approx(button_position):
+			style_menu_button(existing as Button, 30)
+			if not existing.has_meta("ui_callback_bound"):
+				existing.pressed.connect(callback)
+				existing.set_meta("ui_callback_bound", true)
+			return existing as Button
 	var button := Button.new()
 	button.text = text_value
 	button.position = button_position
 	button.size = button_size
-	button.add_theme_font_size_override("font_size", 30)
+	style_menu_button(button, 30)
 	button.add_theme_color_override("font_color", Color("ff9ac2"))
 	button.add_theme_color_override("font_hover_color", Color("fff0c9"))
-	button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
-	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	button.pressed.connect(callback)
 	parent.add_child(button)
 	return button
 
 
 func create_navigation_ui() -> void:
-	title_panel = make_menu_panel(Vector2(160, 90), Vector2(960, 540), Color("71d6ba"))
+	title_panel = make_menu_panel(NodePath("UIRoot/Title"), Color("71d6ba"))
 	# ロゴはNode2D側で描画するため、このパネルは枠だけにして覆い隠さない。
 	var title_panel_style := StyleBoxFlat.new()
 	title_panel_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
@@ -1488,7 +1512,7 @@ func create_navigation_ui() -> void:
 	title_panel_style.set_border_width_all(0)
 	title_panel_style.set_corner_radius_all(0)
 	title_panel.add_theme_stylebox_override("panel", title_panel_style)
-	title_logo = TextureRect.new()
+	title_logo = $UIRoot/Title/Logo
 	title_logo.texture = UI_LOGO
 	title_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title_logo.stretch_mode = TextureRect.STRETCH_SCALE
@@ -1496,16 +1520,14 @@ func create_navigation_ui() -> void:
 	title_logo.size = Vector2(760, 460)
 	# ロゴはNode2Dの_drawで固定矩形へ描画する。TextureRectには描画を任せない。
 	title_logo.visible = false
-	title_panel.add_child(title_logo)
-	title_prompt = Label.new()
+	title_prompt = $UIRoot/Title/Prompt
 	title_prompt.text = "Press Space / Enter / Click to Start"
 	title_prompt.position = Vector2(200, 565)
 	title_prompt.size = Vector2(880, 48)
 	title_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_prompt.add_theme_font_size_override("font_size", 28)
-	title_panel.add_child(title_prompt)
 
-	home_panel = make_menu_panel(Vector2(150, 90), Vector2(980, 540), Color("8fa8e8"))
+	home_panel = make_menu_panel(NodePath("UIRoot/Home"), Color("8fa8e8"))
 	add_menu_texture(home_panel, UI_PANEL_FRAME, Vector2(165, 235), Vector2(470, 345))
 	add_menu_panel_button(home_panel, "オンライン対戦", Vector2(205, 280), Vector2(390, 250), show_online_menu)
 	make_menu_button(home_panel, "練習", Vector2(680, 235), Vector2(400, 130), show_practice_select)
@@ -1513,38 +1535,44 @@ func create_navigation_ui() -> void:
 	character_button.tooltip_text = "キャラクター育成画面は準備中です"
 	make_menu_button(home_panel, "デバッグ", Vector2(680, 475), Vector2(400, 130), show_debug_select)
 
-	practice_panel = make_menu_panel(Vector2(210, 90), Vector2(860, 540), Color("71d6ba"))
+	practice_panel = make_menu_panel(NodePath("UIRoot/Practice"), Color("71d6ba"))
 	add_menu_texture(practice_panel, UI_PANEL_FRAME, Vector2(280, 205), Vector2(720, 385))
-	practice_preview = Label.new()
+	practice_preview = $UIRoot/Practice/Preview
 	practice_preview.position = Vector2(370, 195)
 	practice_preview.size = Vector2(540, 42)
 	practice_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	practice_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	practice_preview.add_theme_font_size_override("font_size", 28)
-	practice_panel.add_child(practice_preview)
-	practice_portrait = make_selection_portrait(practice_panel, Vector2(495, 258), Vector2(300, 230))
-	make_menu_button(practice_panel, "◀", Vector2(325, 415), Vector2(95, 55), func(): change_practice_selection(-1))
-	make_menu_button(practice_panel, "▶", Vector2(860, 415), Vector2(95, 55), func(): change_practice_selection(1))
-	make_menu_button(practice_panel, "このキャラクターで練習", Vector2(470, 570), Vector2(340, 58), start_practice)
-	make_menu_button(practice_panel, "戻る", Vector2(32, 24), Vector2(190, 52), show_home)
+	practice_portrait = $UIRoot/Practice/Portrait
+	for button in [$UIRoot/Practice/PrevButton, $UIRoot/Practice/NextButton, $UIRoot/Practice/StartButton, $UIRoot/Practice/BackButton]:
+		style_menu_button(button)
+	if not practice_panel.has_meta("ui_callbacks_bound"):
+		$UIRoot/Practice/PrevButton.pressed.connect(func(): change_practice_selection(-1))
+		$UIRoot/Practice/NextButton.pressed.connect(func(): change_practice_selection(1))
+		$UIRoot/Practice/StartButton.pressed.connect(start_practice)
+		$UIRoot/Practice/BackButton.pressed.connect(show_home)
+		practice_panel.set_meta("ui_callbacks_bound", true)
 
-	debug_panel = make_menu_panel(Vector2(120, 70), Vector2(1040, 580), Color("ffc45e"))
+	debug_panel = make_menu_panel(NodePath("UIRoot/Debug"), Color("ffc45e"))
 	add_menu_texture(debug_panel, UI_PANEL_FRAME, Vector2(245, 190), Vector2(790, 405))
-	debug_preview = Label.new()
+	debug_preview = $UIRoot/Debug/Preview
 	debug_preview.position = Vector2(155, 182)
 	debug_preview.size = Vector2(970, 40)
 	debug_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	debug_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	debug_preview.add_theme_font_size_override("font_size", 25)
-	debug_panel.add_child(debug_preview)
-	debug_p1_name = make_selection_name(debug_panel, Vector2(285, 230), Vector2(330, 36))
-	debug_p2_name = make_selection_name(debug_panel, Vector2(665, 230), Vector2(330, 36))
-	debug_p1_portrait = make_selection_portrait(debug_panel, Vector2(300, 270), Vector2(290, 200))
-	debug_p2_portrait = make_selection_portrait(debug_panel, Vector2(690, 270), Vector2(290, 200))
-	make_menu_button(debug_panel, "◀", Vector2(300, 465), Vector2(90, 50), func(): change_debug_selection(1, -1))
-	make_menu_button(debug_panel, "▶", Vector2(500, 465), Vector2(90, 50), func(): change_debug_selection(1, 1))
-	make_menu_button(debug_panel, "◀", Vector2(690, 465), Vector2(90, 50), func(): change_debug_selection(2, -1))
-	make_menu_button(debug_panel, "▶", Vector2(890, 465), Vector2(90, 50), func(): change_debug_selection(2, 1))
+	debug_p1_name = $UIRoot/Debug/P1Name
+	debug_p2_name = $UIRoot/Debug/P2Name
+	debug_p1_portrait = $UIRoot/Debug/P1Portrait
+	debug_p2_portrait = $UIRoot/Debug/P2Portrait
+	for button in [$UIRoot/Debug/P1Prev, $UIRoot/Debug/P1Next, $UIRoot/Debug/P2Prev, $UIRoot/Debug/P2Next]:
+		style_menu_button(button)
+	if not debug_panel.has_meta("ui_callbacks_bound"):
+		$UIRoot/Debug/P1Prev.pressed.connect(func(): change_debug_selection(1, -1))
+		$UIRoot/Debug/P1Next.pressed.connect(func(): change_debug_selection(1, 1))
+		$UIRoot/Debug/P2Prev.pressed.connect(func(): change_debug_selection(2, -1))
+		$UIRoot/Debug/P2Next.pressed.connect(func(): change_debug_selection(2, 1))
+		debug_panel.set_meta("ui_callbacks_bound", true)
 	debug_control_p1_button = make_menu_button(debug_panel, "P1を操作", Vector2(310, 530), Vector2(270, 50), func(): set_debug_controlled_player(1))
 	debug_control_p2_button = make_menu_button(debug_panel, "P2を操作", Vector2(700, 530), Vector2(270, 50), func(): set_debug_controlled_player(2))
 	make_menu_button(debug_panel, "デバッグ対戦を開始", Vector2(470, 625), Vector2(340, 56), start_debug_match)
@@ -2040,10 +2068,10 @@ func refresh_lobby_label() -> void:
 		button.visible = local_side == 2
 
 
-func set_lobby_status_icon(icon: StatusIcon, is_ready: bool, is_present: bool) -> void:
+func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> void:
 	icon.visible = is_present
 	if is_present:
-		icon.set_ready(is_ready)
+		icon.call("set_ready", is_ready)
 
 
 func get_idle_texture(visual_id: String) -> Texture2D:
@@ -2123,20 +2151,15 @@ func configure_player(player_id: int, selection: int) -> void:
 	players[player_id] = player
 
 
-func create_challenge_ui(layer: CanvasLayer) -> void:
-	var challenge_layer: ChallengeLayer = ChallengeLayerData.new()
-	add_child(challenge_layer)
-	layer = challenge_layer
-	challenge_dimmer = ColorRect.new()
-	challenge_dimmer.position = Vector2.ZERO
-	challenge_dimmer.size = Vector2(1280, 720)
-	challenge_dimmer.color = Color(0.02, 0.04, 0.10, 0.58)
-	challenge_dimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+func create_challenge_ui() -> void:
+	challenge_dimmer = $ChallengeLayer/ChallengeDimmer
 	challenge_dimmer.visible = false
-	layer.add_child(challenge_dimmer)
-	challenge_panel = PanelContainer.new()
-	challenge_panel.position = Vector2(250, 185)
-	challenge_panel.size = Vector2(780, 400)
+	challenge_panel = $ChallengeLayer/Challenge
+	# The challenge window is scene-authored.  Keep its container and content
+	# visible by default so runtime toggling only controls whether the window is
+	# active; the scene preview also shows the real controls in the editor.
+	challenge_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	challenge_panel.z_index = 10
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color("111b34e8")
 	panel_style.border_color = Color("ef6b73")
@@ -2146,16 +2169,11 @@ func create_challenge_ui(layer: CanvasLayer) -> void:
 	panel_style.corner_radius_bottom_left = 8
 	panel_style.corner_radius_bottom_right = 8
 	challenge_panel.add_theme_stylebox_override("panel", panel_style)
-	layer.add_child(challenge_panel)
 
-	var content: VBoxContainer = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 10)
-	content.add_theme_constant_override("margin_left", 22)
-	content.add_theme_constant_override("margin_top", 18)
-	content.add_theme_constant_override("margin_right", 22)
-	content.add_theme_constant_override("margin_bottom", 18)
-	challenge_panel.add_child(content)
-	challenge_time_bar = ProgressBar.new()
+	var content: VBoxContainer = $ChallengeLayer/Challenge/Content
+	content.visible = true
+	challenge_time_bar = $ChallengeLayer/Challenge/Content/TimeBar
+	challenge_time_bar.visible = true
 	challenge_time_bar.min_value = 0.0
 	challenge_time_bar.max_value = 1.0
 	challenge_time_bar.value = 1.0
@@ -2169,31 +2187,20 @@ func create_challenge_ui(layer: CanvasLayer) -> void:
 	time_bar_bg.bg_color = Color("263452")
 	time_bar_bg.set_corner_radius_all(4)
 	challenge_time_bar.add_theme_stylebox_override("background", time_bar_bg)
-	content.add_child(challenge_time_bar)
-	challenge_title_label = Label.new()
+	challenge_title_label = $ChallengeLayer/Challenge/Content/Title
 	challenge_title_label.add_theme_font_size_override("font_size", 26)
 	challenge_title_label.add_theme_color_override("font_color", Color("ffc1c6"))
 	challenge_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(challenge_title_label)
-	challenge_prompt_label = Label.new()
+	challenge_prompt_label = $ChallengeLayer/Challenge/Content/Prompt
 	challenge_prompt_label.add_theme_font_size_override("font_size", 20)
 	challenge_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(challenge_prompt_label)
-	challenge_trace_canvas = TraceCanvas.new()
-	challenge_trace_canvas.custom_minimum_size = Vector2(0, 235)
-	challenge_trace_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	challenge_trace_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(challenge_trace_canvas)
-	typing_input = LineEdit.new()
-	typing_input.placeholder_text = "ここに入力して Enter"
-	typing_input.add_theme_font_size_override("font_size", 18)
+	challenge_trace_canvas = $ChallengeLayer/Challenge/Content/TraceCanvas
+	typing_input = $ChallengeLayer/Challenge/Content/Input
 	typing_input.text_submitted.connect(_on_typing_submitted)
-	content.add_child(typing_input)
-	challenge_progress_label = Label.new()
+	challenge_progress_label = $ChallengeLayer/Challenge/Content/Progress
 	challenge_progress_label.add_theme_font_size_override("font_size", 16)
 	challenge_progress_label.add_theme_color_override("font_color", Color("b7c1d8"))
 	challenge_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(challenge_progress_label)
 	challenge_panel.visible = false
 
 
@@ -2222,7 +2229,7 @@ func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> 
 	label.horizontal_alignment = alignment
 	label.add_theme_font_size_override("font_size", 22)
 	label.add_theme_color_override("font_color", Color("f1f5ff"))
-	get_child(0).add_child(label)
+	hud_root.add_child(label)
 	return label
 
 
