@@ -7,6 +7,7 @@ project.godot
 work/
 **/__pycache__/
 **/issue_list.md
+docs/issues/issue-list.md
 
 # Asset generation workspace.
 # Raw images, normalized frames, candidate sheets, and validation reports are
