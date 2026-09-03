@@ -272,10 +272,10 @@ const TYPIST_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/e
 const ARITHMETICIAN_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_particle.png")
 const CHANTER_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_particle.png")
 
+var focus_particle_textures: Dictionary = {}
 var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
 var status_text := "開始！ 距離を取りながら相手に通常攻撃を当てよう。"
-var focus_particle_textures: Dictionary = {}
 var skill_projectiles: Array[Dictionary] = []
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
@@ -355,6 +355,8 @@ var character_save_texture: TextureRect
 var character_save_button: Button
 var character_home_texture: TextureRect
 var character_selector_frame: TextureRect
+var character_content_frame: TextureRect
+var character_theme_bar: ColorRect
 var character_skill_rows: Array[HBoxContainer] = []
 var character_skill_selection: Dictionary = {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]}
 var character_selection: int = 0
@@ -432,13 +434,13 @@ class NormalAttackHitArea:
 
 
 func _ready() -> void:
+	load_focus_particle_textures()
 	if menu_layout == null:
 		menu_layout = MenuLayoutData.new()
 	# @tool runs in the editor and its connection guards use metadata so the
 	# scene can be safely reloaded there.  Godot serializes that metadata when
 	# the scene is saved; clear it in a real game instance so saved editor state
 	# can never suppress runtime navigation callbacks.
-	load_focus_particle_textures()
 	if not Engine.is_editor_hint():
 		clear_editor_ui_binding_metadata(self)
 	create_menu_background()
@@ -1765,7 +1767,7 @@ func create_navigation_ui() -> void:
 
 
 func character_names() -> Array[String]:
-	return ["打鍵者", "算術士", "詠唱者"]
+	return ["打鍵士", "算術士", "詠唱者"]
 
 
 func make_selection_name(parent: Control, name_position: Vector2, name_size: Vector2) -> Label:
@@ -1884,6 +1886,8 @@ func create_character_ui() -> void:
 	character_save_button = $UIRoot/Character/SaveButton as Button
 	character_home_texture = $UIRoot/Character/HomeTexture as TextureRect
 	character_selector_frame = $UIRoot/Character/SelectorFrame as TextureRect
+	character_content_frame = $UIRoot/Character/CharacterContentFrame as TextureRect
+	character_theme_bar = $UIRoot/Character/CharacterThemeBar as ColorRect
 	character_skill_rows.clear()
 	for skill_index in 3:
 		var row := character_panel.get_node("Skill%dScroll/Items" % (skill_index + 1)) as HBoxContainer
@@ -1945,6 +1949,14 @@ func character_selector_frame_for(visual_id: String) -> Texture2D:
 	return TYPIST_SELECTOR_FRAME
 
 
+func character_theme_color_for(visual_id: String) -> Color:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_THEME_COLOR
+	if visual_id == "chanter":
+		return CHANTER_THEME_COLOR
+	return TYPIST_THEME_COLOR
+
+
 func update_character_screen() -> void:
 	if character_panel == null:
 		return
@@ -1959,6 +1971,8 @@ func update_character_screen() -> void:
 	character_save_texture.texture = character_save_texture_for(visual_id)
 	character_home_texture.texture = character_save_texture_for(visual_id)
 	character_selector_frame.texture = character_selector_frame_for(visual_id)
+	character_content_frame.texture = character_selector_frame_for(visual_id)
+	character_theme_bar.color = character_theme_color_for(visual_id)
 	for skill_index in 3:
 		var selected_index: int = character_skill_selection[visual_id][skill_index]
 		for candidate_index in 5:
@@ -2305,7 +2319,7 @@ func update_lobby(_delta: float) -> void:
 
 
 func refresh_lobby_label() -> void:
-	var names: Array[String] = ["打鍵者", "算術士", "詠唱者"]
+	var names: Array[String] = ["打鍵士", "算術士", "詠唱者"]
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	lobby_label.text = "オンライン対戦 - 待機画面"
 	var local_side := 2 if network_mode == "client" else 1
@@ -2405,7 +2419,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var player: Dictionary = players[player_id]
 	var ids: Array[String] = ["blade", "arithmetic", "chanter"]
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
-	var names: Array[String] = ["打鍵者", "算術士", "詠唱者"]
+	var names: Array[String] = ["打鍵士", "算術士", "詠唱者"]
 	var colors: Array[Color] = [Color("ef6b73"), Color("7498ff"), Color("b98aff")]
 	player["character_id"] = ids[selection]
 	player["visual_id"] = visual_ids[selection]
@@ -2728,21 +2742,6 @@ func get_sprite_direction_column(facing: Vector2) -> int:
 		_: return 5 # 上右
 
 
-func draw_menu_backdrop() -> void:
-	# 理想画像の地下ストリートを、画面装飾として軽量に再現する。
-	var screen_rect := Rect2(Vector2.ZERO, Vector2(1280, 720))
-	draw_rect(screen_rect, Color("090817"), true)
-	for y in range(0, 520, 38):
-		var offset := 48 if int(y / 38) % 2 == 0 else 0
-		for x in range(-20, 1300, 96):
-			draw_rect(Rect2(x + offset, y, 92, 34), Color("111127"), true)
-			draw_rect(Rect2(x + offset, y, 92, 34), Color("332044"), false, 1.0)
-	for y in range(500, 720, 32):
-		var ratio := float(y - 500) / 220.0
-		var half_width := lerpf(250.0, 760.0, ratio)
-		draw_line(Vector2(640 - half_width, y), Vector2(640 + half_width, y), Color("263050"), 1.0)
-	for x in range(0, 1281, 80):
-		draw_line(Vector2(640, 500), Vector2(x, 720), Color("263050"), 1.0)
 func load_focus_particle_textures() -> void:
 	var particle_directory := DirAccess.open("res://assets/effects/focus_particles")
 	if particle_directory == null:
@@ -2788,6 +2787,21 @@ func draw_focus_particles(player: Dictionary) -> void:
 		draw_texture_rect(texture, Rect2(particle_position - FOCUS_PARTICLE_SIZE * 0.5, FOCUS_PARTICLE_SIZE), false, Color(1.0, 1.0, 1.0, alpha))
 
 
+func draw_menu_backdrop() -> void:
+	# 理想画像の地下ストリートを、画面装飾として軽量に再現する。
+	var screen_rect := Rect2(Vector2.ZERO, Vector2(1280, 720))
+	draw_rect(screen_rect, Color("090817"), true)
+	for y in range(0, 520, 38):
+		var offset := 48 if int(y / 38) % 2 == 0 else 0
+		for x in range(-20, 1300, 96):
+			draw_rect(Rect2(x + offset, y, 92, 34), Color("111127"), true)
+			draw_rect(Rect2(x + offset, y, 92, 34), Color("332044"), false, 1.0)
+	for y in range(500, 720, 32):
+		var ratio := float(y - 500) / 220.0
+		var half_width := lerpf(250.0, 760.0, ratio)
+		draw_line(Vector2(640 - half_width, y), Vector2(640 + half_width, y), Color("263050"), 1.0)
+	for x in range(0, 1281, 80):
+		draw_line(Vector2(640, 500), Vector2(x, 720), Color("263050"), 1.0)
 	draw_circle(Vector2(290, 640), 120, Color("00b9c622"))
 	draw_circle(Vector2(780, 640), 150, Color("ff287a1d"))
 	draw_line(Vector2(0, 32), Vector2(210, 205), Color("d83c9955"), 5.0)

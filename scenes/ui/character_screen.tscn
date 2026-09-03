@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://d0jlg0bausdpa"]
+[gd_scene format=3 uid="uid://db64jtnbdduy2"]
 
 [ext_resource type="Texture2D" uid="uid://bh5xbglgwvnbx" path="res://assets/ui/character_room/typist_background.png" id="1_bg_typist"]
 [ext_resource type="Texture2D" uid="uid://djx8gi728wxk6" path="res://assets/characters/portraits/typist_idle.png" id="4_portrait_typist"]
@@ -7,6 +7,14 @@
 [ext_resource type="Texture2D" uid="uid://bahovt536cmlo" path="res://assets/ui/skill_icons/skill_placeholder_square.png" id="7_skill"]
 [ext_resource type="Texture2D" uid="uid://cx41pj5uenrpu" path="res://assets/ui/character_room/typist_save_button.png" id="8_save_typist"]
 [ext_resource type="Texture2D" uid="uid://cdbd1bumm4dlg" path="res://assets/ui/character_room/typist_frame.png" id="9_frame_typist"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_character_content"]
+bg_color = Color(0, 0, 0, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.08, 0.08, 0.12, 0.9)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_typist_face"]
 atlas = ExtResource("4_portrait_typist")
@@ -58,16 +66,37 @@ color = Color(0.02, 0.03, 0.08, 0.3)
 
 [node name="Portrait" type="TextureRect" parent="." unique_id=326124674]
 layout_mode = 0
-offset_left = 4.0
-offset_top = -70.0
-offset_right = 680.0
-offset_bottom = 824.0
+offset_left = 31.0
+offset_top = -61.0
+offset_right = 707.0
+offset_bottom = 833.0
 mouse_filter = 2
 texture = ExtResource("4_portrait_typist")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="HomeTexture" type="TextureRect" parent="." unique_id=203818446]
+[node name="CharacterContentPanel" type="Panel" parent="." unique_id=203818446]
+layout_mode = 0
+offset_left = 577.0
+offset_top = 96.0
+offset_right = 1237.0
+offset_bottom = 579.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_character_content")
+
+[node name="CharacterContentFrame" type="TextureRect" parent="." unique_id=203818447]
+z_index = 2
+layout_mode = 0
+offset_left = 518.0
+offset_top = 56.0
+offset_right = 1376.8889
+offset_bottom = 676.0
+scale = Vector2(0.9, 0.9)
+mouse_filter = 2
+texture = ExtResource("9_frame_typist")
+expand_mode = 1
+
+[node name="HomeTexture" type="TextureRect" parent="." unique_id=1188969270]
 z_index = 2
 layout_mode = 0
 offset_left = 8.0
@@ -90,9 +119,9 @@ text = "HOME"
 [node name="Name" type="Label" parent="." unique_id=394932063]
 layout_mode = 0
 offset_left = 390.0
-offset_top = 24.0
+offset_top = 6.0
 offset_right = 890.0
-offset_bottom = 84.0
+offset_bottom = 66.0
 theme_override_font_sizes/font_size = 34
 text = "Character"
 horizontal_alignment = 1
@@ -111,12 +140,22 @@ color = Color(0, 0, 0, 1)
 z_index = 2
 layout_mode = 0
 offset_left = 9.999999
-offset_top = 71.0
+offset_top = 100.99999
 offset_right = 3279.9998
-offset_bottom = 6650.9995
+offset_bottom = 6150.9995
 scale = Vector2(0.1, 0.1)
 texture = ExtResource("9_frame_typist")
 expand_mode = 1
+
+[node name="CharacterThemeBar" type="ColorRect" parent="." unique_id=203818448]
+z_index = 1
+layout_mode = 0
+offset_left = 668.0
+offset_top = 182.0
+offset_right = 1197.0
+offset_bottom = 190.0
+mouse_filter = 2
+color = Color(0.278431, 0.682353, 0.498039, 1)
 
 [node name="Selector" type="ScrollContainer" parent="." unique_id=1006994317]
 layout_mode = 0
@@ -211,29 +250,29 @@ stretch_mode = 5
 
 [node name="Description" type="Label" parent="." unique_id=1871179199]
 layout_mode = 0
-offset_left = 650.0
-offset_top = 105.0
-offset_right = 1220.0
-offset_bottom = 195.0
+offset_left = 660.0
+offset_top = 130.0
+offset_right = 1230.0
+offset_bottom = 220.0
 theme_override_font_sizes/font_size = 20
 text = "Type faster to charge skills and release attacks."
 autowrap_mode = 3
 
 [node name="Skill1Title" type="Label" parent="." unique_id=1959722266]
 layout_mode = 0
-offset_left = 650.0
-offset_top = 220.0
-offset_right = 760.0
-offset_bottom = 256.0
+offset_left = 600.0
+offset_top = 245.0
+offset_right = 710.0
+offset_bottom = 281.0
 theme_override_colors/font_color = Color(1, 0.811765, 0.447059, 1)
 text = "SKILL 1"
 
 [node name="Skill1Scroll" type="ScrollContainer" parent="." unique_id=1193350525]
 layout_mode = 0
 offset_left = 760.0
-offset_top = 205.0
+offset_top = 239.0
 offset_right = 1215.0
-offset_bottom = 283.0
+offset_bottom = 317.0
 vertical_scroll_mode = 3
 
 [node name="Items" type="HBoxContainer" parent="Skill1Scroll" unique_id=1825428239]
@@ -277,19 +316,19 @@ expand_icon = true
 
 [node name="Skill2Title" type="Label" parent="." unique_id=1161385833]
 layout_mode = 0
-offset_left = 650.0
-offset_top = 325.0
-offset_right = 760.0
-offset_bottom = 361.0
+offset_left = 600.0
+offset_top = 346.0
+offset_right = 710.0
+offset_bottom = 382.0
 theme_override_colors/font_color = Color(1, 0.811765, 0.447059, 1)
 text = "SKILL 2"
 
 [node name="Skill2Scroll" type="ScrollContainer" parent="." unique_id=1804389958]
 layout_mode = 0
-offset_left = 760.0
-offset_top = 310.0
-offset_right = 1215.0
-offset_bottom = 388.0
+offset_left = 762.0
+offset_top = 344.0
+offset_right = 1217.0
+offset_bottom = 422.0
 vertical_scroll_mode = 3
 
 [node name="Items" type="HBoxContainer" parent="Skill2Scroll" unique_id=854366938]
@@ -299,7 +338,6 @@ theme_override_constants/separation = 10
 [node name="Skill2_1" type="Button" parent="Skill2Scroll/Items" unique_id=1452876944]
 custom_minimum_size = Vector2(76, 68)
 layout_mode = 2
-text = "1"
 icon = ExtResource("7_skill")
 expand_icon = true
 
@@ -333,19 +371,19 @@ expand_icon = true
 
 [node name="Skill3Title" type="Label" parent="." unique_id=1637749477]
 layout_mode = 0
-offset_left = 650.0
-offset_top = 430.0
-offset_right = 760.0
-offset_bottom = 466.0
+offset_left = 600.0
+offset_top = 466.0
+offset_right = 710.0
+offset_bottom = 502.0
 theme_override_colors/font_color = Color(1, 0.811765, 0.447059, 1)
 text = "SKILL 3"
 
 [node name="Skill3Scroll" type="ScrollContainer" parent="." unique_id=1024740000]
 layout_mode = 0
 offset_left = 760.0
-offset_top = 415.0
+offset_top = 465.0
 offset_right = 1215.0
-offset_bottom = 493.0
+offset_bottom = 543.0
 vertical_scroll_mode = 3
 
 [node name="Items" type="HBoxContainer" parent="Skill3Scroll" unique_id=353036209]
@@ -389,29 +427,29 @@ expand_icon = true
 
 [node name="Saved" type="Label" parent="." unique_id=743001282]
 layout_mode = 0
-offset_left = 650.0
-offset_top = 560.0
-offset_right = 980.0
-offset_bottom = 594.0
+offset_left = 586.0
+offset_top = 623.0
+offset_right = 916.0
+offset_bottom = 657.0
 theme_override_colors/font_color = Color(0.443137, 0.839216, 0.729412, 1)
 theme_override_font_sizes/font_size = 16
 text = "Saved loadout"
 
 [node name="SaveTexture" type="TextureRect" parent="." unique_id=1709508801]
 layout_mode = 0
-offset_left = 1010.0
-offset_top = 550.0
-offset_right = 1230.0
-offset_bottom = 647.0
+offset_left = 1020.0
+offset_top = 595.0
+offset_right = 1240.0
+offset_bottom = 692.0
 mouse_filter = 2
 texture = ExtResource("8_save_typist")
 expand_mode = 1
 
 [node name="SaveButton" type="Button" parent="." unique_id=151803746]
 layout_mode = 0
-offset_left = 1011.0
-offset_top = 551.0
-offset_right = 1243.0
-offset_bottom = 633.0
+offset_left = 1019.0
+offset_top = 597.0
+offset_right = 1251.0
+offset_bottom = 679.0
 pivot_offset = Vector2(110, 37)
 text = "SAVE"
