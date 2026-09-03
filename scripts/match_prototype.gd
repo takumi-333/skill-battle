@@ -227,6 +227,7 @@ const STATE_SYNC_INTERVAL := 0.05
 const TITLE_LOGO_ANIMATION_DURATION := 1.2
 const TITLE_PROMPT_BLINK_SPEED := 4.0
 const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
+const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
 const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 const UI_LOGO: Texture2D = preload("res://assets/ui/logo_title.png")
 const UI_PANEL_FRAME: Texture2D = preload("res://assets/ui/panel_frame.png")
@@ -542,6 +543,21 @@ func connect_button_once(button: Button, callback: Callable) -> void:
 
 func play_ui_click() -> void:
 	ui_click_player.play()
+
+
+func play_typist_typing_key_sound() -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = TYPIST_TYPING_KEY_SOUND
+	player.volume_db = -4.0
+	add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+func emit_typist_typing_key_sound() -> void:
+	play_typist_typing_key_sound()
+	if network_mode == "host":
+		rpc("receive_typist_typing_key_sound")
 
 
 func lobby_debug_log(message: String) -> void:
@@ -908,6 +924,7 @@ func _process_typing_character(character: String) -> void:
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
+			emit_typist_typing_key_sound()
 			var local_typing_index := typing_input.text.length()
 			var is_correct := local_typing_index < challenge_answer.length() and character == challenge_answer.substr(local_typing_index, 1)
 			if is_correct:
@@ -918,6 +935,7 @@ func _process_typing_character(character: String) -> void:
 	var player: Dictionary = players[challenge_owner]
 	if not bool(player["focused"]):
 		return
+	emit_typist_typing_key_sound()
 	if challenge_typing_index >= challenge_answer.length() or character != challenge_answer.substr(challenge_typing_index, 1):
 		player["challenge_errors"] = int(player["challenge_errors"]) + 1
 		player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
@@ -2347,6 +2365,12 @@ func receive_remote_input(input_state: Dictionary) -> void:
 func receive_remote_challenge_input(character: String) -> void:
 	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2:
 		_process_typing_character(character)
+
+
+@rpc("authority", "unreliable")
+func receive_typist_typing_key_sound() -> void:
+	if network_mode == "client":
+		play_typist_typing_key_sound()
 
 
 @rpc("any_peer", "reliable")
