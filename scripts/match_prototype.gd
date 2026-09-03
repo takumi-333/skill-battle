@@ -240,6 +240,9 @@ const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_ro
 const TYPIST_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/typist_save_button.png")
 const ARITHMETICIAN_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/arithmetician_save_button.png")
 const CHANTER_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/chanter_save_button.png")
+const TYPIST_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/typist_frame.png")
+const ARITHMETICIAN_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/arithmetician_frame.png")
+const CHANTER_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/chanter_frame.png")
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
@@ -333,6 +336,8 @@ var character_description_label: Label
 var character_saved_label: Label
 var character_save_texture: TextureRect
 var character_save_button: Button
+var character_home_texture: TextureRect
+var character_selector_frame: TextureRect
 var character_skill_rows: Array[HBoxContainer] = []
 var character_skill_selection: Dictionary = {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]}
 var character_selection: int = 0
@@ -1728,6 +1733,8 @@ func create_character_ui() -> void:
 	character_saved_label = $UIRoot/Character/Saved as Label
 	character_save_texture = $UIRoot/Character/SaveTexture as TextureRect
 	character_save_button = $UIRoot/Character/SaveButton as Button
+	character_home_texture = $UIRoot/Character/HomeTexture as TextureRect
+	character_selector_frame = $UIRoot/Character/SelectorFrame as TextureRect
 	character_skill_rows.clear()
 	for skill_index in 3:
 		var row := character_panel.get_node("Skill%dScroll/Items" % (skill_index + 1)) as HBoxContainer
@@ -1739,10 +1746,15 @@ func create_character_ui() -> void:
 		$UIRoot/Character/Selector/Items/Typist,
 		$UIRoot/Character/Selector/Items/Arithmetician,
 		$UIRoot/Character/Selector/Items/Chanter,
+		$UIRoot/Character/Selector/Items/XXX,
+		$UIRoot/Character/Selector/Items/YYY,
+		$UIRoot/Character/Selector/Items/ZZZ,
 	]
 	for index in selector_buttons.size():
 		var selector_button := selector_buttons[index]
 		selector_button.add_theme_font_size_override("font_size", 16)
+		if index >= 3:
+			continue
 		if not selector_button.pressed.is_connected(select_character):
 			selector_button.pressed.connect(func(): select_character(index))
 	for skill_index in 3:
@@ -1757,7 +1769,7 @@ func create_character_ui() -> void:
 
 
 func character_visual_id() -> String:
-	return ["typist", "arithmetician", "chanter"][character_selection]
+	return ["typist", "arithmetician", "chanter", "typist", "arithmetician", "chanter"][character_selection]
 
 
 func character_background_texture(visual_id: String) -> Texture2D:
@@ -1776,17 +1788,28 @@ func character_save_texture_for(visual_id: String) -> Texture2D:
 	return TYPIST_SAVE_BUTTON
 
 
+func character_selector_frame_for(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return ARITHMETICIAN_SELECTOR_FRAME
+	if visual_id == "chanter":
+		return CHANTER_SELECTOR_FRAME
+	return TYPIST_SELECTOR_FRAME
+
+
 func update_character_screen() -> void:
 	if character_panel == null:
 		return
 	var visual_id := character_visual_id()
 	character_background.texture = character_background_texture(visual_id)
 	character_portrait.texture = get_idle_texture(visual_id)
-	character_name_label.text = character_names()[character_selection]
 	var descriptions: Array[String] = ["Type faster to charge skills and release attacks.", "Solve patterns and equations to shape powerful spells.", "Trace rhythms and chants to control lingering magic."]
-	character_description_label.text = descriptions[character_selection]
+	var visual_index := ["typist", "arithmetician", "chanter"].find(visual_id)
+	character_name_label.text = character_names()[visual_index]
+	character_description_label.text = descriptions[visual_index]
 	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
 	character_save_texture.texture = character_save_texture_for(visual_id)
+	character_home_texture.texture = character_save_texture_for(visual_id)
+	character_selector_frame.texture = character_selector_frame_for(visual_id)
 	for skill_index in 3:
 		var selected_index: int = character_skill_selection[visual_id][skill_index]
 		for candidate_index in 5:
@@ -1795,7 +1818,7 @@ func update_character_screen() -> void:
 
 
 func select_character(index: int) -> void:
-	character_selection = posmod(index, 3)
+	character_selection = posmod(index, 6)
 	update_character_screen()
 
 
