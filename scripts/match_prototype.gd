@@ -201,12 +201,13 @@ const MATCH_DURATION := 90.0
 const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
-const BIG_TYPING_SKILL_COOLDOWN := 7.0
+const BIG_TYPING_SKILL_COOLDOWN := 5.0
 const SKILL_PROJECTILE_RADIUS := 10.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const INTERRUPT_DISPLAY_SPEED := 180.0
 const BIG_CHALLENGE_LIMIT := 10.0
-const BIG_TYPING_CHALLENGE_LIMIT := 17.0
+const BIG_TYPING_CHALLENGE_LIMIT := 15.0
+const TYPING_II_CHALLENGE_LIMIT := 10.0
 const BIG_PASSING_SCORE := 0
 const ARITHMETIC_CHALLENGE_LIMIT := 7.0
 const TRACE_CHALLENGE_LIMIT := 8.0
@@ -216,6 +217,7 @@ const TYPING_HOMING_SCORE_THRESHOLD := 80
 const TYPING_HOMING_DURATION := 0.7
 const TYPING_HOMING_TURN_SPEED := deg_to_rad(35.0)
 const TYPING_HOMING_MAX_ANGLE := deg_to_rad(35.0)
+const TYPING_II_PROJECTILE_INTERVAL := 0.3
 const SHOCKWAVE_INTERVAL := 0.5
 const SHOCKWAVE_SPEED := 150.0
 const CHANTER_ZONE_DELAY := 0.2
@@ -241,6 +243,7 @@ const SKILL_HOLE_MASK_SMALL: Texture2D = preload("res://assets/ui/skill_diamond_
 const SKILL_HOLE_MASK_MEDIUM: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png")
 const SKILL_HOLE_MASK_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png")
 const SKILL_PLACEHOLDER_ICON: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
+const TYPIST_KEY_CAP_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/typist_key_cap.png")
 const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
 const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
 const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/chanter_background.png")
@@ -257,6 +260,7 @@ const FOCUS_PARTICLE_COUNT := 12
 const FOCUS_PARTICLE_SIZE := Vector2(16.0, 16.0)
 
 const MatchStateData = preload("res://scripts/match_state.gd")
+const KEY_CAP_PROJECTILE_SCENE: PackedScene = preload("res://scenes/effects/key_cap_projectile.tscn")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
@@ -277,6 +281,8 @@ var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
 var status_text := "開始！ 距離を取りながら相手に通常攻撃を当てよう。"
 var skill_projectiles: Array[Dictionary] = []
+var key_cap_projectile_nodes: Dictionary = {}
+var next_projectile_id: int = 1
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
 var decoys: Array[Dictionary] = []
@@ -565,10 +571,16 @@ func create_challenge_definitions() -> void:
 	challenge_definitions["blade_small"] = small_typing
 	var big_typing: ChallengeDefinition = ChallengeDefinition.new()
 	big_typing.challenge_type = "typing"
-	big_typing.candidates = PackedStringArray(["Hammer Down and Shatter the Ground", "Smash the Earth with a Crushing Blow", "Break the Ground with a Mighty Hammer", "Slam the Hammer and Split the Earth", "Crush the Floor with a Thunderous Strike", "Strike the Ground and Tear It Apart", "Bring the Hammer Down and Crack the Land"])
+	big_typing.candidates = PackedStringArray(["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor", "Strike the Ground", "Crack the Land"])
 	big_typing.time_limit_seconds = BIG_TYPING_CHALLENGE_LIMIT
 	big_typing.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_big"] = big_typing
+	var big_typing_ii: ChallengeDefinition = ChallengeDefinition.new()
+	big_typing_ii.challenge_type = "typing"
+	big_typing_ii.candidates = PackedStringArray(["Pursuit", "Track Down", "Follow the Trail", "Lock On", "On the Trail"])
+	big_typing_ii.time_limit_seconds = TYPING_II_CHALLENGE_LIMIT
+	big_typing_ii.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["blade_big_ii"] = big_typing_ii
 	var small_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	small_arithmetic.challenge_type = "arithmetic"
 	small_arithmetic.candidates = arithmetic_candidates()
@@ -606,6 +618,7 @@ func _process(delta: float) -> void:
 		if challenge_owner == local_player_id:
 			var challenge_player: Dictionary = players[local_player_id]
 			update_challenge_ui(float(challenge_player["challenge_elapsed"]))
+		sync_key_cap_projectiles()
 		update_hud()
 		queue_redraw()
 		return
@@ -639,6 +652,7 @@ func _process(delta: float) -> void:
 	update_magic_zones(delta)
 	update_shockwaves(delta)
 	update_decoys(delta)
+	sync_key_cap_projectiles()
 	if network_mode == "host":
 		sync_network_state(delta)
 
@@ -768,6 +782,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	if float(player[cooldown_key]) > 0.0:
 		return
 	var character_id: String = str(player["character_id"])
+	var selected_big_skill: String = str(player.get("big_skill_id", "typist_trident"))
 	challenge_owner = owner_id
 	challenge_skill = "big" if is_big else "small"
 	challenge_trace_points.clear()
@@ -775,11 +790,16 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_typed_characters = ""
 	challenge_definition = null
 	if character_id == "blade":
-		var typing_definition: ChallengeDefinition = challenge_definitions["blade_big" if is_big else "blade_small"]
+		var typing_definition_key := "blade_small"
+		if is_big and selected_big_skill == "typist_keycap_ii":
+			typing_definition_key = "blade_big_ii"
+		elif is_big:
+			typing_definition_key = "blade_big"
+		var typing_definition: ChallengeDefinition = challenge_definitions[typing_definition_key]
 		challenge_definition = typing_definition
 		challenge_prompt = typing_definition.candidates[randi_range(0, typing_definition.candidates.size() - 1)]
 		challenge_answer = challenge_prompt
-		challenge_skill = "big_typing" if is_big else "small_typing"
+		challenge_skill = "big_typing_keycap_ii" if is_big and selected_big_skill == "typist_keycap_ii" else ("big_typing" if is_big else "small_typing")
 	elif character_id == "arithmetic":
 		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_big" if is_big else "arithmetic_small"]
 		challenge_definition = arithmetic_definition
@@ -930,6 +950,8 @@ func calc_score_by_time_only(remaining_time: float, time_limit: float, curve_amo
 func get_challenge_time_limit() -> float:
 	if challenge_skill.ends_with("trace") or (challenge_definition != null and challenge_definition.no_time_limit):
 		return 0.0
+	if challenge_skill == "big_typing_keycap_ii":
+		return TYPING_II_CHALLENGE_LIMIT
 	if challenge_skill == "big_typing":
 		return BIG_TYPING_CHALLENGE_LIMIT
 	return BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
@@ -947,7 +969,10 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
-	player["small_cooldown" if not is_big else "big_cooldown"] = BIG_TYPING_SKILL_COOLDOWN if is_big else TYPING_SKILL_COOLDOWN
+	if is_big:
+		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
+	else:
+		player["small_cooldown"] = TYPING_SKILL_COOLDOWN
 	if success:
 		player["skill_successes"] = int(player["skill_successes"]) + 1
 		player["score_total"] = int(player["score_total"]) + score
@@ -996,6 +1021,10 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			for index in range(challenge_typed_characters.length()):
 				spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_PROJECTILE_INTERVAL, challenge_typed_characters[index])
 		else:
+			if str(owner.get("big_skill_id", "typist_trident")) == "typist_keycap_ii":
+				for index in range(challenge_typed_characters.length()):
+					spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_II_PROJECTILE_INTERVAL, challenge_typed_characters[index])
+				return
 			trigger_screen_shake(score)
 			for angle in [-PI / 2.0, -PI / 3.0, 0.0, PI / 3.0, PI / 2.0]:
 				spawn_projectile(owner_id, score, true, angle)
@@ -1045,6 +1074,7 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 	var owner_facing: Vector2 = owner["facing"]
 	var facing: Vector2 = owner_facing.rotated(angle_offset)
 	skill_projectiles.append({
+		"projectile_id": next_projectile_id,
 		"owner_id": owner_id,
 		"position": get_player_hitbox_center(owner["position"]) + facing * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS),
 		"velocity": facing * (300.0 if is_big else 550.0),
@@ -1057,7 +1087,9 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 		"homing": not is_big and score >= TYPING_HOMING_SCORE_THRESHOLD,
 		"homing_time": TYPING_HOMING_DURATION if not is_big and score >= TYPING_HOMING_SCORE_THRESHOLD else 0.0,
 		"initial_angle": facing.angle(),
+		"key_cap": not is_big,
 	})
+	next_projectile_id += 1
 
 
 func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, damage_delay: float = 0.0, active_duration: float = 1.0) -> void:
@@ -1197,6 +1229,32 @@ func update_skill_projectiles(delta: float) -> void:
 			skill_projectiles.remove_at(index)
 		else:
 			skill_projectiles[index] = projectile
+
+
+func sync_key_cap_projectiles() -> void:
+	var active_ids: Dictionary = {}
+	for projectile in skill_projectiles:
+		if not bool(projectile.get("key_cap", false)):
+			continue
+		var projectile_id := int(projectile.get("projectile_id", 0))
+		if projectile_id == 0:
+			continue
+		active_ids[projectile_id] = true
+		var projectile_node: Node2D = key_cap_projectile_nodes.get(projectile_id)
+		if projectile_node == null:
+			projectile_node = KEY_CAP_PROJECTILE_SCENE.instantiate() as Node2D
+			add_child(projectile_node)
+			key_cap_projectile_nodes[projectile_id] = projectile_node
+		# projectile_node は通常のNode2Dなので、親の _draw() に設定している
+		# ワールド描画オフセットを自動では受け取らない。プレイヤーや弾と
+		# 同じ画面座標になるよう、ここでカメラオフセットを加える。
+		projectile_node.position = Vector2(projectile["position"]) + get_world_draw_offset()
+		projectile_node.call("set_character", str(projectile.get("chip", "")))
+		projectile_node.call("set_projectile_visible", float(projectile.get("delay", 0.0)) <= 0.0 and bool(projectile.get("launched", false)))
+	for projectile_id in key_cap_projectile_nodes.keys():
+		if not active_ids.has(projectile_id):
+			key_cap_projectile_nodes[projectile_id].queue_free()
+			key_cap_projectile_nodes.erase(projectile_id)
 
 
 func get_player_hitbox_center(player_position: Vector2) -> Vector2:
@@ -1975,9 +2033,21 @@ func update_character_screen() -> void:
 	character_theme_bar.color = character_theme_color_for(visual_id)
 	for skill_index in 3:
 		var selected_index: int = character_skill_selection[visual_id][skill_index]
+		var candidate_names := skill_candidate_names(visual_id, skill_index)
 		for candidate_index in 5:
 			var button := character_skill_rows[skill_index].get_child(candidate_index) as Button
+			button.text = candidate_names[candidate_index]
 			button.modulate = Color("fff0c9") if candidate_index == selected_index else Color("71809e")
+
+
+func skill_candidate_names(visual_id: String, skill_index: int) -> Array[String]:
+	if visual_id == "typist" and skill_index == 0:
+		return ["鍵片追弾", "鍵片追弾", "鍵片追弾", "鍵片追弾", "鍵片追弾"]
+	if visual_id == "typist" and skill_index == 1:
+		return ["三叉震槌", "鍵片追弾II", "未実装", "未実装", "未実装"]
+	if skill_index == 2:
+		return ["通常攻撃", "未実装", "未実装", "未実装", "未実装"]
+	return ["標準", "未実装", "未実装", "未実装", "未実装"]
 
 
 func select_character(index: int) -> void:
@@ -2195,7 +2265,7 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_owner = incoming_challenge_owner
 	challenge_skill = incoming_challenge_skill
 	challenge_prompt = str(state["challenge_prompt"])
-	challenge_answer = challenge_prompt if challenge_skill.ends_with("typing") else ""
+	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
 	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if challenge_skill.ends_with("trace") else PackedVector2Array()
 	update_client_ui_from_state()
 
@@ -2394,6 +2464,10 @@ func begin_match() -> void:
 
 func reset_match_runtime_state() -> void:
 	skill_projectiles.clear()
+	for projectile_node in key_cap_projectile_nodes.values():
+		projectile_node.queue_free()
+	key_cap_projectile_nodes.clear()
+	next_projectile_id = 1
 	magic_zones.clear()
 	shockwaves.clear()
 	screen_shake_time = 0.0
@@ -2422,6 +2496,10 @@ func configure_player(player_id: int, selection: int) -> void:
 	var names: Array[String] = ["打鍵士", "算術士", "詠唱者"]
 	var colors: Array[Color] = [Color("ef6b73"), Color("7498ff"), Color("b98aff")]
 	player["character_id"] = ids[selection]
+	var visual_id: String = visual_ids[selection]
+	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
+	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
+	player["big_skill_id"] = "typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else "typist_trident"
 	player["visual_id"] = visual_ids[selection]
 	player["name"] = names[selection]
 	player["color"] = colors[selection]
@@ -2501,12 +2579,14 @@ func create_challenge_ui() -> void:
 
 
 func get_typist_skill_display_name() -> String:
+	if challenge_skill == "big_typing_keycap_ii":
+		return "鍵片追弾II（けんぺんついだんツー）"
 	return "三叉震槌" if challenge_skill == "big_typing" else "鍵片追弾（けんぺんついだん）"
 
 
 func update_challenge_ui(elapsed: float) -> void:
 	var challenge_player: Dictionary = players[challenge_owner] if challenge_owner in players else {}
-	var skill_name := get_typist_skill_display_name() if challenge_skill.ends_with("typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
+	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	challenge_title_label.text = skill_name
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = get_challenge_time_limit()
@@ -2544,7 +2624,8 @@ func update_hud() -> void:
 		var is_focused := bool(own_player["focused"])
 		skill_widgets[0].set_cooldown(float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
 		skill_widgets[1].set_cooldown(float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
-		skill_widgets[2].set_cooldown(float(own_player["big_cooldown"]), BIG_TYPING_SKILL_COOLDOWN, is_focused)
+		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
+		skill_widgets[2].set_cooldown(float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
 		skill_widgets[3].set_cooldown(1.0, 1.0, true)
 	timer_label.text = "残り %02d秒" % ceili(match_state.time_remaining)
 
@@ -2846,9 +2927,17 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 
 
 func draw_skill_projectile(projectile: Dictionary) -> void:
+	# 遅延発射弾は生成時のプレイヤー位置に置かれているため、
+	# 発射されるまで描画しない。これで発射前の玉が残って見えるのを防ぐ。
+	if float(projectile.get("delay", 0.0)) > 0.0:
+		return
+	if bool(projectile.get("key_cap", false)) and not bool(projectile.get("launched", false)):
+		return
 	var position_value: Vector2 = projectile["position"]
 	var velocity: Vector2 = projectile["velocity"]
 	var direction := velocity.normalized()
+	if bool(projectile.get("key_cap", false)):
+		return
 	draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 5.0, Color("ffca7055"))
 	draw_line(position_value - direction * 14.0, position_value + direction * 8.0, Color("fff0b5"), 5.0)
 	draw_circle(position_value + direction * 9.0, 5.0, Color("ffbd5f"))

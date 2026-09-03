@@ -1,0 +1,29 @@
+[gd_scene format=3 uid="uid://ouhos8ib0yi3"]
+
+[ext_resource type="Script" uid="uid://uxirnm60xbsd" path="res://scripts/key_cap_projectile.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://c7rm35eqdfrej" path="res://assets/ui/skill_effects/typist_key_cap.png" id="2_texture"]
+[ext_resource type="FontFile" uid="uid://c8d817j5ldnte" path="res://resources/DotGothic16/DotGothic16-Regular.ttf" id="3_font"]
+
+[node name="KeyCapProjectile" type="Node2D" unique_id=377708603]
+script = ExtResource("1_script")
+
+[node name="KeyCap" type="Sprite2D" parent="." unique_id=464285632]
+scale = Vector2(0.028125, 0.028125)
+texture = ExtResource("2_texture")
+
+[node name="Character" type="Label" parent="." unique_id=423288584]
+offset_left = -2.0000005
+offset_top = -17.0
+offset_right = 25.0
+offset_bottom = 10.0
+rotation = 0.5742133
+scale = Vector2(0.555, 0.555)
+theme_override_colors/font_color = Color(1, 0.972549, 0.839216, 1)
+theme_override_colors/font_shadow_color = Color(0.027451, 0.0627451, 0.113725, 1)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 18
+text = "A"
+horizontal_alignment = 1
+vertical_alignment = 1
