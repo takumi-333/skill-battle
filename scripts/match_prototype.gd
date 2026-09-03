@@ -249,6 +249,7 @@ const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
 const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chanter_pixel_8dir.png")
+const SHADOW_IDLE_TEXTURE: Texture2D = preload("res://assets/characters/portraits/shadow_idle.png")
 const TYPIST_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist.png")
 const ARITHMETICIAN_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician.png")
 const CHANTER_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter.png")
@@ -366,6 +367,9 @@ var lobby_p1_ready: Button
 var lobby_p2_left: Button
 var lobby_p2_right: Button
 var lobby_p2_ready: Button
+var lobby_start_button: Button
+var lobby_debug_last_signature := ""
+var lobby_ready_mouse_down := false
 @onready var ui_click_player: AudioStreamPlayer = $UIAudioPlayer
 var menu_background: TextureRect
 var menu_background_root: Control
@@ -449,6 +453,7 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	show_title()
+	lobby_debug_log("ready complete; screen=%s mode=%s phase=%s" % [screen, network_mode, phase])
 	queue_redraw()
 
 
@@ -512,6 +517,24 @@ func connect_button_once(button: Button, callback: Callable) -> void:
 
 func play_ui_click() -> void:
 	ui_click_player.play()
+
+
+func lobby_debug_log(message: String) -> void:
+	var line := "[LOBBY_DEBUG] %s | %s" % [Time.get_datetime_string_from_system(), message]
+	print(line)
+	var log_path := "user://lobby_debug.log"
+	var open_mode := FileAccess.READ_WRITE if FileAccess.file_exists(log_path) else FileAccess.WRITE_READ
+	var log_file := FileAccess.open(log_path, open_mode)
+	if log_file:
+		if open_mode == FileAccess.WRITE_READ:
+			print("[LOBBY_DEBUG] file=%s" % ProjectSettings.globalize_path(log_path))
+		log_file.seek_end()
+		log_file.store_line(line)
+		log_file.close()
+
+
+func lobby_debug_control_name(control: Control) -> String:
+	return str(control.get_path()) if control else "<none>"
 
 
 func create_challenge_definitions() -> void:
@@ -1298,6 +1321,7 @@ func set_challenge_overlay_visible(is_visible: bool) -> void:
 
 
 func apply_screen_state(next_screen: String) -> void:
+	lobby_debug_log("apply_screen_state %s -> %s; mode=%s phase=%s" % [screen, next_screen, network_mode, phase])
 	screen = next_screen
 	screen_manager.call("show_screen", next_screen)
 
@@ -1333,18 +1357,18 @@ func create_lobby_ui() -> void:
 	lobby_p2_left = $UIRoot/Lobby/PlayerTwoLeft
 	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
 	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
+	lobby_start_button = $UIRoot/Lobby/StartButton
 	lobby_home_button = $UIRoot/Lobby/HomeButton
-	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_home_button]:
+	add_menu_texture(lobby_panel, UI_BUTTON_PRIMARY, Vector2(1000.0, 598.0), Vector2(248.0, 58.0))
+	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_start_button, lobby_home_button]:
 		style_menu_button(button)
-	if not lobby_panel.has_meta("ui_callbacks_bound"):
-		lobby_p1_left.pressed.connect(func(): set_lobby_selection(1, -1))
-		lobby_p1_right.pressed.connect(func(): set_lobby_selection(1, 1))
-		lobby_p1_ready.pressed.connect(func(): toggle_lobby_ready(1))
-		lobby_p2_left.pressed.connect(func(): set_lobby_selection(2, -1))
-		lobby_p2_right.pressed.connect(func(): set_lobby_selection(2, 1))
-		lobby_p2_ready.pressed.connect(func(): toggle_lobby_ready(2))
-		lobby_home_button.pressed.connect(return_to_home)
-		lobby_panel.set_meta("ui_callbacks_bound", true)
+	connect_button_once(lobby_p1_left, func(): set_lobby_selection(1, -1))
+	connect_button_once(lobby_p1_right, func(): set_lobby_selection(1, 1))
+	connect_button_once(lobby_p1_ready, toggle_local_lobby_ready)
+	connect_button_once(lobby_p2_left, func(): set_lobby_selection(2, -1))
+	connect_button_once(lobby_p2_right, func(): set_lobby_selection(2, 1))
+	connect_button_once(lobby_start_button, start_lobby_match)
+	connect_button_once(lobby_home_button, return_to_home)
 
 
 func make_lobby_info(info_position: Vector2, info_size: Vector2) -> Label:
@@ -1385,6 +1409,7 @@ func make_status_icon(icon_position: Vector2) -> StatusIcon:
 
 
 func set_lobby_selection(player_id: int, step: int) -> void:
+	lobby_debug_log("selection requested; player_id=%d step=%d mode=%s local_id=%d" % [player_id, step, network_mode, local_player_id])
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
@@ -1401,6 +1426,7 @@ func set_lobby_selection(player_id: int, step: int) -> void:
 
 
 func toggle_lobby_ready(player_id: int) -> void:
+	lobby_debug_log("ready requested; player_id=%d mode=%s local_id=%d before p1=%s p2=%s" % [player_id, network_mode, local_player_id, str(p1_ready), str(p2_ready)])
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
@@ -1410,8 +1436,23 @@ func toggle_lobby_ready(player_id: int) -> void:
 	else:
 		p2_ready = not p2_ready
 	if network_mode == "client":
+		lobby_debug_log("sending remote lobby choice; selection=%d ready=%s" % [p2_selection, str(p2_ready)])
 		rpc_id(1, "receive_remote_lobby_choice", p2_selection, p2_ready)
 	refresh_lobby_label()
+
+
+func toggle_local_lobby_ready() -> void:
+	lobby_debug_log("local ready button pressed; mode=%s local_id=%d" % [network_mode, local_player_id])
+	toggle_lobby_ready(2 if network_mode == "client" else 1)
+
+
+func start_lobby_match() -> void:
+	if network_mode != "host" or not p1_ready or not p2_ready:
+		return
+	phase = "countdown"
+	countdown_remaining = 3.0
+	status_text = "試合開始まで 3"
+	apply_screen_state("match")
 
 
 func create_result_ui() -> void:
@@ -1680,6 +1721,7 @@ func show_home() -> void:
 
 
 func return_to_home() -> void:
+	lobby_debug_log("return_to_home pressed; screen=%s mode=%s phase=%s" % [screen, network_mode, phase])
 	if challenge_owner != 0:
 		end_active_challenge(false, 0, "課題を中止した。")
 	challenge_owner = 0
@@ -1892,6 +1934,7 @@ func start_host() -> void:
 	multiplayer.multiplayer_peer = peer
 	network_mode = "host"
 	local_player_id = 1
+	lobby_debug_log("host started; unique_id=%d port=%d" % [multiplayer.get_unique_id(), NETWORK_PORT])
 	show_lobby()
 	status_text = "ルームを作成しました。参加者を待っています。"
 
@@ -1908,22 +1951,26 @@ func join_host() -> void:
 	multiplayer.multiplayer_peer = peer
 	network_mode = "client"
 	local_player_id = 2
+	lobby_debug_log("client connection requested; address=%s:%d unique_id=%d" % [host_address, host_port, multiplayer.get_unique_id()])
 	network_status_label.text = "接続中..."
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	lobby_debug_log("peer_connected peer_id=%d mode=%s peers=%s" % [peer_id, network_mode, str(multiplayer.get_peers())])
 	if network_mode == "host":
 		status_text = "参加者が接続しました。キャラクターを選択してください。"
 		sync_network_state(STATE_SYNC_INTERVAL)
 
 
 func _on_connected_to_server() -> void:
+	lobby_debug_log("connected_to_server; unique_id=%d mode=%s screen_before=%s" % [multiplayer.get_unique_id(), network_mode, screen])
 	phase = "lobby"
 	apply_screen_state("online_waiting")
 	rpc_id(1, "request_lobby_state")
 
 
 func _on_connection_failed() -> void:
+	lobby_debug_log("connection_failed; screen=%s mode=%s" % [screen, network_mode])
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	network_mode = "local"
 	show_connection()
@@ -1931,6 +1978,7 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
+	lobby_debug_log("server_disconnected; screen=%s mode=%s" % [screen, network_mode])
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	network_mode = "local"
 	show_connection()
@@ -2007,6 +2055,7 @@ func receive_network_state(state: Dictionary) -> void:
 	match_state.match_over = bool(state["match_over"])
 	match_state.winner_id = int(state["winner_id"])
 	phase = str(state["phase"])
+	lobby_debug_log("network_state received; phase=%s p1_ready=%s p2_ready=%s screen=%s mode=%s" % [phase, str(state["p1_ready"]), str(state["p2_ready"]), screen, network_mode])
 	p1_selection = int(state["p1_selection"])
 	p2_selection = int(state["p2_selection"])
 	p1_ready = bool(state["p1_ready"])
@@ -2041,12 +2090,15 @@ func interpolate_network_players(delta: float) -> void:
 
 func update_client_ui_from_state() -> void:
 	if phase == "lobby":
-		apply_screen_state("online_waiting")
+		if screen != "online_waiting":
+			apply_screen_state("online_waiting")
 		refresh_lobby_label()
 	elif phase == "countdown":
-		apply_screen_state("match")
+		if screen != "match":
+			apply_screen_state("match")
 	elif phase == "match":
-		apply_screen_state("match")
+		if screen != "match":
+			apply_screen_state("match")
 	if phase == "result":
 		if screen != "result":
 			show_result(match_state.winner_id)
@@ -2080,6 +2132,8 @@ func receive_remote_lobby_choice(selection: int, ready: bool) -> void:
 		return
 	p2_selection = clampi(selection, 0, 2)
 	p2_ready = ready
+	lobby_debug_log("remote lobby choice received; selection=%d ready=%s sender=%d" % [p2_selection, str(p2_ready), multiplayer.get_remote_sender_id()])
+	refresh_lobby_label()
 
 
 @rpc("any_peer", "unreliable")
@@ -2137,11 +2191,6 @@ func show_lobby() -> void:
 
 func update_lobby(_delta: float) -> void:
 	refresh_lobby_label()
-	if p1_ready and p2_ready:
-		phase = "countdown"
-		countdown_remaining = 3.0
-		status_text = "試合開始まで 3"
-		apply_screen_state("match")
 
 
 func refresh_lobby_label() -> void:
@@ -2152,20 +2201,45 @@ func refresh_lobby_label() -> void:
 	var remote_connected := multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
 	lobby_p1_preview.visible = local_side == 1
 	lobby_p2_preview.visible = local_side == 2
-	lobby_p1_info.text = "あなた\n%s" % names[p1_selection] if local_side == 1 else ("対戦相手\n%s" % names[p1_selection] if remote_connected else "対戦相手\n入室待ち")
-	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else ("対戦相手\n%s" % names[p2_selection] if remote_connected else "対戦相手\n入室待ち")
+	lobby_p1_info.text = "あなた\n%s" % names[p1_selection] if local_side == 1 else "対戦相手"
+	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else "対戦相手"
 	set_lobby_status_icon(lobby_p1_status_icon, p1_ready, local_side == 1 or remote_connected)
 	set_lobby_status_icon(lobby_p2_status_icon, p2_ready, local_side == 2 or remote_connected)
 	if local_side == 1:
 		lobby_p1_preview.texture = get_idle_texture(visual_ids[p1_selection])
-		lobby_p2_preview.texture = null
+		lobby_p2_preview.texture = SHADOW_IDLE_TEXTURE if remote_connected else null
 	else:
-		lobby_p1_preview.texture = null
+		lobby_p1_preview.texture = SHADOW_IDLE_TEXTURE if remote_connected else null
 		lobby_p2_preview.texture = get_idle_texture(visual_ids[p2_selection])
 	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready]:
-		button.visible = local_side == 1
+		var should_show := local_side == 1
+		if button.visible != should_show:
+			button.visible = should_show
 	for button in [lobby_p2_left, lobby_p2_right, lobby_p2_ready]:
-		button.visible = local_side == 2
+		var should_show := local_side == 2
+		if button.visible != should_show:
+			button.visible = should_show
+	if not lobby_p1_ready.visible:
+		lobby_p1_ready.visible = true
+	if lobby_p2_ready.visible:
+		lobby_p2_ready.visible = false
+	var should_show_start := network_mode == "host"
+	if lobby_start_button.visible != should_show_start:
+		lobby_start_button.visible = should_show_start
+	var should_disable_start := not (p1_ready and p2_ready)
+	if lobby_start_button.disabled != should_disable_start:
+		lobby_start_button.disabled = should_disable_start
+	var next_ready_text := "準備完了済み" if (p2_ready if local_side == 2 else p1_ready) else "準備完了"
+	var ready_was_pressed := lobby_p1_ready.button_pressed
+	var ready_text_before := lobby_p1_ready.text
+	if ready_text_before != next_ready_text:
+		lobby_p1_ready.text = next_ready_text
+	if ready_was_pressed or ready_text_before != next_ready_text:
+		lobby_debug_log("ready button refreshed while active; pressed=%s text=%s->%s visible=%s disabled=%s" % [str(ready_was_pressed), ready_text_before, next_ready_text, str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled)])
+	var debug_signature := "%s|%s|%s|%s|%s|%s|%s" % [network_mode, screen, str(remote_connected), str(p1_ready), str(p2_ready), str(lobby_p1_ready.visible), str(lobby_home_button.visible)]
+	if debug_signature != lobby_debug_last_signature:
+		lobby_debug_last_signature = debug_signature
+		lobby_debug_log("lobby refreshed; mode=%s side=%d connected=%s p1_ready=%s p2_ready=%s ready_visible=%s ready_disabled=%s home_visible=%s home_disabled=%s" % [network_mode, local_side, str(remote_connected), str(p1_ready), str(p2_ready), str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled), str(lobby_home_button.visible), str(lobby_home_button.disabled)])
 
 
 func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> void:
@@ -2606,6 +2680,25 @@ func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var hovered := get_viewport().gui_get_hovered_control()
+		lobby_debug_log("mouse %s; pos=%s screen=%s mode=%s phase=%s hovered=%s ready_pressed=%s ready_text=%s" % ["pressed" if event.pressed else "released", str(event.position), screen, network_mode, phase, lobby_debug_control_name(hovered), str(lobby_p1_ready.button_pressed if lobby_p1_ready else false), lobby_p1_ready.text if lobby_p1_ready else "<none>"])
+		# クライアントでは、ネットワーク受信とGUI処理の競合でButtonの
+		# pressedシグナルが発火しない場合があるため、準備完了だけは
+		# マウスの押下・解放を直接ローカル操作へ変換する。
+		if network_mode == "client" and phase == "lobby" and screen == "online_waiting" and lobby_p1_ready and event.button_index == MOUSE_BUTTON_LEFT:
+			var is_over_ready_button := lobby_p1_ready.get_global_rect().has_point(event.position)
+			if event.pressed and is_over_ready_button:
+				lobby_ready_mouse_down = true
+				get_viewport().set_input_as_handled()
+				return
+			if not event.pressed and lobby_ready_mouse_down:
+				lobby_ready_mouse_down = false
+				get_viewport().set_input_as_handled()
+				if is_over_ready_button:
+					lobby_debug_log("client ready click handled manually")
+					toggle_local_lobby_ready()
+				return
 	if screen == "title":
 		if (event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_SPACE, KEY_ENTER]) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 			play_ui_click()
