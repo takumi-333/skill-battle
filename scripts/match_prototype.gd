@@ -200,7 +200,7 @@ const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
 const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
-const TYPING_SKILL_COOLDOWN := 3.0
+const TYPING_SKILL_COOLDOWN := 2.0
 const BIG_TYPING_SKILL_COOLDOWN := 7.0
 const SKILL_PROJECTILE_RADIUS := 10.0
 const TYPING_INTERRUPT_GAUGE := 30.0
@@ -212,6 +212,10 @@ const ARITHMETIC_CHALLENGE_LIMIT := 7.0
 const TRACE_CHALLENGE_LIMIT := 8.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const TYPING_PROJECTILE_INTERVAL := 0.5
+const TYPING_HOMING_SCORE_THRESHOLD := 80
+const TYPING_HOMING_DURATION := 0.7
+const TYPING_HOMING_TURN_SPEED := deg_to_rad(35.0)
+const TYPING_HOMING_MAX_ANGLE := deg_to_rad(35.0)
 const SHOCKWAVE_INTERVAL := 0.5
 const SHOCKWAVE_SPEED := 150.0
 const CHANTER_ZONE_DELAY := 0.2
@@ -1048,6 +1052,9 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 		"delay": delay,
 		"chip": chip,
 		"launched": false,
+		"homing": not is_big and score >= TYPING_HOMING_SCORE_THRESHOLD,
+		"homing_time": TYPING_HOMING_DURATION if not is_big and score >= TYPING_HOMING_SCORE_THRESHOLD else 0.0,
+		"initial_angle": facing.angle(),
 	})
 
 
@@ -1152,7 +1159,20 @@ func update_skill_projectiles(delta: float) -> void:
 			var launch_direction := (launch_target - launch_origin).normalized()
 			projectile["position"] = launch_origin
 			projectile["velocity"] = launch_direction * 550.0
+			projectile["initial_angle"] = launch_direction.angle()
 			projectile["launched"] = true
+		if bool(projectile.get("homing", false)) and bool(projectile.get("launched", false)) and float(projectile.get("homing_time", 0.0)) > 0.0:
+			var homing_owner_id := int(projectile["owner_id"])
+			var homing_target_id := 2 if homing_owner_id == 1 else 1
+			var homing_direction := (Vector2(players[homing_target_id]["position"]) - Vector2(projectile["position"])).normalized()
+			if homing_direction.length_squared() > 0.0:
+				var initial_angle := float(projectile["initial_angle"])
+				var current_angle := Vector2(projectile["velocity"]).angle()
+				var desired_angle := initial_angle + clampf(angle_difference(initial_angle, homing_direction.angle()), -TYPING_HOMING_MAX_ANGLE, TYPING_HOMING_MAX_ANGLE)
+				var next_angle := rotate_toward(current_angle, desired_angle, TYPING_HOMING_TURN_SPEED * delta)
+				var projectile_speed := Vector2(projectile["velocity"]).length()
+				projectile["velocity"] = Vector2.from_angle(next_angle) * projectile_speed
+			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		var position_value: Vector2 = projectile["position"] + projectile["velocity"] * delta
 		projectile["position"] = position_value
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
