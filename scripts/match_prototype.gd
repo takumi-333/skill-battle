@@ -246,6 +246,11 @@ const CHANTER_SAVE_BUTTON: Texture2D = preload("res://assets/ui/character_room/c
 const TYPIST_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/typist_frame.png")
 const ARITHMETICIAN_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/arithmetician_frame.png")
 const CHANTER_SELECTOR_FRAME: Texture2D = preload("res://assets/ui/character_room/chanter_frame.png")
+const TYPIST_THEME_COLOR := Color("47ae7f")
+const ARITHMETICIAN_THEME_COLOR := Color("465da8")
+const CHANTER_THEME_COLOR := Color("8b5bb7")
+const FOCUS_PARTICLE_COUNT := 12
+const FOCUS_PARTICLE_SIZE := Vector2(16.0, 16.0)
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
@@ -266,6 +271,7 @@ const CHANTER_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/
 var match_state: MatchState = MatchStateData.new()
 var players: Dictionary = match_state.players
 var status_text := "開始！ 距離を取りながら相手に通常攻撃を当てよう。"
+var focus_particle_textures: Dictionary = {}
 var skill_projectiles: Array[Dictionary] = []
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
@@ -428,6 +434,7 @@ func _ready() -> void:
 	# scene can be safely reloaded there.  Godot serializes that metadata when
 	# the scene is saved; clear it in a real game instance so saved editor state
 	# can never suppress runtime navigation callbacks.
+	load_focus_particle_textures()
 	if not Engine.is_editor_hint():
 		clear_editor_ui_binding_metadata(self)
 	create_menu_background()
@@ -2716,6 +2723,51 @@ func draw_menu_backdrop() -> void:
 		draw_line(Vector2(640 - half_width, y), Vector2(640 + half_width, y), Color("263050"), 1.0)
 	for x in range(0, 1281, 80):
 		draw_line(Vector2(640, 500), Vector2(x, 720), Color("263050"), 1.0)
+func load_focus_particle_textures() -> void:
+	var particle_directory := DirAccess.open("res://assets/effects/focus_particles")
+	if particle_directory == null:
+		push_warning("focus particle directory is missing")
+		return
+	var files := particle_directory.get_files()
+	files.sort()
+	for visual_id in ["typist", "chanter", "arithmetician"]:
+		var file_prefix: String = "arithmetic" if visual_id == "arithmetician" else visual_id
+		var textures: Array[Texture2D] = []
+		for file_name in files:
+			if file_name.begins_with(file_prefix + "_") and file_name.ends_with(".png"):
+				var texture := load("res://assets/effects/focus_particles/" + file_name) as Texture2D
+				if texture != null:
+					textures.append(texture)
+		focus_particle_textures[visual_id] = textures
+
+
+func draw_focus_particles(player: Dictionary) -> void:
+	if not bool(player.get("focused", false)):
+		return
+	var visual_id := str(player.get("visual_id", "typist"))
+	var textures: Array = focus_particle_textures.get(visual_id, [])
+	if textures.is_empty():
+		return
+	var center := get_player_hitbox_center(player["position"])
+	var elapsed := character_animation_elapsed
+	for particle_index in range(FOCUS_PARTICLE_COUNT):
+		var duration := 1.25 + fposmod(float(particle_index) * 0.19, 0.7)
+		var phase := fposmod(float(particle_index) * 0.37, duration)
+		var cycle_time := elapsed + phase
+		var cycle_index: float = floorf(cycle_time / duration)
+		var progress := fposmod(cycle_time, duration) / duration
+		var seed: float = float(particle_index) * 17.13 + cycle_index * 31.71
+		var angle := fposmod(seed * 2.399 + sin(seed * 0.73) * 0.55, TAU)
+		var radius := 55.0 + fposmod(absf(sin(seed * 1.137)) * 10000.0, 55.0)
+		var spawn_position := center + Vector2.from_angle(angle) * radius
+		var eased_progress := 1.0 - pow(1.0 - progress, 2.0)
+		var particle_position := spawn_position.lerp(center, eased_progress)
+		var particle_opacity := 0.8 + fposmod(absf(sin(seed * 2.173)) * 10000.0, 0.2)
+		var alpha := sin(progress * PI) * particle_opacity
+		var texture: Texture2D = textures[particle_index % textures.size()]
+		draw_texture_rect(texture, Rect2(particle_position - FOCUS_PARTICLE_SIZE * 0.5, FOCUS_PARTICLE_SIZE), false, Color(1.0, 1.0, 1.0, alpha))
+
+
 	draw_circle(Vector2(290, 640), 120, Color("00b9c622"))
 	draw_circle(Vector2(780, 640), 150, Color("ff287a1d"))
 	draw_line(Vector2(0, 32), Vector2(210, 205), Color("d83c9955"), 5.0)
@@ -2732,8 +2784,7 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id != local_player_id and float(player.get("invisible_flicker", 0.0)) < 2.3 and float(player["attack_time"]) <= 0.0:
 		return
 	if bool(player["focused"]):
-		var focus_center := get_player_hitbox_center(position_value)
-		draw_arc(focus_center, PLAYER_HITBOX_RADIUS_Y + 15.0, 0.0, TAU, 28, Color("ffd0a1"), 2.5, true)
+		draw_focus_particles(player)
 	var is_moving: bool = bool(player.get("is_moving", false))
 	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
 	var sprite_column: int = get_sprite_direction_column(facing)
