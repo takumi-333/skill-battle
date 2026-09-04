@@ -257,8 +257,14 @@ const SKILL_PROJECTILE_RADIUS := 10.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const INTERRUPT_DISPLAY_SPEED := 180.0
 const BIG_CHALLENGE_LIMIT := 10.0
-const BIG_TYPING_CHALLENGE_LIMIT := 15.0
-const TYPING_II_CHALLENGE_LIMIT := 10.0
+const TRIDENT_CHALLENGE_LIMIT := 8.0
+const KEYCAP_II_CHALLENGE_LIMIT := 7.0
+const TRIDENT_STRIKE_DURATION := 1.0
+const TRIDENT_RAISE_DURATION := 0.12
+const TRIDENT_READY_HOLD_DURATION := 0.60
+const TRIDENT_POST_STRIKE_DELAY := 0.18
+const TRIDENT_IMPACT_DURATION := 1.9
+const TRIDENT_LANDING_RADIUS := 30.0
 const BIG_PASSING_SCORE := 0
 const ARITHMETIC_CHALLENGE_LIMIT := 7.0
 const TRACE_CHALLENGE_LIMIT := 8.0
@@ -354,6 +360,7 @@ var key_cap_projectile_nodes: Dictionary = {}
 var next_projectile_id: int = 1
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
+var trident_impacts: Array[Dictionary] = []
 var hammer_spins: Array[Dictionary] = []
 var decoys: Array[Dictionary] = []
 var arithmetic_flash_time: float = 0.0
@@ -661,13 +668,13 @@ func create_challenge_definitions() -> void:
 	var big_typing: ChallengeDefinition = ChallengeDefinition.new()
 	big_typing.challenge_type = "typing"
 	big_typing.candidates = PackedStringArray(["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor", "Strike the Ground", "Crack the Land"])
-	big_typing.time_limit_seconds = BIG_TYPING_CHALLENGE_LIMIT
+	big_typing.time_limit_seconds = TRIDENT_CHALLENGE_LIMIT
 	big_typing.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_big"] = big_typing
 	var big_typing_ii: ChallengeDefinition = ChallengeDefinition.new()
 	big_typing_ii.challenge_type = "typing"
 	big_typing_ii.candidates = PackedStringArray(["Pursuit", "Track Down", "Follow the Trail", "Lock On", "On the Trail"])
-	big_typing_ii.time_limit_seconds = TYPING_II_CHALLENGE_LIMIT
+	big_typing_ii.time_limit_seconds = KEYCAP_II_CHALLENGE_LIMIT
 	big_typing_ii.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_big_ii"] = big_typing_ii
 	var skill3_typing: ChallengeDefinition = ChallengeDefinition.new()
@@ -752,6 +759,7 @@ func _process(delta: float) -> void:
 	update_hammer_spins(delta)
 	update_magic_zones(delta)
 	update_shockwaves(delta)
+	update_trident_impacts(delta)
 	update_decoys(delta)
 	sync_key_cap_projectiles()
 	if network_mode == "host":
@@ -804,7 +812,8 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	var player: Dictionary = players[player_id]
 	var direction := Vector2.ZERO
 	var is_attacking := float(player["attack_time"]) > 0.0
-	if is_attacking:
+	var trident_locked := is_trident_active(player_id)
+	if is_attacking or trident_locked:
 		# 通常攻撃は開始時の位置と向きで完了まで固定する。
 		player["is_moving"] = false
 	elif network_mode == "local" and player_id != debug_controlled_player_id:
@@ -815,7 +824,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		direction.x = float(Input.is_key_pressed(right_key)) - float(Input.is_key_pressed(left_key))
 		direction.y = float(Input.is_key_pressed(down_key)) - float(Input.is_key_pressed(up_key))
 	var moved := false
-	if not is_attacking and direction.length_squared() > 0.0:
+	if not is_attacking and not trident_locked and direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		player["facing"] = direction
 		var skill3_speed_multiplier := typist_skill3_movement_multiplier(player_id)
@@ -824,7 +833,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		if can_move_player_to(player_id, next_position):
 			player["position"] = next_position
 			moved = true
-	player["is_moving"] = moved if not is_attacking else false
+	player["is_moving"] = moved if not is_attacking and not trident_locked else false
 	player["attack_cooldown"] = maxf(0.0, player["attack_cooldown"] - delta)
 	player["attack_time"] = maxf(0.0, player["attack_time"] - delta)
 	player["hit_time"] = maxf(0.0, player["hit_time"] - delta)
@@ -1096,15 +1105,11 @@ func calc_score_by_time_only(remaining_time: float, time_limit: float, curve_amo
 
 
 func get_challenge_time_limit() -> float:
-	if challenge_skill.ends_with("trace") or (challenge_definition != null and challenge_definition.no_time_limit):
+	if challenge_definition != null and challenge_definition.no_time_limit:
 		return 0.0
-	if challenge_skill == "big_typing_keycap_ii":
-		return TYPING_II_CHALLENGE_LIMIT
-	if challenge_skill == "big_typing":
-		return BIG_TYPING_CHALLENGE_LIMIT
-	if challenge_skill == "skill3_typing":
-		return TYPIST_SKILL3_CHALLENGE_LIMIT
-	return BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
+	if challenge_definition != null:
+		return challenge_definition.time_limit_seconds
+	return TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT)
 
 
 func end_active_challenge(success: bool, score: int, failure_message: String) -> void:
@@ -1183,21 +1188,16 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 					spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_II_PROJECTILE_INTERVAL, challenge_typed_characters[index])
 				return
 			trigger_screen_shake(score)
-			for angle in [-PI / 2.0, -PI / 3.0, 0.0, PI / 3.0, PI / 2.0]:
-				spawn_projectile(owner_id, score, true, angle)
-			if score >= 50:
-				for wave_index in range(3):
-					shockwaves.append({
-						"owner_id": owner_id,
-						"origin": get_player_hitbox_center(owner["position"]),
-						"delay": float(wave_index) * SHOCKWAVE_INTERVAL,
-						"elapsed": 0.0,
-						"radius": 0.0,
-						"duration": shockwave_duration(score),
-						"damage": 0 if score < 80 else 12 + roundi(float(score) * 0.2),
-						"knockback": lerpf(18.0, 48.0, float(score) / 100.0),
-						"hit": false,
-					})
+			trident_impacts.append({
+				"owner_id": owner_id,
+				"origin": get_player_hitbox_center(owner["position"]),
+				"facing": owner.get("facing", Vector2.DOWN),
+				"score": score,
+				"elapsed": 0.0,
+				"strike_duration": TRIDENT_STRIKE_DURATION,
+				"duration": TRIDENT_IMPACT_DURATION,
+				"released": false,
+			})
 	elif character_id == "arithmetic":
 		if not is_big:
 			# 再発動時は、前回のデコイをすべて消してから新しく生成する。
@@ -1345,6 +1345,94 @@ func update_shockwaves(delta: float) -> void:
 			shockwaves.remove_at(index)
 		else:
 			shockwaves[index] = wave
+
+
+func update_trident_impacts(delta: float) -> void:
+	for index in range(trident_impacts.size() - 1, -1, -1):
+		var impact: Dictionary = trident_impacts[index]
+		impact["elapsed"] = float(impact.get("elapsed", 0.0)) + delta
+		if not bool(impact.get("released", false)) and float(impact["elapsed"]) >= float(impact.get("strike_duration", TRIDENT_STRIKE_DURATION)):
+			spawn_trident_attack(impact)
+			impact["released"] = true
+		if float(impact["elapsed"]) >= float(impact.get("duration", 0.55)):
+			trident_impacts.remove_at(index)
+		else:
+			trident_impacts[index] = impact
+
+
+func spawn_trident_attack(impact: Dictionary) -> void:
+	var owner_id := int(impact.get("owner_id", 0))
+	var score := int(impact.get("score", 0))
+	var origin: Vector2 = impact.get("origin", Vector2.ZERO)
+	var facing: Vector2 = Vector2(impact.get("facing", Vector2.DOWN)).normalized()
+	var hammer_center := get_trident_hammer_tip(origin, facing, score)
+	var target_id := 2 if owner_id == 1 else 1
+	if players.has(target_id) and is_point_in_player_hitbox(hammer_center, players[target_id]["position"], TRIDENT_LANDING_RADIUS):
+		var landing_damage := trident_landing_damage(score)
+		if landing_damage > 0:
+			apply_damage(target_id, landing_damage, "三叉震槌の直撃")
+	for angle_offset in [-PI / 2.0, -PI / 3.0, 0.0, PI / 3.0, PI / 2.0]:
+		spawn_trident_projectile(owner_id, score, hammer_center, facing.rotated(angle_offset))
+	if score >= 50:
+		for wave_index in range(3):
+			shockwaves.append({
+				"owner_id": owner_id,
+				"origin": hammer_center,
+				"delay": float(wave_index) * SHOCKWAVE_INTERVAL,
+				"elapsed": 0.0,
+				"radius": 0.0,
+				"duration": shockwave_duration(score),
+				"damage": 0 if score < 80 else 12 + roundi(float(score) * 0.2),
+				"knockback": lerpf(18.0, 48.0, float(score) / 100.0),
+				"hit": false,
+			})
+
+
+func spawn_trident_projectile(owner_id: int, score: int, origin: Vector2, facing: Vector2) -> void:
+	skill_projectiles.append({
+		"projectile_id": next_projectile_id,
+		"owner_id": owner_id,
+		"position": origin + facing * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS),
+		"velocity": facing * 300.0,
+		"damage": 50 + roundi(float(score) * 0.2),
+		"lifetime": 5.0,
+		"piercing": true,
+		"delay": 0.0,
+		"chip": "",
+		"launched": true,
+		"homing": false,
+		"homing_time": 0.0,
+		"initial_angle": facing.angle(),
+		"key_cap": false,
+	})
+	next_projectile_id += 1
+
+
+func trident_landing_damage(score: int) -> int:
+	if score < 30:
+		return 10
+	if score < 40:
+		return 40
+	if score < 50:
+		return 45
+	if score < 60:
+		return 50
+	return score
+
+
+func get_trident_hammer_tip(origin: Vector2, facing: Vector2, score: int) -> Vector2:
+	var source_size := TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE.get_size()
+	var normalized_source_size := Vector2(source_size) / float(maxi(source_size.x, source_size.y))
+	var normalized_tip_offset := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * normalized_source_size
+	var weapon_canvas_size := 150.0 + float(score) * 0.35
+	return origin + facing.normalized() * (24.0 + normalized_tip_offset.length() * weapon_canvas_size)
+
+
+func is_trident_active(player_id: int) -> bool:
+	for impact in trident_impacts:
+		if int(impact.get("owner_id", 0)) == player_id:
+			return true
+	return false
 
 
 func shockwave_duration(score: int) -> float:
@@ -2173,6 +2261,7 @@ func return_to_home() -> void:
 	skill_projectiles.clear()
 	magic_zones.clear()
 	shockwaves.clear()
+	trident_impacts.clear()
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
@@ -2511,6 +2600,7 @@ func make_network_state() -> Dictionary:
 		"skill_projectiles": skill_projectiles,
 		"magic_zones": magic_zones,
 		"shockwaves": shockwaves,
+		"trident_impacts": trident_impacts,
 		"hammer_spins": hammer_spins,
 		"decoys": decoys,
 		"arithmetic_flash_time": arithmetic_flash_time,
@@ -2553,6 +2643,7 @@ func receive_network_state(state: Dictionary) -> void:
 	skill_projectiles = state["skill_projectiles"]
 	magic_zones = state["magic_zones"]
 	shockwaves = state.get("shockwaves", [])
+	trident_impacts = state.get("trident_impacts", [])
 	hammer_spins = state.get("hammer_spins", [])
 	decoys = state.get("decoys", [])
 	arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
@@ -2686,6 +2777,7 @@ func show_lobby() -> void:
 	skill_projectiles.clear()
 	magic_zones.clear()
 	shockwaves.clear()
+	trident_impacts.clear()
 	hammer_spins.clear()
 	lobby_home_button.visible = network_mode in ["host", "client"]
 	status_text = "キャラクターを選択してください。"
@@ -2779,6 +2871,7 @@ func reset_match_runtime_state() -> void:
 	next_projectile_id = 1
 	magic_zones.clear()
 	shockwaves.clear()
+	trident_impacts.clear()
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
@@ -3054,6 +3147,8 @@ func _draw() -> void:
 		draw_hammer_spin(spin)
 	for player_id in draw_player_ids:
 		draw_player(player_id, players[player_id])
+	for impact in trident_impacts:
+		draw_trident_impact(impact)
 	for projectile in skill_projectiles:
 		draw_skill_projectile(projectile)
 	for wave in shockwaves:
@@ -3352,6 +3447,64 @@ func draw_hammer_spin(spin: Dictionary) -> void:
 	var rotation := float(spin.get("angle", 0.0)) - handle_to_tip.angle()
 	draw_set_transform(center + get_world_draw_offset(), rotation, Vector2.ONE)
 	draw_texture_rect(TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE, Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size), false)
+	draw_set_transform(get_world_draw_offset())
+
+
+func draw_trident_impact(impact: Dictionary) -> void:
+	var origin: Vector2 = impact.get("origin", Vector2.ZERO)
+	var facing: Vector2 = Vector2(impact.get("facing", Vector2.DOWN)).normalized()
+	var duration := float(impact.get("duration", TRIDENT_IMPACT_DURATION))
+	var elapsed := float(impact.get("elapsed", 0.0))
+	var strike_duration := float(impact.get("strike_duration", TRIDENT_STRIKE_DURATION))
+	var motion_duration := maxf(strike_duration - TRIDENT_POST_STRIKE_DELAY, 0.001)
+	var strike_progress := clampf(elapsed / motion_duration, 0.0, 1.0)
+	var ripple_progress := clampf((elapsed - strike_duration) / maxf(duration - strike_duration, 0.001), 0.0, 1.0)
+	var ripple_fade := 1.0 - ripple_progress if elapsed >= strike_duration else 0.0
+	var score := float(impact.get("score", 0))
+	var hammer_center := get_trident_hammer_tip(origin, facing, int(score))
+	var radius := lerpf(8.0, 116.0, ripple_progress)
+
+	# 地面の亀裂と衝撃リングは、発動地点から一気に広がる。
+	draw_circle(hammer_center, lerpf(22.0, 8.0, ripple_progress), Color(1.0, 0.74, 0.30, 0.22 * ripple_fade), true)
+	draw_arc(hammer_center, radius, 0.0, TAU, 40, Color(1.0, 0.82, 0.40, 0.85 * ripple_fade), 5.0, true)
+	for crack_index in range(8):
+		var crack_angle := TAU * float(crack_index) / 8.0 + facing.angle() * 0.18
+		var crack_direction := Vector2.from_angle(crack_angle)
+		var crack_length := lerpf(20.0, 78.0 + score * 0.25, ripple_progress)
+		var crack_start := hammer_center + crack_direction * 12.0
+		var crack_end := hammer_center + crack_direction * crack_length
+		draw_line(crack_start, crack_end, Color(0.98, 0.68, 0.28, 0.72 * ripple_fade), 3.0, true)
+		draw_line(crack_end, crack_end + crack_direction.rotated(0.55) * 12.0, Color(1.0, 0.84, 0.48, 0.52 * ripple_fade), 2.0, true)
+
+	# ハンマーは短い予備動作から正面へ振り下ろす。
+	var source_size := TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE.get_size()
+	var normalized_source_size := Vector2(source_size) / float(maxi(source_size.x, source_size.y))
+	var normalized_tip_offset := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * normalized_source_size
+	var weapon_canvas_size := 150.0 + score * 0.35
+	var weapon_size := normalized_source_size * weapon_canvas_size
+	var handle_to_tip := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * weapon_size
+	# 素早く振り上げ、短く溜めてから一気に振り抜く。
+	var strike_offset := 0.0
+	var hammer_forward_offset := 24.0
+	var raise_ratio := TRIDENT_RAISE_DURATION / motion_duration
+	var hold_end_ratio := (TRIDENT_RAISE_DURATION + TRIDENT_READY_HOLD_DURATION) / motion_duration
+	if strike_progress < raise_ratio:
+		var raise_progress := strike_progress / raise_ratio
+		var eased_raise := raise_progress * raise_progress * (3.0 - 2.0 * raise_progress)
+		strike_offset = lerpf(0.0, -2.2, eased_raise)
+		hammer_forward_offset = lerpf(24.0, -24.0, eased_raise)
+	elif strike_progress < hold_end_ratio:
+		strike_offset = -2.2
+		hammer_forward_offset = -24.0
+	else:
+		var swing_progress := (strike_progress - hold_end_ratio) / maxf(1.0 - hold_end_ratio, 0.001)
+		var eased_swing := swing_progress * swing_progress * (3.0 - 2.0 * swing_progress)
+		strike_offset = lerpf(-2.2, 0.0, eased_swing)
+		hammer_forward_offset = lerpf(-24.0, 24.0, eased_swing)
+	var strike_angle := facing.angle() - handle_to_tip.angle() + strike_offset
+	var hammer_origin := origin + facing * hammer_forward_offset
+	draw_set_transform(hammer_origin + get_world_draw_offset(), strike_angle, Vector2.ONE)
+	draw_texture_rect(TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE, Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size), false, Color.WHITE)
 	draw_set_transform(get_world_draw_offset())
 
 
