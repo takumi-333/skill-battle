@@ -318,6 +318,9 @@ const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
 const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_stellar_barrage.png")
+const SKILL_TYPIST_LOCK: Texture2D = preload("res://assets/ui/skill_icons/typist_lock.png")
+const SKILL_ARITHMETICIAN_LOCK: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_lock.png")
+const SKILL_CHANTER_LOCK: Texture2D = preload("res://assets/ui/skill_icons/chanter_lock.png")
 const SKILL_EMPTY_ICON: Texture2D = null
 const SKILL_THEME_TYPIST := Color("121F18")
 const SKILL_THEME_ARITHMETICIAN := Color("1C213F")
@@ -1895,7 +1898,7 @@ func create_skill_hud() -> void:
 		# the Inspector. The definition values are kept as documentation/defaults
 		# only; runtime must not overwrite the user's HUD layout.
 		var widget := slot.get_node("SkillDiamondWidgetPrefab") as Node
-		var preview_icons: Array[Texture2D] = [SKILL_TYPIST_HAMMER, SKILL_TYPIST_KEYCAP, SKILL_TYPIST_TRIDENT, SKILL_EMPTY_ICON]
+		var preview_icons: Array[Texture2D] = [SKILL_EMPTY_ICON, SKILL_TYPIST_KEYCAP, SKILL_TYPIST_TRIDENT, SKILL_EMPTY_ICON]
 		widget.call("configure", definition["texture"], definition["binding"], definition["size"], preview_icons[skill_widgets.size()], definition["mask"], definition["center"], definition["badge"], definition["badge_radius"], SKILL_THEME_TYPIST)
 		skill_widgets.append(widget)
 
@@ -2498,29 +2501,41 @@ func update_character_screen() -> void:
 		update_skill_detail()
 	for skill_index in 3:
 		var selected_index: int = character_skill_selection[visual_id][skill_index]
-		var candidate_names := skill_candidate_names(visual_id, skill_index)
+		if not is_skill_candidate_implemented(visual_id, skill_index, selected_index):
+			selected_index = first_implemented_skill_candidate(visual_id, skill_index)
+			var selections: Array = character_skill_selection[visual_id]
+			selections[skill_index] = selected_index
+			character_skill_selection[visual_id] = selections
+		var candidate_names: Array = skill_candidate_names(visual_id, skill_index)
 		for candidate_index in 5:
 			var button := character_skill_rows[skill_index].get_child(candidate_index) as Button
 			var icon := get_skill_icon(visual_id, skill_index, candidate_index)
+			var is_implemented := is_skill_candidate_implemented(visual_id, skill_index, candidate_index)
 			button.text = ""
 			button.tooltip_text = candidate_names[candidate_index]
 			button.icon = icon
 			button.expand_icon = true
 			button.custom_minimum_size = Vector2(76, 76)
-			button.modulate = Color.WHITE
-			style_character_skill_button(button, skill_theme_color(visual_id), candidate_index == selected_index)
+			button.disabled = not is_implemented
+			button.focus_mode = Control.FOCUS_ALL if is_implemented else Control.FOCUS_NONE
+			button.modulate = Color.WHITE if is_implemented else Color("8a8a96")
+			style_character_skill_button(button, skill_theme_color(visual_id), candidate_index == selected_index, is_implemented)
 
 
-func skill_candidate_names(visual_id: String, skill_index: int) -> Array[String]:
+func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if visual_id == "typist" and skill_index == 0:
-		return ["鍵片追弾", "鍵片追弾", "鍵片追弾", "鍵片追弾", "鍵片追弾"]
+		return ["鍵片追弾", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "typist" and skill_index == 1:
 		return ["三叉震槌", "鍵片追弾II", "未実装", "未実装", "未実装"]
 	if skill_index == 2:
 		if visual_id == "typist":
 			return ["ぶんまわし", "未実装", "未実装", "未実装", "未実装"]
-		return ["通常攻撃", "未実装", "未実装", "未実装", "未実装"]
-	return ["標準", "未実装", "未実装", "未実装", "未実装"]
+		return ["未実装", "未実装", "未実装", "未実装", "未実装"]
+	if visual_id == "arithmetician":
+		return ["無限級数", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
+	if visual_id == "chanter":
+		return ["円環の降臨", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["星辰弾幕", "未実装", "未実装", "未実装", "未実装"]
+	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 
 
 func select_character(index: int) -> void:
@@ -2530,6 +2545,8 @@ func select_character(index: int) -> void:
 
 func select_skill(skill_index: int, candidate_index: int) -> void:
 	var visual_id := character_visual_id()
+	if not is_skill_candidate_implemented(visual_id, skill_index, candidate_index):
+		return
 	var selections: Array = character_skill_selection[visual_id]
 	selections[skill_index] = candidate_index
 	character_skill_selection[visual_id] = selections
@@ -2548,6 +2565,8 @@ func connect_character_ui_clicks(node: Node) -> void:
 
 
 func open_skill_detail(skill_index: int, candidate_index: int) -> void:
+	if not is_skill_candidate_implemented(character_visual_id(), skill_index, candidate_index):
+		return
 	character_skill_detail_slot = skill_index
 	character_skill_detail_candidate = candidate_index
 	update_skill_detail()
@@ -2566,6 +2585,9 @@ func close_skill_detail() -> void:
 func set_skill_from_detail() -> void:
 	if character_skill_detail_slot < 0 or character_skill_detail_candidate < 0:
 		return
+	if not is_skill_candidate_implemented(character_visual_id(), character_skill_detail_slot, character_skill_detail_candidate):
+		close_skill_detail()
+		return
 	select_skill(character_skill_detail_slot, character_skill_detail_candidate)
 	close_skill_detail()
 
@@ -2574,7 +2596,7 @@ func update_skill_detail() -> void:
 	if character_skill_detail_overlay == null or character_skill_detail_slot < 0 or character_skill_detail_candidate < 0:
 		return
 	var visual_id := character_visual_id()
-	var skill_name := skill_candidate_names(visual_id, character_skill_detail_slot)[character_skill_detail_candidate]
+	var skill_name: String = skill_candidate_names(visual_id, character_skill_detail_slot)[character_skill_detail_candidate]
 	character_skill_detail_icon.texture = get_skill_icon(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
 	character_skill_detail_name.text = skill_name
 	character_skill_detail_description.text = skill_description(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
@@ -2586,7 +2608,7 @@ func update_skill_detail() -> void:
 
 
 func skill_description(visual_id: String, skill_index: int, candidate_index: int) -> String:
-	var name := skill_candidate_names(visual_id, skill_index)[candidate_index]
+	var name: String = skill_candidate_names(visual_id, skill_index)[candidate_index]
 	if name == "未実装":
 		return "このスキルは現在準備中です。"
 	if visual_id == "typist":
@@ -3242,9 +3264,6 @@ func configure_skill_icons(player: Dictionary) -> void:
 		get_skill_icon(visual_id, 1, int(selected_skills[1])),
 		get_skill_icon(visual_id, 2, int(selected_skills[2])),
 	]
-	# 通常攻撃は専用アイコンが用意されている打鍵士だけ表示する。
-	if visual_id == "typist":
-		icons[0] = SKILL_TYPIST_HAMMER
 	var theme_color := skill_theme_color(visual_id)
 	var definitions := [
 		{"texture": SKILL_DIAMOND_SMALL, "mask": SKILL_HOLE_MASK_SMALL, "center": Vector2(0.5, 0.427), "badge": Vector2(0.5, 0.765), "badge_radius": 0.053, "binding": "1", "size": Vector2(112, 112)},
@@ -3257,7 +3276,32 @@ func configure_skill_icons(player: Dictionary) -> void:
 		skill_widgets[index].call("configure", definition["texture"], definition["binding"], definition["size"], icons[index], definition["mask"], definition["center"], definition["badge"], definition["badge_radius"], theme_color)
 
 
+func is_skill_candidate_implemented(visual_id: String, skill_index: int, candidate_index: int) -> bool:
+	if candidate_index < 0 or candidate_index >= 5:
+		return false
+	if visual_id == "typist":
+		return (skill_index == 0 and candidate_index == 0) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index == 0)
+	return skill_index < 2 and candidate_index == 0
+
+
+func first_implemented_skill_candidate(visual_id: String, skill_index: int) -> int:
+	for candidate_index in 5:
+		if is_skill_candidate_implemented(visual_id, skill_index, candidate_index):
+			return candidate_index
+	return -1
+
+
+func lock_icon_for(visual_id: String) -> Texture2D:
+	if visual_id == "arithmetician":
+		return SKILL_ARITHMETICIAN_LOCK
+	if visual_id == "chanter":
+		return SKILL_CHANTER_LOCK
+	return SKILL_TYPIST_LOCK
+
+
 func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) -> Texture2D:
+	if not is_skill_candidate_implemented(visual_id, skill_index, selected_index):
+		return lock_icon_for(visual_id)
 	if visual_id == "typist":
 		if skill_index == 0:
 			return SKILL_TYPIST_KEYCAP
@@ -3265,8 +3309,6 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 			return SKILL_TYPIST_KEYCAP_II if selected_index == 1 else SKILL_TYPIST_TRIDENT
 		if skill_index == 2:
 			return SKILL_TYPIST_HAMMER if selected_index == 0 else SKILL_EMPTY_ICON
-		return SKILL_EMPTY_ICON
-	if selected_index != 0:
 		return SKILL_EMPTY_ICON
 	if visual_id == "arithmetician":
 		return SKILL_ARITHMETICIAN_INFINITE_SERIES if skill_index == 0 else SKILL_ARITHMETICIAN_CONVERGENCE
@@ -3282,10 +3324,10 @@ func skill_theme_color(visual_id: String) -> Color:
 		_: return SKILL_THEME_TYPIST
 
 
-func style_character_skill_button(button: Button, theme_color: Color, is_selected: bool) -> void:
+func style_character_skill_button(button: Button, theme_color: Color, is_selected: bool, is_implemented: bool = true) -> void:
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = theme_color
-	normal.border_color = Color("E6B072") if is_selected else theme_color.lightened(0.22)
+	normal.bg_color = theme_color if is_implemented else theme_color.darkened(0.45)
+	normal.border_color = Color("E6B072") if is_selected and is_implemented else normal.bg_color.lightened(0.12)
 	normal.set_border_width_all(3 if is_selected else 1)
 	normal.set_corner_radius_all(4)
 	normal.content_margin_left = 8.0
@@ -3293,7 +3335,7 @@ func style_character_skill_button(button: Button, theme_color: Color, is_selecte
 	normal.content_margin_top = 8.0
 	normal.content_margin_bottom = 8.0
 	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = theme_color.lightened(0.10)
+	hover.bg_color = theme_color.lightened(0.10) if is_implemented else normal.bg_color
 	var pressed := normal.duplicate() as StyleBoxFlat
 	pressed.bg_color = theme_color.darkened(0.10)
 	var focus := normal.duplicate() as StyleBoxFlat
