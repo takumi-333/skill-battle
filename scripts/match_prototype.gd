@@ -292,6 +292,7 @@ const STATE_SYNC_INTERVAL := 0.05
 const TITLE_LOGO_ANIMATION_DURATION := 1.2
 const TITLE_PROMPT_BLINK_SPEED := 4.0
 const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
+const SKILL_PANEL_CLICK_SOUND: AudioStream = preload("res://assets/audio/skill_panel_click.wav")
 const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
 const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 const UI_LOGO: Texture2D = preload("res://assets/ui/logo_title.png")
@@ -447,6 +448,18 @@ var character_theme_bar: ColorRect
 var character_skill_rows: Array[HBoxContainer] = []
 var character_skill_selection: Dictionary = {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]}
 var character_selection: int = 0
+var character_skill_detail_overlay: Control
+var character_skill_detail_panel: Panel
+var character_skill_detail_frame: TextureRect
+var character_skill_detail_icon: TextureRect
+var character_skill_detail_name: Label
+var character_skill_detail_description: Label
+var character_skill_detail_close_button: Button
+var character_skill_detail_set_button: Button
+var character_skill_detail_close_texture: TextureRect
+var character_skill_detail_set_texture: TextureRect
+var character_skill_detail_slot: int = -1
+var character_skill_detail_candidate: int = -1
 var title_logo: TextureRect
 var practice_selection: int = 0
 var debug_p1_selection: int = 0
@@ -600,12 +613,12 @@ func create_menu_background() -> void:
 
 
 func _on_node_added(node: Node) -> void:
-	if node is Button and not (node as Button).pressed.is_connected(play_ui_click):
+	if node is Button and not node.has_meta("skip_ui_click") and not (node as Button).pressed.is_connected(play_ui_click):
 		node.pressed.connect(play_ui_click)
 
 
 func connect_existing_ui_clicks(node: Node) -> void:
-	if node is Button and not (node as Button).pressed.is_connected(play_ui_click):
+	if node is Button and not node.has_meta("skip_ui_click") and not (node as Button).pressed.is_connected(play_ui_click):
 		(node as Button).pressed.connect(play_ui_click)
 	for child in node.get_children():
 		connect_existing_ui_clicks(child)
@@ -1921,6 +1934,7 @@ func _on_screen_changed(next_screen: String) -> void:
 	set_gameplay_hud_visible(is_gameplay_screen)
 	if not is_gameplay_screen:
 		set_challenge_overlay_visible(false)
+		close_skill_detail()
 
 
 func create_lobby_ui() -> void:
@@ -2376,6 +2390,18 @@ func create_character_ui() -> void:
 	character_selector_frame = $UIRoot/Character/SelectorFrame as TextureRect
 	character_content_frame = $UIRoot/Character/CharacterContentFrame as TextureRect
 	character_theme_bar = $UIRoot/Character/CharacterThemeBar as ColorRect
+	character_skill_detail_overlay = $UIRoot/Character/SkillDetailOverlay as Control
+	character_skill_detail_panel = $UIRoot/Character/SkillDetailOverlay/Panel as Panel
+	character_skill_detail_frame = $UIRoot/Character/SkillDetailOverlay/Panel/Frame as TextureRect
+	character_skill_detail_icon = $UIRoot/Character/SkillDetailOverlay/Panel/Icon as TextureRect
+	character_skill_detail_name = $UIRoot/Character/SkillDetailOverlay/Panel/SkillName as Label
+	character_skill_detail_description = $UIRoot/Character/SkillDetailOverlay/Panel/SkillDescription as Label
+	character_skill_detail_close_texture = $UIRoot/Character/SkillDetailOverlay/Panel/CloseTexture as TextureRect
+	character_skill_detail_set_texture = $UIRoot/Character/SkillDetailOverlay/Panel/SetTexture as TextureRect
+	character_skill_detail_close_button = $UIRoot/Character/SkillDetailOverlay/Panel/CloseButton as Button
+	character_skill_detail_set_button = $UIRoot/Character/SkillDetailOverlay/Panel/SetButton as Button
+	character_skill_detail_close_button.set_meta("skip_ui_click", true)
+	character_skill_detail_set_button.set_meta("skip_ui_click", true)
 	character_skill_rows.clear()
 	for skill_index in 3:
 		var row := character_panel.get_node("Skill%dScroll/Items" % (skill_index + 1)) as HBoxContainer
@@ -2402,8 +2428,15 @@ func create_character_ui() -> void:
 		for candidate_index in 5:
 			var skill_button := character_skill_rows[skill_index].get_child(candidate_index) as Button
 			skill_button.add_theme_font_size_override("font_size", 14)
-			if not skill_button.pressed.is_connected(select_skill):
-				skill_button.pressed.connect(func(): select_skill(skill_index, candidate_index))
+			skill_button.set_meta("skip_ui_click", true)
+			skill_button.set_meta("skill_detail_button", true)
+			if not skill_button.pressed.is_connected(open_skill_detail):
+				skill_button.pressed.connect(func(): open_skill_detail(skill_index, candidate_index))
+	connect_character_ui_clicks(character_panel)
+	connect_button_once(character_skill_detail_close_button, close_skill_detail)
+	connect_button_once(character_skill_detail_set_button, set_skill_from_detail)
+	style_character_detail_button(character_skill_detail_close_button)
+	style_character_detail_button(character_skill_detail_set_button)
 	connect_button_once($UIRoot/Character/HomeButton as Button, show_home)
 	connect_button_once(character_save_button, save_character_skills)
 	update_character_screen()
@@ -2461,6 +2494,8 @@ func update_character_screen() -> void:
 	character_selector_frame.texture = character_selector_frame_for(visual_id)
 	character_content_frame.texture = character_selector_frame_for(visual_id)
 	character_theme_bar.color = character_theme_color_for(visual_id)
+	if character_skill_detail_overlay.visible:
+		update_skill_detail()
 	for skill_index in 3:
 		var selected_index: int = character_skill_selection[visual_id][skill_index]
 		var candidate_names := skill_candidate_names(visual_id, skill_index)
@@ -2499,6 +2534,91 @@ func select_skill(skill_index: int, candidate_index: int) -> void:
 	selections[skill_index] = candidate_index
 	character_skill_selection[visual_id] = selections
 	update_character_screen()
+
+
+func connect_character_ui_clicks(node: Node) -> void:
+	if node is Button:
+		node.set_meta("skip_ui_click", true)
+		if not node.has_meta("skill_detail_button") and not node.has_meta("skill_panel_click_connected"):
+			if not (node as Button).pressed.is_connected(play_skill_panel_click):
+				(node as Button).pressed.connect(play_skill_panel_click)
+			node.set_meta("skill_panel_click_connected", true)
+	for child in node.get_children():
+		connect_character_ui_clicks(child)
+
+
+func open_skill_detail(skill_index: int, candidate_index: int) -> void:
+	character_skill_detail_slot = skill_index
+	character_skill_detail_candidate = candidate_index
+	update_skill_detail()
+	character_skill_detail_overlay.visible = true
+	play_skill_panel_click()
+
+
+func close_skill_detail() -> void:
+	if character_skill_detail_overlay == null:
+		return
+	character_skill_detail_overlay.visible = false
+	character_skill_detail_slot = -1
+	character_skill_detail_candidate = -1
+
+
+func set_skill_from_detail() -> void:
+	if character_skill_detail_slot < 0 or character_skill_detail_candidate < 0:
+		return
+	select_skill(character_skill_detail_slot, character_skill_detail_candidate)
+	close_skill_detail()
+
+
+func update_skill_detail() -> void:
+	if character_skill_detail_overlay == null or character_skill_detail_slot < 0 or character_skill_detail_candidate < 0:
+		return
+	var visual_id := character_visual_id()
+	var skill_name := skill_candidate_names(visual_id, character_skill_detail_slot)[character_skill_detail_candidate]
+	character_skill_detail_icon.texture = get_skill_icon(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
+	character_skill_detail_name.text = skill_name
+	character_skill_detail_description.text = skill_description(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
+	character_skill_detail_frame.texture = character_selector_frame_for(visual_id)
+	character_skill_detail_close_texture.texture = character_save_texture_for(visual_id)
+	character_skill_detail_set_texture.texture = character_save_texture_for(visual_id)
+	character_skill_detail_close_button.text = "閉じる"
+	character_skill_detail_set_button.text = "スキルをセット"
+
+
+func skill_description(visual_id: String, skill_index: int, candidate_index: int) -> String:
+	var name := skill_candidate_names(visual_id, skill_index)[candidate_index]
+	if name == "未実装":
+		return "このスキルは現在準備中です。"
+	if visual_id == "typist":
+		if skill_index == 0:
+			return "鍵片を連続で打ち出し、素早い入力で攻撃を強化する打鍵士の基本スキル。"
+		if skill_index == 1 and candidate_index == 0:
+			return "三叉の衝撃を前方へ放ち、複数の敵をまとめて吹き飛ばす。"
+		if skill_index == 1:
+			return "追従する鍵片を連続発射し、入力の勢いを攻撃へ変える。"
+		return "大槌を振り回し、周囲の敵を遠くへ吹き飛ばす。"
+	if visual_id == "arithmetician":
+		return "数式を解き明かして魔力を収束させ、強力な術式を発動する。"
+	return "詠唱の軌跡をなぞって魔力を操り、周囲に持続する効果を残す。"
+
+
+func play_skill_panel_click() -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = SKILL_PANEL_CLICK_SOUND
+	player.volume_db = 0.0
+	add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+func style_character_detail_button(button: Button) -> void:
+	button.z_index = 3
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
 func save_character_skills() -> void:

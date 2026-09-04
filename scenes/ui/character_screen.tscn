@@ -453,3 +453,115 @@ offset_right = 1251.0
 offset_bottom = 679.0
 pivot_offset = Vector2(110, 37)
 text = "SAVE"
+
+[node name="SkillDetailOverlay" type="Control" parent="." unique_id=203818449]
+z_index = 100
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 0
+visible = false
+
+[node name="Dimmer" type="ColorRect" parent="SkillDetailOverlay" unique_id=203818450]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 0
+color = Color(0.015, 0.02, 0.055, 0.78)
+
+[node name="Panel" type="Panel" parent="SkillDetailOverlay" unique_id=203818451]
+layout_mode = 0
+offset_left = 64.0
+offset_top = 36.0
+offset_right = 1216.0
+offset_bottom = 684.0
+mouse_filter = 0
+
+[node name="Frame" type="TextureRect" parent="SkillDetailOverlay/Panel" unique_id=203818452]
+z_index = 1
+layout_mode = 0
+offset_left = -42.0
+offset_top = -34.0
+offset_right = 1194.0
+offset_bottom = 686.0
+mouse_filter = 2
+texture = ExtResource("9_frame_typist")
+expand_mode = 1
+
+[node name="Icon" type="TextureRect" parent="SkillDetailOverlay/Panel" unique_id=203818453]
+z_index = 2
+layout_mode = 0
+offset_left = 92.0
+offset_top = 74.0
+offset_right = 432.0
+offset_bottom = 414.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="SkillName" type="Label" parent="SkillDetailOverlay/Panel" unique_id=203818454]
+z_index = 2
+layout_mode = 0
+offset_left = 482.0
+offset_top = 84.0
+offset_right = 1030.0
+offset_bottom = 150.0
+theme_override_font_sizes/font_size = 32
+text = "スキル名"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillDescription" type="Label" parent="SkillDetailOverlay/Panel" unique_id=203818455]
+z_index = 2
+layout_mode = 0
+offset_left = 482.0
+offset_top = 178.0
+offset_right = 1030.0
+offset_bottom = 388.0
+theme_override_colors/font_color = Color(0.91, 0.92, 0.98, 1)
+theme_override_font_sizes/font_size = 20
+text = "スキルの詳細な説明"
+autowrap_mode = 3
+vertical_alignment = 1
+
+[node name="CloseTexture" type="TextureRect" parent="SkillDetailOverlay/Panel" unique_id=203818456]
+z_index = 2
+layout_mode = 0
+offset_left = 100.0
+offset_top = 510.0
+offset_right = 442.0
+offset_bottom = 616.0
+mouse_filter = 2
+texture = ExtResource("8_save_typist")
+expand_mode = 1
+
+[node name="SetTexture" type="TextureRect" parent="SkillDetailOverlay/Panel" unique_id=203818457]
+z_index = 2
+layout_mode = 0
+offset_left = 700.0
+offset_top = 510.0
+offset_right = 1042.0
+offset_bottom = 616.0
+mouse_filter = 2
+texture = ExtResource("8_save_typist")
+expand_mode = 1
+
+[node name="CloseButton" type="Button" parent="SkillDetailOverlay/Panel" unique_id=203818458]
+z_index = 3
+layout_mode = 0
+offset_left = 100.0
+offset_top = 510.0
+offset_right = 442.0
+offset_bottom = 616.0
+mouse_filter = 0
+text = "閉じる"
+
+[node name="SetButton" type="Button" parent="SkillDetailOverlay/Panel" unique_id=203818459]
+z_index = 3
+layout_mode = 0
+offset_left = 700.0
+offset_top = 510.0
+offset_right = 1042.0
+offset_bottom = 616.0
+mouse_filter = 0
+text = "スキルをセット"
