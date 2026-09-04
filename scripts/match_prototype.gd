@@ -539,6 +539,7 @@ func _ready() -> void:
 	create_network_ui()
 	create_navigation_ui()
 	create_character_ui()
+	connect_existing_ui_clicks(self)
 	screen_manager.call("configure", {
 		"title": title_panel,
 		"home": home_panel,
@@ -601,6 +602,13 @@ func create_menu_background() -> void:
 func _on_node_added(node: Node) -> void:
 	if node is Button and not (node as Button).pressed.is_connected(play_ui_click):
 		node.pressed.connect(play_ui_click)
+
+
+func connect_existing_ui_clicks(node: Node) -> void:
+	if node is Button and not (node as Button).pressed.is_connected(play_ui_click):
+		(node as Button).pressed.connect(play_ui_click)
+	for child in node.get_children():
+		connect_existing_ui_clicks(child)
 
 
 func style_menu_button(button: Button, font_size: int = 20) -> void:
@@ -1054,12 +1062,62 @@ func update_typing_challenge(delta: float) -> void:
 
 
 func _on_typing_submitted(_submitted_text: String) -> void:
-	# Enter送信は廃止。入力はキー単位で即時判定する。
-	return
+	if challenge_skill.ends_with("arithmetic"):
+		_submit_arithmetic_answer(_submitted_text)
+
+
+func _is_typing_challenge() -> bool:
+	return challenge_skill.ends_with("typing")
+
+
+func _process_arithmetic_character(character: String) -> void:
+	if challenge_owner == 0 or not challenge_skill.ends_with("arithmetic"):
+		return
+	if network_mode == "client":
+		if challenge_owner == local_player_id:
+			typing_input.text += character
+			typing_input.caret_column = typing_input.text.length()
+			rpc_id(1, "receive_remote_challenge_input", character)
+		return
+	var player: Dictionary = players[challenge_owner]
+	if not bool(player["focused"]):
+		return
+	challenge_typed_characters += character
+	if challenge_owner == local_player_id:
+		typing_input.text = challenge_typed_characters
+		typing_input.caret_column = typing_input.text.length()
+
+
+func _submit_arithmetic_answer(submitted_text: String) -> void:
+	if challenge_owner == 0 or not challenge_skill.ends_with("arithmetic"):
+		return
+	if network_mode == "client":
+		if challenge_owner == local_player_id:
+			rpc_id(1, "receive_remote_challenge_submission", submitted_text)
+			typing_input.text = ""
+		return
+	var player: Dictionary = players[challenge_owner]
+	if not bool(player["focused"]):
+		return
+	if submitted_text.strip_edges() == challenge_answer:
+		var elapsed: float = float(player["challenge_elapsed"])
+		var limit: float = get_challenge_time_limit()
+		var score := calc_score_by_time_only(limit - elapsed, limit)
+		end_active_challenge(true, score, "")
+		return
+	player["challenge_errors"] = int(player["challenge_errors"]) + 1
+	player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
+	players[challenge_owner] = player
+	challenge_typed_characters = ""
+	typing_input.text = ""
+	challenge_miss_flash = 0.22
+	challenge_shake = 0.22
+	status_text = "回答を間違えた。残り時間が減少した。"
+	update_challenge_ui(float(player["challenge_elapsed"]))
 
 
 func _process_typing_character(character: String) -> void:
-	if challenge_owner == 0 or challenge_skill.ends_with("trace"):
+	if challenge_owner == 0 or not _is_typing_challenge():
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -2739,7 +2797,16 @@ func receive_remote_input(input_state: Dictionary) -> void:
 @rpc("any_peer", "reliable")
 func receive_remote_challenge_input(character: String) -> void:
 	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2:
-		_process_typing_character(character)
+		if challenge_skill.ends_with("arithmetic"):
+			_process_arithmetic_character(character)
+		else:
+			_process_typing_character(character)
+
+
+@rpc("any_peer", "reliable")
+func receive_remote_challenge_submission(submitted_text: String) -> void:
+	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2 and challenge_skill.ends_with("arithmetic"):
+		_submit_arithmetic_answer(submitted_text)
 
 
 @rpc("authority", "unreliable")
@@ -3580,6 +3647,21 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if challenge_owner != 0 and not challenge_skill.ends_with("trace") and challenge_owner == local_player_id:
+			if challenge_skill.ends_with("arithmetic"):
+				if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+					_submit_arithmetic_answer(typing_input.text)
+					get_viewport().set_input_as_handled()
+					return
+				if event.keycode == KEY_BACKSPACE:
+					typing_input.text = typing_input.text.substr(0, maxi(0, typing_input.text.length() - 1))
+					challenge_typed_characters = typing_input.text
+					typing_input.caret_column = typing_input.text.length()
+					get_viewport().set_input_as_handled()
+					return
+				if event.unicode > 0:
+					_process_arithmetic_character(String.chr(event.unicode))
+					get_viewport().set_input_as_handled()
+					return
 			if event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_BACKSPACE]:
 				get_viewport().set_input_as_handled()
 				return
