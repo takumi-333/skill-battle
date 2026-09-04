@@ -210,21 +210,29 @@ class TraceCanvas extends Control:
 	var target_points: PackedVector2Array = PackedVector2Array()
 	var input_points: PackedVector2Array = PackedVector2Array()
 	var is_tracing: bool = false
+	var target_color := Color("8fa8e888")
+	var input_color := Color("fff2b0")
+	var input_outer_color := Color("fff2b0")
+	var input_width := 5.0
 
-	func set_trace_data(target: PackedVector2Array, input: PackedVector2Array) -> void:
+	func set_trace_data(target: PackedVector2Array, input: PackedVector2Array, target_tint: Color = Color("8fa8e888"), input_tint: Color = Color("fff2b0"), input_outer_tint: Color = Color("fff2b0"), brush_width: float = 5.0) -> void:
 		target_points = target
 		input_points = input
+		target_color = target_tint
+		input_color = input_tint
+		input_outer_color = input_outer_tint
+		input_width = brush_width
 		queue_redraw()
 
 	func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color("0a1224cc"), true)
 		draw_rect(Rect2(Vector2.ZERO, size), Color("7386b8"), false, 2.0)
 		if target_points.size() >= 2:
-			draw_polyline(target_points, Color("8fa8e888"), 12.0, true)
+			draw_polyline(target_points, target_color, 12.0, true)
+		var glow_width := input_width + 4.0 if input_outer_color != input_color else input_width
 		if input_points.size() >= 2:
-			draw_polyline(input_points, Color("fff2b0"), 5.0, true)
-		for point in input_points:
-			draw_circle(point, 3.0, Color("fff2b0"))
+			draw_polyline(input_points, input_outer_color, glow_width, false)
+			draw_polyline(input_points, input_color, input_width, false)
 
 const ARENA := Rect2(0, 0, 2520, 1160)
 ## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
@@ -342,6 +350,7 @@ const FOCUS_PARTICLE_COUNT := 12
 const FOCUS_PARTICLE_SIZE := Vector2(16.0, 16.0)
 
 const MatchStateData = preload("res://scripts/match_state.gd")
+const TraceEvaluatorData = preload("res://scripts/trace_evaluator.gd")
 const KEY_CAP_PROJECTILE_SCENE: PackedScene = preload("res://scenes/effects/key_cap_projectile.tscn")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
@@ -392,6 +401,8 @@ var screen_shake_time: float = 0.0
 var screen_shake_strength: float = 0.0
 var challenge_trace_points: PackedVector2Array = PackedVector2Array()
 var challenge_target_points: PackedVector2Array = PackedVector2Array()
+var trace_evaluator = TraceEvaluatorData.new()
+var last_trace_result: Dictionary = {}
 var challenge_definitions: Dictionary = {}
 var network_mode: String = "local"
 var local_player_id: int = 1
@@ -1057,7 +1068,16 @@ func make_trace_target(is_big: bool) -> PackedVector2Array:
 
 func update_trace_canvas() -> void:
 	if challenge_trace_canvas:
-		challenge_trace_canvas.set_trace_data(challenge_target_points, challenge_trace_points)
+		var target_tint := Color("8fa8e888")
+		var input_tint := Color("fff2b0")
+		var input_outer_tint := Color("fff2b0")
+		var brush_width := 5.0
+		if challenge_owner in players and str(players[challenge_owner].get("character_id", "")) == "chanter":
+			# 紋章は従来色のまま、詠唱士のユーザー筆跡だけをネオン紫にする。
+			input_tint = Color("f3ddffff")
+			input_outer_tint = Color("8b5bb7dd")
+			brush_width = 12.0
+		challenge_trace_canvas.set_trace_data(challenge_target_points, challenge_trace_points, target_tint, input_tint, input_outer_tint, brush_width)
 
 
 func update_typing_challenge(delta: float) -> void:
@@ -1240,11 +1260,19 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 		status_text = "%sの%sが発動！ スコア %d点" % [player["name"], "スキル3" if is_skill3 else ("スキル2" if is_big else "スキル1"), score]
 	else:
 		status_text = failure_message
+	if _is_trace_challenge() and not last_trace_result.is_empty():
+		append_trace_result_to_status()
 	challenge_owner = 0
 	challenge_skill = ""
 	challenge_trace_points.clear()
 	challenge_target_points.clear()
 	update_trace_canvas()
+
+
+func append_trace_result_to_status() -> void:
+	if last_trace_result.is_empty():
+		return
+	status_text += " [trace score=%d mean=%.1f p95=%.1f coverage=%.1f ratio=%.2f%s]" % [int(last_trace_result.get("score", 0)), float(last_trace_result.get("mean_error", 0.0)), float(last_trace_result.get("p95_error", 0.0)), float(last_trace_result.get("coverage_error", 0.0)), float(last_trace_result.get("length_ratio", 0.0)), " NG:%s" % str(last_trace_result.get("ng_reason", "")) if bool(last_trace_result.get("ng", false)) else ""]
 
 
 func end_typing_challenge(success: bool, score: int, failure_message: String) -> void:
@@ -2984,8 +3012,9 @@ func receive_remote_trace(trace_points: PackedVector2Array) -> void:
 	if network_mode != "host" or multiplayer.get_remote_sender_id() <= 0 or challenge_owner != 2:
 		return
 	challenge_trace_points = trace_points
-	var trace_score: int = evaluate_trace()
-	end_active_challenge(trace_score >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45), trace_score, "なぞりに失敗した。")
+	var trace_result := evaluate_trace_result()
+	var trace_score: int = int(trace_result["score"])
+	end_active_challenge(_trace_result_passes(trace_result), trace_score, "なぞりに失敗した。")
 
 
 @rpc("any_peer", "reliable")
@@ -3903,8 +3932,9 @@ func _input(event: InputEvent) -> void:
 			if network_mode == "client":
 				rpc_id(1, "receive_remote_trace", challenge_trace_points)
 				return
-			var trace_score: int = evaluate_trace()
-			end_active_challenge(trace_score >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45), trace_score, "なぞりに失敗した。")
+			var trace_result := evaluate_trace_result()
+			var trace_score: int = int(trace_result["score"])
+			end_active_challenge(_trace_result_passes(trace_result), trace_score, "なぞりに失敗した。")
 		return
 	if event is InputEventMouseMotion and challenge_owner != 0 and _is_trace_challenge() and event.button_mask != 0:
 		if network_mode == "host" and challenge_owner != 1:
@@ -3915,40 +3945,19 @@ func _input(event: InputEvent) -> void:
 
 
 func evaluate_trace() -> int:
-	if challenge_trace_points.size() < 2 or challenge_target_points.size() < 2:
-		return 0
-	var distance_total := 0.0
-	for point in challenge_trace_points:
-		distance_total += distance_to_trace_target(point)
-	var distance_score := clampf(100.0 - distance_total / float(challenge_trace_points.size()) * 1.8, 0.0, 100.0)
-	var covered := 0
-	var sample_count := 0
-	for index in range(challenge_target_points.size() - 1):
-		var segment_start := challenge_target_points[index]
-		var segment_end := challenge_target_points[index + 1]
-		var segment_length := segment_start.distance_to(segment_end)
-		var steps := maxi(1, ceili(segment_length / 24.0))
-		for step in range(steps + 1):
-			var target_point := segment_start.lerp(segment_end, float(step) / float(steps))
-			sample_count += 1
-			for input_point in challenge_trace_points:
-				if input_point.distance_to(target_point) <= 28.0:
-					covered += 1
-					break
-	var coverage_score := 0.0 if sample_count == 0 else float(covered) / float(sample_count) * 100.0
-	if challenge_skill == "small_trace":
-		return roundi(distance_score * 0.45 + coverage_score * 0.55)
-	var start_score := clampf(100.0 - challenge_trace_points[0].distance_to(challenge_target_points[0]) * 0.8, 0.0, 100.0)
-	var end_score := clampf(100.0 - challenge_trace_points[challenge_trace_points.size() - 1].distance_to(challenge_target_points[challenge_target_points.size() - 1]) * 0.8, 0.0, 100.0)
-	return roundi(start_score * 0.20 + end_score * 0.20 + distance_score * 0.25 + coverage_score * 0.35)
+	return int(evaluate_trace_result()["score"])
+
+
+func evaluate_trace_result() -> Dictionary:
+	last_trace_result = trace_evaluator.evaluate(challenge_target_points, challenge_trace_points)
+	return last_trace_result
+
+
+func _trace_result_passes(result: Dictionary) -> bool:
+	if bool(result.get("ng", true)):
+		return false
+	return int(result.get("score", 0)) >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45)
 
 
 func distance_to_trace_target(point: Vector2) -> float:
-	var closest := INF
-	for index in range(challenge_target_points.size() - 1):
-		var start_point := challenge_target_points[index]
-		var end_point := challenge_target_points[index + 1]
-		var segment := end_point - start_point
-		var ratio := clampf((point - start_point).dot(segment) / maxf(segment.length_squared(), 0.001), 0.0, 1.0)
-		closest = minf(closest, point.distance_to(start_point + segment * ratio))
-	return closest
+	return trace_evaluator._distance_to_polyline(point, challenge_target_points)
