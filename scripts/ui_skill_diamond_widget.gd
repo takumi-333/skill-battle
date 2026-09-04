@@ -62,6 +62,8 @@ func set_cooldown(remaining: float, duration: float, is_unavailable: bool = fals
 	var progress := clampf(1.0 - maxf(0.0, remaining) / maxf(0.001, duration), 0.0, 1.0)
 	icon_material.set_shader_parameter("progress", 0.0 if is_unavailable else progress)
 	icon_material.set_shader_parameter("unavailable", is_unavailable)
+	background_material.set_shader_parameter("progress", 0.0 if is_unavailable else progress)
+	background_material.set_shader_parameter("unavailable", is_unavailable)
 
 func _build_layers() -> void:
 	if icon_rect != null:
@@ -73,9 +75,9 @@ func _build_layers() -> void:
 	frame_rect = get_node_or_null("Frame") as TextureRect
 	key_label = get_node_or_null("KeyLabel") as Label
 	if icon_rect != null and background_rect != null and frame_rect != null and key_label != null:
-		background_material = _make_material(false)
+		background_material = _make_material(true, false)
 		background_rect.material = background_material
-		icon_material = _make_material(true)
+		icon_material = _make_material(true, true)
 		icon_rect.material = icon_material
 		badge_disc = get_node_or_null("BadgeDisc") as BadgeDisc
 		if badge_disc == null:
@@ -90,14 +92,14 @@ func _build_layers() -> void:
 	background_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	background_rect.stretch_mode = TextureRect.STRETCH_SCALE
 	background_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background_material = _make_material(false)
+	background_material = _make_material(true, false)
 	background_rect.material = background_material
 	add_child(background_rect)
 	icon_rect = TextureRect.new()
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_SCALE
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_material = _make_material(true)
+	icon_material = _make_material(true, true)
 	icon_rect.material = icon_material
 	add_child(icon_rect)
 	badge_disc = BadgeDisc.new()
@@ -123,7 +125,7 @@ func _build_layers() -> void:
 	key_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(key_label)
 
-func _make_material(with_cooldown: bool) -> ShaderMaterial:
+func _make_material(with_cooldown: bool, scale_icon: bool) -> ShaderMaterial:
 	var shader := Shader.new()
 	shader.code = """
 	shader_type canvas_item;
@@ -135,7 +137,7 @@ func _make_material(with_cooldown: bool) -> ShaderMaterial:
 	void fragment() {
 		if (texture(hole_mask, UV).a < 0.5) discard;
 		vec2 source_uv = UV;
-		if (WITH_COOLDOWN) {
+		if (WITH_ICON_SCALE) {
 			source_uv = (UV - vec2(0.5)) / icon_scale + vec2(0.5);
 		}
 		if (source_uv.x < 0.0 || source_uv.x > 1.0 || source_uv.y < 0.0 || source_uv.y > 1.0) {
@@ -147,14 +149,17 @@ func _make_material(with_cooldown: bool) -> ShaderMaterial:
 			float angle = atan(point.x, -point.y);
 			if (angle < 0.0) angle += 6.28318530718;
 			float lit = step(angle, progress * 6.28318530718);
-			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			float brightness = unavailable ? UNAVAILABLE_BRIGHTNESS : mix(COOLDOWN_BRIGHTNESS, 1.0, lit);
 			COLOR = vec4(source.rgb * brightness, source.a);
 			} else {
 				COLOR = source;
 			}
 		}
 	}
-	""".replace("WITH_COOLDOWN", "true" if with_cooldown else "false")
+	""".replace("WITH_ICON_SCALE", "true" if scale_icon else "false") \
+		.replace("WITH_COOLDOWN", "true" if with_cooldown else "false") \
+		.replace("UNAVAILABLE_BRIGHTNESS", "0.16" if scale_icon else "0.22") \
+		.replace("COOLDOWN_BRIGHTNESS", "0.18" if scale_icon else "0.35")
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	return material

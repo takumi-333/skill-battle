@@ -1003,8 +1003,8 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_shake = 0.0
 	var show_local_challenge: bool = network_mode != "host" or owner_id == 1
 	set_challenge_overlay_visible(show_local_challenge)
-	typing_input.visible = not challenge_skill.ends_with("trace")
-	challenge_trace_canvas.visible = challenge_skill.ends_with("trace")
+	typing_input.visible = not _is_trace_challenge()
+	challenge_trace_canvas.visible = _is_trace_challenge()
 	typing_input.text = ""
 	if typing_input.visible and show_local_challenge:
 		typing_input.grab_focus()
@@ -1078,16 +1078,36 @@ func update_typing_challenge(delta: float) -> void:
 
 
 func _on_typing_submitted(_submitted_text: String) -> void:
-	if challenge_skill.ends_with("arithmetic"):
+	if _is_arithmetic_challenge():
 		_submit_arithmetic_answer(_submitted_text)
 
 
 func _is_typing_challenge() -> bool:
-	return challenge_skill.ends_with("typing")
+	return _get_challenge_type() == "typing"
+
+
+func _is_arithmetic_challenge() -> bool:
+	return _get_challenge_type() == "arithmetic"
+
+
+func _is_trace_challenge() -> bool:
+	return _get_challenge_type() == "tracing"
+
+
+func _get_challenge_type() -> String:
+	if challenge_definition != null:
+		return str(challenge_definition.challenge_type)
+	if challenge_skill == "skill3_typing" or challenge_skill.contains("typing"):
+		return "typing"
+	if challenge_skill.contains("arithmetic"):
+		return "arithmetic"
+	if challenge_skill.contains("trace"):
+		return "tracing"
+	return ""
 
 
 func _process_arithmetic_character(character: String) -> void:
-	if challenge_owner == 0 or not challenge_skill.ends_with("arithmetic"):
+	if challenge_owner == 0 or not _is_arithmetic_challenge():
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -1105,7 +1125,7 @@ func _process_arithmetic_character(character: String) -> void:
 
 
 func _submit_arithmetic_answer(submitted_text: String) -> void:
-	if challenge_owner == 0 or not challenge_skill.ends_with("arithmetic"):
+	if challenge_owner == 0 or not _is_arithmetic_challenge():
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -1183,7 +1203,7 @@ func get_challenge_time_limit() -> float:
 		return 0.0
 	if challenge_definition != null:
 		return challenge_definition.time_limit_seconds
-	return TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT)
+	return TRACE_CHALLENGE_LIMIT if _is_trace_challenge() else (ARITHMETIC_CHALLENGE_LIMIT if _is_arithmetic_challenge() else TYPING_CHALLENGE_LIMIT)
 
 
 func end_active_challenge(success: bool, score: int, failure_message: String) -> void:
@@ -2730,6 +2750,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	lobby_debug_log("peer_connected peer_id=%d mode=%s peers=%s" % [peer_id, network_mode, str(multiplayer.get_peers())])
 	if network_mode == "host":
 		status_text = "参加者が接続しました。キャラクターを選択してください。"
+		refresh_lobby_label()
 		sync_network_state(STATE_SYNC_INTERVAL)
 
 
@@ -2853,13 +2874,14 @@ func receive_network_state(state: Dictionary) -> void:
 	var incoming_challenge_skill := str(state["challenge_skill"])
 	if challenge_owner != incoming_challenge_owner or challenge_skill != incoming_challenge_skill:
 		challenge_trace_points.clear()
+		challenge_definition = null
 	challenge_owner = incoming_challenge_owner
 	challenge_skill = incoming_challenge_skill
 	challenge_prompt = str(state["challenge_prompt"])
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
 	if challenge_skill == "skill3_typing":
 		challenge_answer = challenge_prompt
-	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if challenge_skill.ends_with("trace") else PackedVector2Array()
+	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if _is_trace_challenge() else PackedVector2Array()
 	update_client_ui_from_state()
 
 
@@ -2895,8 +2917,8 @@ func update_client_ui_from_state() -> void:
 	if player_is_challenging:
 		apply_challenge_layout(str(players[local_player_id]["character_id"]))
 		challenge_prompt_label.text = challenge_prompt
-		typing_input.visible = not challenge_skill.ends_with("trace")
-		challenge_trace_canvas.visible = challenge_skill.ends_with("trace")
+		typing_input.visible = not _is_trace_challenge()
+		challenge_trace_canvas.visible = _is_trace_challenge()
 		update_challenge_ui(float(players[local_player_id]["challenge_elapsed"]))
 		if typing_input.visible and not typing_input.has_focus():
 			typing_input.grab_focus()
@@ -2939,7 +2961,7 @@ func receive_remote_input(input_state: Dictionary) -> void:
 @rpc("any_peer", "reliable")
 func receive_remote_challenge_input(character: String) -> void:
 	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2:
-		if challenge_skill.ends_with("arithmetic"):
+		if _is_arithmetic_challenge():
 			_process_arithmetic_character(character)
 		else:
 			_process_typing_character(character)
@@ -2947,7 +2969,7 @@ func receive_remote_challenge_input(character: String) -> void:
 
 @rpc("any_peer", "reliable")
 func receive_remote_challenge_submission(submitted_text: String) -> void:
-	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2 and challenge_skill.ends_with("arithmetic"):
+	if network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2 and _is_arithmetic_challenge():
 		_submit_arithmetic_answer(submitted_text)
 
 
@@ -3004,8 +3026,10 @@ func refresh_lobby_label() -> void:
 	lobby_label.text = "オンライン対戦 - 待機画面"
 	var local_side := 2 if network_mode == "client" else 1
 	var remote_connected := multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
-	lobby_p1_preview.visible = local_side == 1
-	lobby_p2_preview.visible = local_side == 2
+	# Both cards remain visible so the opponent slot can communicate connection
+	# state with the shadow portrait. The status icon still indicates readiness.
+	lobby_p1_preview.visible = true
+	lobby_p2_preview.visible = true
 	lobby_p1_info.text = "あなた\n%s" % names[p1_selection] if local_side == 1 else "対戦相手"
 	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else "対戦相手"
 	set_lobby_status_icon(lobby_p1_status_icon, p1_ready, local_side == 1 or remote_connected)
@@ -3808,8 +3832,8 @@ func _input(event: InputEvent) -> void:
 	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if challenge_owner != 0 and not challenge_skill.ends_with("trace") and challenge_owner == local_player_id:
-			if challenge_skill.ends_with("arithmetic"):
+		if challenge_owner != 0 and not _is_trace_challenge() and challenge_owner == local_player_id:
+			if _is_arithmetic_challenge():
 				if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
 					_submit_arithmetic_answer(typing_input.text)
 					get_viewport().set_input_as_handled()
@@ -3866,7 +3890,7 @@ func _input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE and challenge_owner != 0:
 			end_active_challenge(false, 0, "課題を中止した。")
 			return
-	if event is InputEventMouseButton and challenge_owner != 0 and challenge_skill.ends_with("trace"):
+	if event is InputEventMouseButton and challenge_owner != 0 and _is_trace_challenge():
 		if network_mode == "host" and challenge_owner != 1:
 			return
 		if challenge_trace_canvas == null or not challenge_trace_canvas.get_global_rect().has_point(event.position):
@@ -3882,7 +3906,7 @@ func _input(event: InputEvent) -> void:
 			var trace_score: int = evaluate_trace()
 			end_active_challenge(trace_score >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45), trace_score, "なぞりに失敗した。")
 		return
-	if event is InputEventMouseMotion and challenge_owner != 0 and challenge_skill.ends_with("trace") and event.button_mask != 0:
+	if event is InputEventMouseMotion and challenge_owner != 0 and _is_trace_challenge() and event.button_mask != 0:
 		if network_mode == "host" and challenge_owner != 1:
 			return
 		if challenge_trace_canvas != null and challenge_trace_canvas.get_global_rect().has_point(event.position):
