@@ -31,13 +31,16 @@ class SkillDiamondWidget extends Control:
 	var cooldown_duration: float = 1.0
 	var unavailable: bool = false
 	var icon_material: ShaderMaterial
+	var background_material: ShaderMaterial
+	var background_theme_color := Color.TRANSPARENT
 	var icon_rect: TextureRect
+	var background_rect: TextureRect
 	var frame_rect: TextureRect
 	var key_label: Label
 	var key_icon: TextureRect
 	var badge_disc: BadgeDisc
 
-	func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_texture: Texture2D, hole_mask: Texture2D, hole_center: Vector2, badge_center: Vector2, badge_radius: float) -> void:
+	func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_texture: Texture2D, hole_mask: Texture2D, hole_center: Vector2, badge_center: Vector2, badge_radius: float, theme_color: Color) -> void:
 		frame_texture = texture
 		key_text = binding
 		custom_minimum_size = widget_size
@@ -45,20 +48,52 @@ class SkillDiamondWidget extends Control:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if icon_rect != null:
 			icon_rect.texture = icon_texture
+			icon_rect.visible = icon_texture != null
 			icon_rect.size = size
+			if background_theme_color != theme_color:
+				background_rect.texture = make_background_texture(theme_color)
+				background_theme_color = theme_color
+			background_rect.size = size
 			frame_rect.texture = frame_texture
 			frame_rect.size = size
 			badge_disc.center_ratio = badge_center
 			badge_disc.radius_ratio = badge_radius
 			icon_material.set_shader_parameter("hole_mask", hole_mask)
 			icon_material.set_shader_parameter("hole_center", hole_center)
+			background_material.set_shader_parameter("hole_mask", hole_mask)
 			return
+		background_rect = TextureRect.new()
+		background_rect.position = Vector2.ZERO
+		background_rect.size = size
+		background_rect.texture = make_background_texture(theme_color)
+		background_theme_color = theme_color
+		background_rect.z_index = -1
+		background_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		background_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		background_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var background_shader := Shader.new()
+		background_shader.code = """
+		shader_type canvas_item;
+		uniform sampler2D hole_mask;
+		void fragment() {
+			if (texture(hole_mask, UV).a < 0.5) {
+				discard;
+			}
+			COLOR = texture(TEXTURE, UV);
+		}
+		"""
+		background_material = ShaderMaterial.new()
+		background_material.shader = background_shader
+		background_material.set_shader_parameter("hole_mask", hole_mask)
+		background_rect.material = background_material
+		add_child(background_rect)
 		icon_rect = TextureRect.new()
 		# アイコンはウィジェット全面へ描き、フレーム画像から抽出した
 		# 中央の透明領域だけをシェーダーで残す。
 		icon_rect.position = Vector2.ZERO
 		icon_rect.size = size
 		icon_rect.texture = icon_texture
+		icon_rect.visible = icon_texture != null
 		icon_rect.z_index = 0
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_SCALE
@@ -153,6 +188,17 @@ class SkillDiamondWidget extends Control:
 			return
 		# フレームとキー表示は子ノードとしてアイコンより前面に固定する。
 
+	func make_background_texture(theme_color: Color) -> GradientTexture2D:
+		var gradient := Gradient.new()
+		gradient.colors = PackedColorArray([theme_color.lightened(0.08), theme_color.darkened(0.16)])
+		var texture := GradientTexture2D.new()
+		texture.gradient = gradient
+		texture.width = 256
+		texture.height = 256
+		texture.fill_from = Vector2(0.5, 0.0)
+		texture.fill_to = Vector2(0.5, 1.0)
+		return texture
+
 class BadgeDisc extends Control:
 	var center_ratio := Vector2(0.5, 0.78)
 	var radius_ratio := 0.06
@@ -202,6 +248,11 @@ const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
 const BIG_TYPING_SKILL_COOLDOWN := 5.0
+const TYPIST_SKILL3_COOLDOWN := 3.0
+const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
+const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
+const TYPIST_SKILL3_HAMMER_HIT_INTERVAL := 0.28
+const TYPIST_SKILL3_KEYCAP_INTERVAL := 0.5
 const SKILL_PROJECTILE_RADIUS := 10.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const INTERRUPT_DISPLAY_SPEED := 180.0
@@ -212,6 +263,14 @@ const BIG_PASSING_SCORE := 0
 const ARITHMETIC_CHALLENGE_LIMIT := 7.0
 const TRACE_CHALLENGE_LIMIT := 8.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
+const ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL := 5.0
+const ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL := 10.0
+const ARITHMETICIAN_DECOY_NOISE_DURATION := 0.12
+const ARITHMETICIAN_DECOY_FLASH_DURATION := 0.25
+const ARITHMETICIAN_DECOY_THIN_ALPHA := 0.22
+const ARITHMETICIAN_DECOY_NORMAL_ALPHA := 1.0
+const ARITHMETICIAN_FLASH_RADIUS := 1000.0
+const ARITHMETICIAN_FLASH_DURATION := 0.2
 const TYPING_PROJECTILE_INTERVAL := 0.5
 const TYPING_HOMING_SCORE_THRESHOLD := 80
 const TYPING_HOMING_DURATION := 0.7
@@ -244,6 +303,18 @@ const SKILL_HOLE_MASK_SMALL: Texture2D = preload("res://assets/ui/skill_diamond_
 const SKILL_HOLE_MASK_MEDIUM: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png")
 const SKILL_HOLE_MASK_LARGE: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png")
 const SKILL_PLACEHOLDER_ICON: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
+const SKILL_TYPIST_HAMMER: Texture2D = preload("res://assets/ui/skill_icons/typist_hammer_spin.png")
+const SKILL_TYPIST_KEYCAP: Texture2D = preload("res://assets/ui/skill_icons/typist_keycap.png")
+const SKILL_TYPIST_TRIDENT: Texture2D = preload("res://assets/ui/skill_icons/typist_trident.png")
+const SKILL_TYPIST_KEYCAP_II: Texture2D = preload("res://assets/ui/skill_icons/typist_keycap_ii.png")
+const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_infinite_series.png")
+const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
+const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
+const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_stellar_barrage.png")
+const SKILL_EMPTY_ICON: Texture2D = null
+const SKILL_THEME_TYPIST := Color("121F18")
+const SKILL_THEME_ARITHMETICIAN := Color("1C213F")
+const SKILL_THEME_CHANTER := Color("3F255D")
 const TYPIST_KEY_CAP_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/typist_key_cap.png")
 const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
 const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
@@ -267,9 +338,6 @@ const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typis
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
 const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chanter_pixel_8dir.png")
 const SHADOW_IDLE_TEXTURE: Texture2D = preload("res://assets/characters/portraits/shadow_idle.png")
-const TYPIST_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist.png")
-const ARITHMETICIAN_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician.png")
-const CHANTER_NORMAL_ATTACK_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter.png")
 const TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_weapon.png")
 const ARITHMETICIAN_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_weapon.png")
 const CHANTER_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_weapon.png")
@@ -286,7 +354,11 @@ var key_cap_projectile_nodes: Dictionary = {}
 var next_projectile_id: int = 1
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
+var hammer_spins: Array[Dictionary] = []
 var decoys: Array[Dictionary] = []
+var arithmetic_flash_time: float = 0.0
+var arithmetic_flash_center := Vector2.ZERO
+var arithmetic_flash_owner_id: int = 0
 var phase: String = "lobby"
 var screen: String = "title"
 var countdown_remaining: float = 0.0
@@ -343,7 +415,8 @@ var network_back_button: Button
 var lobby_home_button: Button
 var gameplay_home_button: Button
 var hp_bar: ProgressBar
-var skill_widgets: Array[SkillDiamondWidget] = []
+var skill_widgets: Array[Node] = []
+var skill_hud_signature := ""
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
@@ -597,20 +670,30 @@ func create_challenge_definitions() -> void:
 	big_typing_ii.time_limit_seconds = TYPING_II_CHALLENGE_LIMIT
 	big_typing_ii.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_big_ii"] = big_typing_ii
+	var skill3_typing: ChallengeDefinition = ChallengeDefinition.new()
+	skill3_typing.challenge_type = "typing"
+	skill3_typing.candidates = PackedStringArray(["Spin the Hammer, Scatter All", "Hammer Spin Sends Foes Flying", "Circle the Hammer, Crush All", "Spin Hard, Launch Every Enemy", "Clockwise Spin, Foes Scatter", "Heavy Hammer Whirlwind Attack", "Endless Spin Blows Foes Away", "Hammer Spin Clears the Field"])
+	skill3_typing.time_limit_seconds = TYPIST_SKILL3_CHALLENGE_LIMIT
+	skill3_typing.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["blade_skill3"] = skill3_typing
 	var small_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	small_arithmetic.challenge_type = "arithmetic"
-	small_arithmetic.candidates = arithmetic_candidates()
+	small_arithmetic.candidates = arithmetic_skill1_candidates()
 	small_arithmetic.time_limit_seconds = ARITHMETIC_CHALLENGE_LIMIT
 	challenge_definitions["arithmetic_small"] = small_arithmetic
 	var big_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	big_arithmetic.challenge_type = "arithmetic"
-	big_arithmetic.candidates = arithmetic_candidates()
+	big_arithmetic.candidates = arithmetic_skill2_candidates()
 	big_arithmetic.time_limit_seconds = BIG_CHALLENGE_LIMIT
 	big_arithmetic.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["arithmetic_big"] = big_arithmetic
 
 
-func arithmetic_candidates() -> PackedStringArray:
+func arithmetic_skill1_candidates() -> PackedStringArray:
+	return PackedStringArray(["12 + 3 * 8", "15 + 4 * 9", "18 + 5 * 14", "21 + 6 * 7", "16 + 7 * 8", "24 + 3 * 12", "17 + 4 * 11", "25 + 5 * 9", "14 + 6 * 10", "19 + 3 * 13", "23 + 4 * 12", "11 + 7 * 9", "26 + 3 * 14", "20 + 5 * 13", "27 + 4 * 15"])
+
+
+func arithmetic_skill2_candidates() -> PackedStringArray:
 	return PackedStringArray(["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255", "18 + 5 * 14", "7 + 6 * 8 + 15", "21 + 22 + 23 + 24", "176 + 248", "32 + 7 * 11", "9 + 5 * 12 + 18", "14 + 16 + 18 + 20", "187 + 326", "25 + 6 * 13", "8 + 9 * 7 + 14", "15 + 17 + 19 + 21"])
 
 
@@ -619,6 +702,7 @@ func _process(delta: float) -> void:
 	challenge_miss_flash = maxf(0.0, challenge_miss_flash - delta)
 	challenge_shake = maxf(0.0, challenge_shake - delta)
 	screen_shake_time = maxf(0.0, screen_shake_time - delta)
+	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - delta)
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
 		if screen == "title":
 			title_animation_elapsed += delta
@@ -665,6 +749,7 @@ func _process(delta: float) -> void:
 		update_player(2, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
 	update_typing_challenge(delta)
 	update_skill_projectiles(delta)
+	update_hammer_spins(delta)
 	update_magic_zones(delta)
 	update_shockwaves(delta)
 	update_decoys(delta)
@@ -679,6 +764,8 @@ func _process(delta: float) -> void:
 			start_small_skill(debug_controlled_player_id)
 		if Input.is_key_pressed(KEY_3):
 			start_big_skill(debug_controlled_player_id)
+		if Input.is_key_pressed(KEY_4):
+			start_skill3(debug_controlled_player_id)
 	else:
 		if Input.is_key_pressed(KEY_1):
 			try_attack(1)
@@ -686,12 +773,16 @@ func _process(delta: float) -> void:
 			start_small_skill(1)
 		if Input.is_key_pressed(KEY_3):
 			start_big_skill(1)
+		if Input.is_key_pressed(KEY_4):
+			start_skill3(1)
 		if network_mode != "host" and Input.is_key_pressed(KEY_1):
 			try_attack(2)
 		if network_mode != "host" and Input.is_key_pressed(KEY_2):
 			start_small_skill(2)
 		if network_mode != "host" and Input.is_key_pressed(KEY_3):
 			start_big_skill(2)
+		if network_mode != "host" and Input.is_key_pressed(KEY_4):
+			start_skill3(2)
 	if network_mode == "host":
 		if bool(remote_input["attack"]):
 			try_attack(2)
@@ -699,6 +790,8 @@ func _process(delta: float) -> void:
 			start_small_skill(2)
 		if bool(remote_input["big"]):
 			start_big_skill(2)
+		if bool(remote_input["skill3"]):
+			start_skill3(2)
 
 	if match_state.time_remaining <= 0.0 and not match_state.match_over:
 		finish_match_by_time()
@@ -725,7 +818,8 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	if not is_attacking and direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		player["facing"] = direction
-		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * (1.25 if float(player["buff_time"]) > 0.0 else 1.0)
+		var skill3_speed_multiplier := typist_skill3_movement_multiplier(player_id)
+		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * skill3_speed_multiplier * (float(player.get("buff_speed_multiplier", 1.0)) if float(player["buff_time"]) > 0.0 else 1.0)
 		var next_position := clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
 		if can_move_player_to(player_id, next_position):
 			player["position"] = next_position
@@ -736,9 +830,11 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	player["hit_time"] = maxf(0.0, player["hit_time"] - delta)
 	player["small_cooldown"] = maxf(0.0, float(player["small_cooldown"]) - delta)
 	player["big_cooldown"] = maxf(0.0, float(player["big_cooldown"]) - delta)
+	player["skill3_cooldown"] = maxf(0.0, float(player.get("skill3_cooldown", 0.0)) - delta)
 	player["buff_time"] = maxf(0.0, float(player["buff_time"]) - delta)
 	if float(player["buff_time"]) <= 0.0:
 		player["attack_damage_buff"] = 0
+		player["buff_speed_multiplier"] = 1.0
 	player["invisible_time"] = maxf(0.0, float(player.get("invisible_time", 0.0)) - delta)
 	player["invisible_flicker"] = maxf(0.0, float(player.get("invisible_flicker", 0.0)) - delta)
 	if float(player["invisible_time"]) > 0.0 and float(player["invisible_flicker"]) <= 0.0:
@@ -786,6 +882,40 @@ func start_small_skill(owner_id: int) -> void:
 
 func start_big_skill(owner_id: int) -> void:
 	start_skill_challenge(owner_id, true)
+
+
+func start_skill3(owner_id: int) -> void:
+	if challenge_owner != 0 or not players.has(owner_id):
+		return
+	var player: Dictionary = players[owner_id]
+	if bool(player["focused"]) or float(player.get("skill3_cooldown", 0.0)) > 0.0:
+		return
+	if str(player.get("character_id", "")) != "blade":
+		return
+	var definition: ChallengeDefinition = challenge_definitions["blade_skill3"]
+	challenge_owner = owner_id
+	challenge_skill = "skill3_typing"
+	challenge_definition = definition
+	challenge_prompt = definition.candidates[randi_range(0, definition.candidates.size() - 1)]
+	challenge_answer = challenge_prompt
+	challenge_typing_index = 0
+	challenge_typed_characters = ""
+	challenge_trace_points.clear()
+	player["focused"] = true
+	player["challenge_elapsed"] = 0.0
+	player["interrupt_gauge_max"] = TYPING_INTERRUPT_GAUGE
+	player["interrupt_gauge"] = TYPING_INTERRUPT_GAUGE
+	player["interrupt_gauge_display"] = TYPING_INTERRUPT_GAUGE
+	players[owner_id] = player
+	set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
+	typing_input.visible = true
+	challenge_trace_canvas.visible = false
+	typing_input.text = ""
+	if network_mode != "host" or owner_id == 1:
+		typing_input.grab_focus()
+	apply_challenge_layout("blade")
+	status_text = "%sがスキル3の集中を開始！" % player["name"]
+	update_challenge_ui(0.0)
 
 
 func start_skill_challenge(owner_id: int, is_big: bool) -> void:
@@ -972,6 +1102,8 @@ func get_challenge_time_limit() -> float:
 		return TYPING_II_CHALLENGE_LIMIT
 	if challenge_skill == "big_typing":
 		return BIG_TYPING_CHALLENGE_LIMIT
+	if challenge_skill == "skill3_typing":
+		return TYPIST_SKILL3_CHALLENGE_LIMIT
 	return BIG_CHALLENGE_LIMIT if challenge_skill.begins_with("big") else (TRACE_CHALLENGE_LIMIT if challenge_skill.ends_with("trace") else (ARITHMETIC_CHALLENGE_LIMIT if challenge_skill.ends_with("arithmetic") else TYPING_CHALLENGE_LIMIT))
 
 
@@ -981,13 +1113,16 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	var owner_id: int = challenge_owner
 	var player: Dictionary = players[owner_id]
 	var is_big: bool = challenge_skill.begins_with("big")
+	var is_skill3: bool = challenge_skill == "skill3_typing"
 	var challenge_time: float = float(player["challenge_elapsed"])
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
-	if is_big:
+	if is_skill3:
+		player["skill3_cooldown"] = TYPIST_SKILL3_COOLDOWN
+	elif is_big:
 		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
 	else:
 		player["small_cooldown"] = TYPING_SKILL_COOLDOWN
@@ -1003,7 +1138,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	typing_input.visible = true
 	if success:
 		spawn_character_skill(owner_id, score, is_big)
-		status_text = "%sの%sが発動！ スコア %d点" % [player["name"], "スキル2" if is_big else "スキル1", score]
+		status_text = "%sの%sが発動！ スコア %d点" % [player["name"], "スキル3" if is_skill3 else ("スキル2" if is_big else "スキル1"), score]
 	else:
 		status_text = failure_message
 	challenge_owner = 0
@@ -1035,6 +1170,10 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 	var owner: Dictionary = players[owner_id]
 	var character_id: String = str(owner["character_id"])
 	if character_id == "blade":
+		if challenge_skill == "skill3_typing":
+			hammer_spins.append({"owner_id": owner_id, "score": score, "angle": 0.0, "lifetime": typist_skill3_duration(score), "hit_timer": 0.0, "keycap_timer": TYPIST_SKILL3_KEYCAP_INTERVAL})
+			trigger_screen_shake(score)
+			return
 		if not is_big:
 			for index in range(challenge_typed_characters.length()):
 				spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_PROJECTILE_INTERVAL, challenge_typed_characters[index])
@@ -1061,16 +1200,27 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 					})
 	elif character_id == "arithmetic":
 		if not is_big:
-			for index in range(30):
-				var angle := TAU * float(index) / 30.0 + randf_range(-0.18, 0.18)
-				var radius := randf_range(60.0, 620.0)
+			# 再発動時は、前回のデコイをすべて消してから新しく生成する。
+			decoys.clear()
+			var decoy_count := arithmetic_decoy_count(score)
+			var radius_range := arithmetic_decoy_radius_range(score)
+			for index in range(decoy_count):
+				var angle := TAU * float(index) / float(decoy_count) + randf_range(-0.18, 0.18)
+				var radius := randf_range(radius_range.x, radius_range.y)
 				var decoy_origin := clamp_to_arena(owner["position"] + Vector2.from_angle(angle) * radius)
-				decoys.append({"owner_id": owner_id, "visual_id": owner.get("visual_id", "arithmetician"), "facing": owner.get("facing", Vector2.DOWN), "position": decoy_origin, "origin": decoy_origin, "lifetime": lerpf(20.0, 30.0, float(score) / 100.0), "sway_timer": randf_range(2.0, 3.0)})
-			owner["buff_time"] = lerpf(20.0, 30.0, float(score) / 100.0)
-			owner["attack_damage_buff"] = 8
+				var movement_offset_angle := TAU * float(randi_range(0, 7)) / 8.0
+				var decoy_facing: Vector2 = owner.get("facing", Vector2.DOWN).rotated(movement_offset_angle)
+				decoys.append({"owner_id": owner_id, "visual_id": owner.get("visual_id", "arithmetician"), "facing": decoy_facing, "position": decoy_origin, "owner_position": owner["position"], "movement_offset_angle": movement_offset_angle, "is_moving": false, "animation_phase": randf_range(0.0, 1.0), "lifetime": arithmetic_decoy_lifetime(score), "noise_timer": randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL), "noise_time": 0.0, "noise_phase": randf_range(0.0, TAU), "flash_time": ARITHMETICIAN_DECOY_FLASH_DURATION})
+			owner["buff_time"] = arithmetic_decoy_lifetime(score)
+			owner["buff_speed_multiplier"] = 1.1
+			owner["attack_damage_buff"] = 5
+			arithmetic_flash_center = owner["position"]
+			arithmetic_flash_owner_id = owner_id
+			arithmetic_flash_time = ARITHMETICIAN_FLASH_DURATION
 			players[owner_id] = owner
 		else:
 			owner["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
+			owner["buff_speed_multiplier"] = 1.25
 			owner["attack_damage_buff"] = 10
 			owner["invisible_time"] = owner["buff_time"]
 			owner["invisible_flicker"] = 0.0
@@ -1085,6 +1235,34 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			for cycle in range(3):
 				for shot in range(16):
 					spawn_projectile(owner_id, score, true, TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08)
+
+
+func arithmetic_decoy_count(score: int) -> int:
+	if score <= 59:
+		return 5
+	if score <= 69:
+		return 5 + score - 60
+	if score <= 79:
+		return 6 + score - 70
+	if score <= 89:
+		return 80 + score - 80
+	return 10 + score - 90
+
+
+func arithmetic_decoy_lifetime(score: int) -> float:
+	if score <= 59:
+		return 20.0
+	if score <= 79:
+		return 30.0
+	return 40.0
+
+
+func arithmetic_decoy_radius_range(score: int) -> Vector2:
+	if score <= 59:
+		return Vector2(10.0, 500.0)
+	if score <= 79:
+		return Vector2(20.0, 700.0)
+	return Vector2(20.0, 1000.0)
 
 
 func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: float, delay: float = 0.0, chip: String = "") -> void:
@@ -1185,11 +1363,25 @@ func trigger_screen_shake(score: int) -> void:
 func update_decoys(delta: float) -> void:
 	for index in range(decoys.size() - 1, -1, -1):
 		var decoy: Dictionary = decoys[index]
+		var owner_id := int(decoy.get("owner_id", 0))
+		if players.has(owner_id):
+			var owner: Dictionary = players[owner_id]
+			var owner_position: Vector2 = owner["position"]
+			var previous_owner_position: Vector2 = decoy.get("owner_position", owner_position)
+			var owner_delta := owner_position - previous_owner_position
+			var offset_angle := float(decoy.get("movement_offset_angle", 0.0))
+			decoy["facing"] = Vector2(owner["facing"]).rotated(offset_angle)
+			decoy["is_moving"] = owner_delta.length_squared() > 0.0
+			if owner_delta.length_squared() > 0.0:
+				decoy["position"] = clamp_to_arena(Vector2(decoy["position"]) + owner_delta.rotated(offset_angle))
+			decoy["owner_position"] = owner_position
 		decoy["lifetime"] = float(decoy["lifetime"]) - delta
-		decoy["sway_timer"] = float(decoy["sway_timer"]) - delta
-		if float(decoy["sway_timer"]) <= 0.0:
-			decoy["sway_timer"] = randf_range(2.0, 3.0)
-			decoy["position"] = decoy["origin"] + Vector2(randf_range(-24.0, 24.0), randf_range(-18.0, 18.0))
+		decoy["noise_timer"] = float(decoy.get("noise_timer", ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL)) - delta
+		decoy["noise_time"] = maxf(0.0, float(decoy.get("noise_time", 0.0)) - delta)
+		decoy["flash_time"] = maxf(0.0, float(decoy.get("flash_time", 0.0)) - delta)
+		if float(decoy["noise_timer"]) <= 0.0:
+			decoy["noise_timer"] = randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL)
+			decoy["noise_time"] = ARITHMETICIAN_DECOY_NOISE_DURATION
 		if float(decoy["lifetime"]) <= 0.0:
 			decoys.remove_at(index)
 		else:
@@ -1249,6 +1441,68 @@ func update_skill_projectiles(delta: float) -> void:
 			skill_projectiles[index] = projectile
 
 
+func update_hammer_spins(delta: float) -> void:
+	for index in range(hammer_spins.size() - 1, -1, -1):
+		var spin: Dictionary = hammer_spins[index]
+		var owner_id := int(spin["owner_id"])
+		if not players.has(owner_id):
+			hammer_spins.remove_at(index)
+			continue
+		spin["lifetime"] = float(spin["lifetime"]) - delta
+		spin["angle"] = fmod(float(spin["angle"]) + TYPIST_SKILL3_HAMMER_SPEED * delta, TAU)
+		spin["hit_timer"] = maxf(0.0, float(spin["hit_timer"]) - delta)
+		spin["keycap_timer"] = float(spin["keycap_timer"]) - delta
+		var owner: Dictionary = players[owner_id]
+		# 発動中は打鍵士自身もハンマーの回転に合わせて向きを変える。
+		owner["facing"] = Vector2.from_angle(float(spin["angle"]))
+		players[owner_id] = owner
+		var score := int(spin["score"])
+		var hammer_radius := 92.0 + float(score) * 0.42
+		var hammer_position := get_player_hitbox_center(owner["position"]) + Vector2.from_angle(float(spin["angle"])) * hammer_radius
+		var target_id := 2 if owner_id == 1 else 1
+		if float(spin["hit_timer"]) <= 0.0 and players.has(target_id) and is_point_near_hammer_segment(get_player_hitbox_center(players[target_id]["position"]), get_player_hitbox_center(owner["position"]), hammer_position, PLAYER_HITBOX_RADIUS_Y + 12.0):
+			apply_damage(target_id, 10 + floori(float(score) * 0.2), "ぶんまわし")
+			spin["hit_timer"] = TYPIST_SKILL3_HAMMER_HIT_INTERVAL
+		if score >= 60 and float(spin["keycap_timer"]) <= 0.0:
+			var facing: Vector2 = owner["facing"].normalized()
+			skill_projectiles.append({"projectile_id": next_projectile_id, "owner_id": owner_id, "position": hammer_position, "velocity": facing * 800.0, "damage": 10, "lifetime": 3.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": facing.angle(), "key_cap": true})
+			next_projectile_id += 1
+			spin["keycap_timer"] = TYPIST_SKILL3_KEYCAP_INTERVAL
+		if float(spin["lifetime"]) <= 0.0:
+			hammer_spins.remove_at(index)
+		else:
+			hammer_spins[index] = spin
+
+
+func typist_skill3_duration(score: int) -> float:
+	if score <= 30:
+		return 3.0
+	if score <= 50:
+		return lerpf(3.0, 6.0, float(score - 30) / 20.0)
+	if score <= 70:
+		return lerpf(6.0, 9.0, float(score - 50) / 20.0)
+	if score <= 90:
+		return lerpf(9.0, 13.0, float(score - 70) / 20.0)
+	return 13.0
+
+
+func typist_skill3_movement_multiplier(player_id: int) -> float:
+	for spin in hammer_spins:
+		if int(spin.get("owner_id", 0)) != player_id:
+			continue
+		var score := int(spin.get("score", 0))
+		if score <= 30:
+			return 0.8
+		if score <= 40:
+			return 0.9
+		if score <= 60:
+			return 1.0
+		if score < 80:
+			return 1.05
+		return 1.1
+	return 1.0
+
+
 func sync_key_cap_projectiles() -> void:
 	var active_ids: Dictionary = {}
 	for projectile in skill_projectiles:
@@ -1291,6 +1545,16 @@ func is_point_in_player_hitbox(point: Vector2, player_position: Vector2, padding
 	var radius_y: float = PLAYER_HITBOX_RADIUS_Y + padding
 	var normalized_point := point - center
 	return (normalized_point.x * normalized_point.x) / (radius_x * radius_x) + (normalized_point.y * normalized_point.y) / (radius_y * radius_y) <= 1.0
+
+
+func is_point_near_hammer_segment(point: Vector2, segment_start: Vector2, segment_end: Vector2, padding: float) -> bool:
+	var segment := segment_end - segment_start
+	var segment_length_squared := segment.length_squared()
+	if segment_length_squared <= 0.0:
+		return point.distance_squared_to(segment_start) <= padding * padding
+	var projection := clampf((point - segment_start).dot(segment) / segment_length_squared, 0.0, 1.0)
+	var nearest_point := segment_start + segment * projection
+	return point.distance_squared_to(nearest_point) <= padding * padding
 
 
 func can_move_player_to(player_id: int, next_position: Vector2) -> bool:
@@ -1468,14 +1732,12 @@ func create_skill_hud() -> void:
 	for definition in definitions:
 		var slot_name: String = ["SkillNormal", "SkillSmall", "SkillBig", "SkillBigAlt"][skill_widgets.size()]
 		var slot := hud_root.get_node(slot_name) as Control
-		var widget := slot.get_node_or_null("SkillDiamondWidget") as SkillDiamondWidget
-		if widget == null:
-			widget = SkillDiamondWidget.new()
-			widget.name = "SkillDiamondWidget"
-			widget.position = Vector2.ZERO
-		widget.configure(definition["texture"], definition["binding"], definition["size"], SKILL_PLACEHOLDER_ICON, definition["mask"], definition["center"], definition["badge"], definition["badge_radius"])
-		if widget.get_parent() == null:
-			slot.add_child(widget)
+		# Slot position and size are scene-authored so they remain editable in
+		# the Inspector. The definition values are kept as documentation/defaults
+		# only; runtime must not overwrite the user's HUD layout.
+		var widget := slot.get_node("SkillDiamondWidgetPrefab") as Node
+		var preview_icons: Array[Texture2D] = [SKILL_TYPIST_HAMMER, SKILL_TYPIST_KEYCAP, SKILL_TYPIST_TRIDENT, SKILL_EMPTY_ICON]
+		widget.call("configure", definition["texture"], definition["binding"], definition["size"], preview_icons[skill_widgets.size()], definition["mask"], definition["center"], definition["badge"], definition["badge_radius"], SKILL_THEME_TYPIST)
 		skill_widgets.append(widget)
 
 
@@ -1491,7 +1753,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	controls_label.visible = is_visible and network_mode == "practice"
 	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local"]
 	for widget in skill_widgets:
-		widget.visible = is_visible
+		widget.set("visible", is_visible)
 
 
 func set_challenge_overlay_visible(is_visible: bool) -> void:
@@ -1914,6 +2176,9 @@ func return_to_home() -> void:
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
+	arithmetic_flash_time = 0.0
+	arithmetic_flash_center = Vector2.ZERO
+	arithmetic_flash_owner_id = 0
 	match_state.reset()
 	players = match_state.players
 	phase = "lobby"
@@ -1924,7 +2189,7 @@ func return_to_home() -> void:
 	p1_ready = false
 	p2_ready = false
 	network_target_players.clear()
-	remote_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false}
+	remote_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false, "skill3": false}
 	show_home()
 
 
@@ -2054,8 +2319,14 @@ func update_character_screen() -> void:
 		var candidate_names := skill_candidate_names(visual_id, skill_index)
 		for candidate_index in 5:
 			var button := character_skill_rows[skill_index].get_child(candidate_index) as Button
-			button.text = candidate_names[candidate_index]
-			button.modulate = Color("fff0c9") if candidate_index == selected_index else Color("71809e")
+			var icon := get_skill_icon(visual_id, skill_index, candidate_index)
+			button.text = ""
+			button.tooltip_text = candidate_names[candidate_index]
+			button.icon = icon
+			button.expand_icon = true
+			button.custom_minimum_size = Vector2(76, 76)
+			button.modulate = Color.WHITE
+			style_character_skill_button(button, skill_theme_color(visual_id), candidate_index == selected_index)
 
 
 func skill_candidate_names(visual_id: String, skill_index: int) -> Array[String]:
@@ -2064,6 +2335,8 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array[String]
 	if visual_id == "typist" and skill_index == 1:
 		return ["三叉震槌", "鍵片追弾II", "未実装", "未実装", "未実装"]
 	if skill_index == 2:
+		if visual_id == "typist":
+			return ["ぶんまわし", "未実装", "未実装", "未実装", "未実装"]
 		return ["通常攻撃", "未実装", "未実装", "未実装", "未実装"]
 	return ["標準", "未実装", "未実装", "未実装", "未実装"]
 
@@ -2207,6 +2480,7 @@ func process_client_network_input(_delta: float) -> void:
 		"attack": Input.is_key_pressed(KEY_1),
 		"small": Input.is_key_pressed(KEY_2),
 		"big": Input.is_key_pressed(KEY_3),
+		"skill3": Input.is_key_pressed(KEY_4),
 	}
 	rpc_id(1, "receive_remote_input", pending_client_input)
 
@@ -2237,7 +2511,11 @@ func make_network_state() -> Dictionary:
 		"skill_projectiles": skill_projectiles,
 		"magic_zones": magic_zones,
 		"shockwaves": shockwaves,
+		"hammer_spins": hammer_spins,
 		"decoys": decoys,
+		"arithmetic_flash_time": arithmetic_flash_time,
+		"arithmetic_flash_center": arithmetic_flash_center,
+		"arithmetic_flash_owner_id": arithmetic_flash_owner_id,
 		"challenge_owner": challenge_owner,
 		"challenge_skill": challenge_skill,
 		"challenge_prompt": challenge_prompt,
@@ -2275,7 +2553,11 @@ func receive_network_state(state: Dictionary) -> void:
 	skill_projectiles = state["skill_projectiles"]
 	magic_zones = state["magic_zones"]
 	shockwaves = state.get("shockwaves", [])
+	hammer_spins = state.get("hammer_spins", [])
 	decoys = state.get("decoys", [])
+	arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
+	arithmetic_flash_center = state.get("arithmetic_flash_center", Vector2.ZERO)
+	arithmetic_flash_owner_id = int(state.get("arithmetic_flash_owner_id", 0))
 	var incoming_challenge_owner := int(state["challenge_owner"])
 	var incoming_challenge_skill := str(state["challenge_skill"])
 	if challenge_owner != incoming_challenge_owner or challenge_skill != incoming_challenge_skill:
@@ -2284,6 +2566,8 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_skill = incoming_challenge_skill
 	challenge_prompt = str(state["challenge_prompt"])
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
+	if challenge_skill == "skill3_typing":
+		challenge_answer = challenge_prompt
 	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if challenge_skill.ends_with("trace") else PackedVector2Array()
 	update_client_ui_from_state()
 
@@ -2402,6 +2686,7 @@ func show_lobby() -> void:
 	skill_projectiles.clear()
 	magic_zones.clear()
 	shockwaves.clear()
+	hammer_spins.clear()
 	lobby_home_button.visible = network_mode in ["host", "client"]
 	status_text = "キャラクターを選択してください。"
 	apply_screen_state("online_waiting" if network_mode in ["host", "client"] else "debug_waiting")
@@ -2497,6 +2782,9 @@ func reset_match_runtime_state() -> void:
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
+	arithmetic_flash_time = 0.0
+	arithmetic_flash_center = Vector2.ZERO
+	arithmetic_flash_owner_id = 0
 	challenge_owner = 0
 	challenge_skill = ""
 	challenge_prompt = ""
@@ -2524,6 +2812,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
 	player["big_skill_id"] = "typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else "typist_trident"
+	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ""
 	player["visual_id"] = visual_ids[selection]
 	player["name"] = names[selection]
 	player["color"] = colors[selection]
@@ -2535,6 +2824,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["attack_time"] = 0.0
 	player["hit_time"] = 0.0
 	player["buff_time"] = 0.0
+	player["buff_speed_multiplier"] = 1.0
 	player["attack_damage_buff"] = 0
 	player["invisible_time"] = 0.0
 	player["invisible_flicker"] = 0.0
@@ -2611,6 +2901,8 @@ func get_typist_skill_display_name() -> String:
 func update_challenge_ui(elapsed: float) -> void:
 	var challenge_player: Dictionary = players[challenge_owner] if challenge_owner in players else {}
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
+	if challenge_skill == "skill3_typing":
+		skill_name = "ぶんまわし（スキル3）"
 	challenge_title_label.text = skill_name
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = get_challenge_time_limit()
@@ -2642,16 +2934,95 @@ func update_hud() -> void:
 	if not players.has(hud_player_id):
 		return
 	var own_player: Dictionary = players[hud_player_id]
+	configure_skill_icons(own_player)
 	player_one_label.text = "HP %d" % int(own_player["hp"])
 	hp_bar.value = int(own_player["hp"])
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
-		skill_widgets[0].set_cooldown(float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
-		skill_widgets[1].set_cooldown(float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
+		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
+		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
 		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
-		skill_widgets[2].set_cooldown(float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
-		skill_widgets[3].set_cooldown(1.0, 1.0, true)
+		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
+		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), TYPIST_SKILL3_COOLDOWN, is_focused)
 	timer_label.text = "残り %02d秒" % ceili(match_state.time_remaining)
+
+
+func configure_skill_icons(player: Dictionary) -> void:
+	if skill_widgets.size() < 4:
+		return
+	var visual_id := str(player.get("visual_id", "typist"))
+	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
+	var signature := "%s|%s|%s|%s" % [visual_id, str(selected_skills[0]), str(selected_skills[1]), str(selected_skills[2])]
+	if signature == skill_hud_signature:
+		return
+	skill_hud_signature = signature
+	var icons: Array[Texture2D] = [
+		SKILL_EMPTY_ICON,
+		get_skill_icon(visual_id, 0, int(selected_skills[0])),
+		get_skill_icon(visual_id, 1, int(selected_skills[1])),
+		get_skill_icon(visual_id, 2, int(selected_skills[2])),
+	]
+	# 通常攻撃は専用アイコンが用意されている打鍵士だけ表示する。
+	if visual_id == "typist":
+		icons[0] = SKILL_TYPIST_HAMMER
+	var theme_color := skill_theme_color(visual_id)
+	var definitions := [
+		{"texture": SKILL_DIAMOND_SMALL, "mask": SKILL_HOLE_MASK_SMALL, "center": Vector2(0.5, 0.427), "badge": Vector2(0.5, 0.765), "badge_radius": 0.053, "binding": "1", "size": Vector2(112, 112)},
+		{"texture": SKILL_DIAMOND_MEDIUM, "mask": SKILL_HOLE_MASK_MEDIUM, "center": Vector2(0.5, 0.437), "badge": Vector2(0.5, 0.785), "badge_radius": 0.062, "binding": "2", "size": Vector2(142, 142)},
+		{"texture": SKILL_DIAMOND_LARGE, "mask": SKILL_HOLE_MASK_LARGE, "center": Vector2(0.5, 0.401), "badge": Vector2(0.5, 0.775), "badge_radius": 0.081, "binding": "3", "size": Vector2(180, 180)},
+		{"texture": SKILL_DIAMOND_LARGE, "mask": SKILL_HOLE_MASK_LARGE, "center": Vector2(0.5, 0.401), "badge": Vector2(0.5, 0.775), "badge_radius": 0.081, "binding": "4", "size": Vector2(180, 180)},
+	]
+	for index in 4:
+		var definition: Dictionary = definitions[index]
+		skill_widgets[index].call("configure", definition["texture"], definition["binding"], definition["size"], icons[index], definition["mask"], definition["center"], definition["badge"], definition["badge_radius"], theme_color)
+
+
+func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) -> Texture2D:
+	if visual_id == "typist":
+		if skill_index == 0:
+			return SKILL_TYPIST_KEYCAP
+		if skill_index == 1:
+			return SKILL_TYPIST_KEYCAP_II if selected_index == 1 else SKILL_TYPIST_TRIDENT
+		if skill_index == 2:
+			return SKILL_TYPIST_HAMMER if selected_index == 0 else SKILL_EMPTY_ICON
+		return SKILL_EMPTY_ICON
+	if selected_index != 0:
+		return SKILL_EMPTY_ICON
+	if visual_id == "arithmetician":
+		return SKILL_ARITHMETICIAN_INFINITE_SERIES if skill_index == 0 else SKILL_ARITHMETICIAN_CONVERGENCE
+	if visual_id == "chanter":
+		return SKILL_CHANTER_CIRCLE_DESCENT if skill_index == 0 else SKILL_CHANTER_STELLAR_BARRAGE
+	return SKILL_EMPTY_ICON
+
+
+func skill_theme_color(visual_id: String) -> Color:
+	match visual_id:
+		"arithmetician": return SKILL_THEME_ARITHMETICIAN
+		"chanter": return SKILL_THEME_CHANTER
+		_: return SKILL_THEME_TYPIST
+
+
+func style_character_skill_button(button: Button, theme_color: Color, is_selected: bool) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = theme_color
+	normal.border_color = Color("E6B072") if is_selected else theme_color.lightened(0.22)
+	normal.set_border_width_all(3 if is_selected else 1)
+	normal.set_corner_radius_all(4)
+	normal.content_margin_left = 8.0
+	normal.content_margin_right = 8.0
+	normal.content_margin_top = 8.0
+	normal.content_margin_bottom = 8.0
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = theme_color.lightened(0.10)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = theme_color.darkened(0.10)
+	var focus := normal.duplicate() as StyleBoxFlat
+	focus.border_color = Color("FFF2B0")
+	focus.set_border_width_all(3)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", focus)
 
 
 func format_debug_hud_player(player_id: int) -> String:
@@ -2679,6 +3050,8 @@ func _draw() -> void:
 	draw_arena()
 	# 条件式の配列リテラルは未型付きArrayになるため、ここでは推論型で受ける。
 	var draw_player_ids := [1] if network_mode == "practice" else [1, 2]
+	for spin in hammer_spins:
+		draw_hammer_spin(spin)
 	for player_id in draw_player_ids:
 		draw_player(player_id, players[player_id])
 	for projectile in skill_projectiles:
@@ -2690,8 +3063,8 @@ func _draw() -> void:
 		draw_arc(wave["origin"], float(wave["radius"]), 0.0, TAU, 48, Color(1.0, 0.76, 0.42, wave_alpha), 7.0, true)
 	for decoy in decoys:
 		var decoy_owner_id := int(decoy["owner_id"])
-		var alpha := 0.22 if decoy_owner_id == local_player_id else 0.72
-		draw_decoy(decoy, alpha)
+		var decoy_alpha := ARITHMETICIAN_DECOY_THIN_ALPHA if decoy_owner_id == local_player_id else ARITHMETICIAN_DECOY_NORMAL_ALPHA
+		draw_decoy(decoy, decoy_alpha)
 	for zone in magic_zones:
 		if not bool(zone.get("spawned", false)):
 			continue
@@ -2701,6 +3074,7 @@ func _draw() -> void:
 		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, zone_alpha))
 		draw_arc(zone["position"], 80.0, 0.0, TAU, 32, Color("c7a6ff"), 3.0, true)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_arithmetic_flash()
 
 
 func get_world_draw_offset() -> Vector2:
@@ -2742,14 +3116,6 @@ func get_character_texture(visual_id: String) -> Texture2D:
 	if visual_id == "chanter":
 		return CHANTER_TEXTURE
 	return TYPIST_TEXTURE
-
-
-func get_normal_attack_texture(visual_id: String) -> Texture2D:
-	if visual_id == "arithmetician":
-		return ARITHMETICIAN_NORMAL_ATTACK_TEXTURE
-	if visual_id == "chanter":
-		return CHANTER_NORMAL_ATTACK_TEXTURE
-	return TYPIST_NORMAL_ATTACK_TEXTURE
 
 
 func get_normal_attack_weapon_texture(visual_id: String) -> Texture2D:
@@ -2969,13 +3335,67 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-5.0, 5.0), str(projectile["chip"]), HORIZONTAL_ALIGNMENT_CENTER, 10.0, 10, Color("17213d"))
 
 
+func draw_hammer_spin(spin: Dictionary) -> void:
+	var owner_id := int(spin.get("owner_id", 0))
+	if not players.has(owner_id):
+		return
+	var owner: Dictionary = players[owner_id]
+	var center: Vector2 = get_player_hitbox_center(owner["position"])
+	var score := int(spin.get("score", 0))
+	var radius := 92.0 + float(score) * 0.42
+	var source_size := TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE.get_size()
+	var normalized_source_size := Vector2(source_size) / float(maxi(source_size.x, source_size.y))
+	var normalized_tip_offset := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * normalized_source_size
+	var weapon_canvas_size := radius / normalized_tip_offset.length()
+	var weapon_size := normalized_source_size * weapon_canvas_size
+	var handle_to_tip := (WEAPON_TIP_UV - WEAPON_HANDLE_UV) * weapon_size
+	var rotation := float(spin.get("angle", 0.0)) - handle_to_tip.angle()
+	draw_set_transform(center + get_world_draw_offset(), rotation, Vector2.ONE)
+	draw_texture_rect(TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE, Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size), false)
+	draw_set_transform(get_world_draw_offset())
+
+
 func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 	var visual_id := str(decoy.get("visual_id", "arithmetician"))
 	var facing: Vector2 = decoy.get("facing", Vector2.DOWN)
 	var texture := get_character_texture(visual_id)
-	var source_rect := Rect2(get_sprite_direction_column(facing) * 64.0, 0.0, 64.0, 64.0)
+	var animation_row := 0
+	if bool(decoy.get("is_moving", false)):
+		animation_row = 1 + (int(floor((character_animation_elapsed + float(decoy.get("animation_phase", 0.0))) * 8.0)) % 4)
+	var source_rect := Rect2(get_sprite_direction_column(facing) * 64.0, animation_row * 64.0, 64.0, 64.0)
 	var position_value: Vector2 = decoy["position"]
-	draw_texture_rect_region(texture, Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0)), source_rect, Color(1.0, 1.0, 1.0, alpha))
+	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
+	var flash_ratio := clampf(float(decoy.get("flash_time", 0.0)) / ARITHMETICIAN_DECOY_FLASH_DURATION, 0.0, 1.0)
+	if flash_ratio > 0.0:
+		draw_circle(position_value + Vector2(0.0, -12.0), 42.0 + 10.0 * (1.0 - flash_ratio), Color(0.20, 0.65, 1.0, 0.20 * flash_ratio))
+	var noise_ratio := clampf(float(decoy.get("noise_time", 0.0)) / ARITHMETICIAN_DECOY_NOISE_DURATION, 0.0, 1.0)
+	var sprite_color := Color(0.55, 0.85, 1.0, alpha) if flash_ratio > 0.0 else Color(1.0, 1.0, 1.0, alpha)
+	if noise_ratio > 0.0:
+		var phase := float(decoy.get("noise_phase", 0.0)) + character_animation_elapsed * 80.0
+		var jitter := Vector2(sin(phase) * 3.0, cos(phase * 1.37) * 1.5) * noise_ratio
+		draw_texture_rect_region(texture, Rect2(sprite_rect.position + jitter, sprite_rect.size), source_rect, Color(0.25, 0.85, 1.0, 0.28 * noise_ratio * alpha))
+		draw_texture_rect_region(texture, Rect2(sprite_rect.position - jitter, sprite_rect.size), source_rect, Color(0.35, 0.65, 1.0, 0.24 * noise_ratio * alpha))
+	draw_texture_rect_region(texture, sprite_rect, source_rect, sprite_color)
+	if noise_ratio > 0.0:
+		for strip_index in range(3):
+			var strip_y := sprite_rect.position.y + 12.0 + float(strip_index) * 17.0
+			draw_rect(Rect2(sprite_rect.position.x, strip_y, sprite_rect.size.x, 3.0), Color(0.35, 0.85, 1.0, 0.32 * noise_ratio * alpha), true)
+
+
+func draw_arithmetic_flash() -> void:
+	if arithmetic_flash_time <= 0.0 or arithmetic_flash_owner_id == 0:
+		return
+	var camera_player_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	if not players.has(camera_player_id):
+		return
+	var camera_position: Vector2 = players[camera_player_id]["position"]
+	var owner_position: Vector2 = arithmetic_flash_center
+	var owner_is_visible := camera_player_id == arithmetic_flash_owner_id
+	var target_is_visible := players.has(1 if arithmetic_flash_owner_id == 2 else 2) and camera_position.distance_to(owner_position) <= ARITHMETICIAN_FLASH_RADIUS
+	if not owner_is_visible and not target_is_visible:
+		return
+	var ratio := clampf(arithmetic_flash_time / ARITHMETICIAN_FLASH_DURATION, 0.0, 1.0)
+	draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color(0.20, 0.55, 1.0, 0.16 * ratio), true)
 
 
 func _input(event: InputEvent) -> void:

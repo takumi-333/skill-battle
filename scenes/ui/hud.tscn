@@ -8,6 +8,9 @@
 [ext_resource type="Texture2D" uid="uid://8u4udnaltlir" path="res://assets/ui/skill_diamond_frames/skill_diamond_medium_ready.png" id="6_4d46k"]
 [ext_resource type="Texture2D" uid="uid://dvikb31et2vun" path="res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png" id="7_erw67"]
 [ext_resource type="Texture2D" uid="uid://booxe07v1p745" path="res://assets/ui/skill_diamond_frames/skill_diamond_large_ready.png" id="8_gonto"]
+[ext_resource type="PackedScene" uid="uid://8myqef231sf1" path="res://scenes/ui/skill_diamond_small.tscn" id="9_small"]
+[ext_resource type="PackedScene" uid="uid://dcmhvhexphowe" path="res://scenes/ui/skill_diamond_medium.tscn" id="10_medium"]
+[ext_resource type="PackedScene" uid="uid://bscmax44jdtw2" path="res://scenes/ui/skill_diamond_large.tscn" id="11_large"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yc10j"]
 bg_color = Color(0.02745098, 0.043137256, 0.078431375, 1)
@@ -359,6 +362,7 @@ offset_right = 1164.0
 offset_bottom = 690.0
 
 [node name="SkillDiamondWidget" type="Control" parent="SkillNormal" unique_id=1724171971]
+visible = false
 custom_minimum_size = Vector2(112, 112)
 anchors_preset = 0
 offset_right = 112.0
@@ -407,6 +411,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="_Control_64817" type="Control" parent="SkillNormal" unique_id=965466694]
+visible = false
 custom_minimum_size = Vector2(112, 112)
 anchors_preset = 0
 offset_right = 112.0
@@ -454,6 +459,13 @@ text = "1"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SkillDiamondWidgetPrefab" parent="SkillNormal" unique_id=1819665949 instance=ExtResource("9_small")]
+layout_mode = 0
+offset_left = 13.0
+offset_top = -4.0
+offset_right = 125.0
+offset_bottom = 108.0
+
 [node name="SkillSmall" type="Control" parent="." unique_id=1236887090]
 anchors_preset = 0
 offset_left = 1114.0
@@ -462,6 +474,7 @@ offset_right = 1256.0
 offset_bottom = 657.0
 
 [node name="SkillDiamondWidget" type="Control" parent="SkillSmall" unique_id=1043151569]
+visible = false
 custom_minimum_size = Vector2(142, 142)
 anchors_preset = 0
 offset_right = 142.0
@@ -510,6 +523,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="_Control_64822" type="Control" parent="SkillSmall" unique_id=370749898]
+visible = false
 custom_minimum_size = Vector2(142, 142)
 anchors_preset = 0
 offset_right = 142.0
@@ -557,6 +571,13 @@ text = "2"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SkillDiamondWidgetPrefab" parent="SkillSmall" unique_id=378183143 instance=ExtResource("10_medium")]
+layout_mode = 0
+offset_left = 15.0
+offset_top = -16.0
+offset_right = 157.0
+offset_bottom = 126.0
+
 [node name="SkillBig" type="Control" parent="." unique_id=1904904450]
 anchors_preset = 0
 offset_left = 928.0
@@ -565,6 +586,7 @@ offset_right = 1108.0
 offset_bottom = 681.0
 
 [node name="SkillDiamondWidget" type="Control" parent="SkillBig" unique_id=45483183]
+visible = false
 custom_minimum_size = Vector2(180, 180)
 anchors_preset = 0
 offset_right = 180.0
@@ -613,6 +635,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="_Control_64827" type="Control" parent="SkillBig" unique_id=2119192355]
+visible = false
 custom_minimum_size = Vector2(180, 180)
 anchors_preset = 0
 offset_right = 180.0
@@ -660,6 +683,13 @@ text = "3"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SkillDiamondWidgetPrefab" parent="SkillBig" unique_id=1266065617 instance=ExtResource("11_large")]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 3.0
+offset_right = 184.0
+offset_bottom = 183.0
+
 [node name="SkillBigAlt" type="Control" parent="." unique_id=1812304721]
 anchors_preset = 0
 offset_left = 1017.0
@@ -668,6 +698,7 @@ offset_right = 1197.0
 offset_bottom = 590.0
 
 [node name="SkillDiamondWidget" type="Control" parent="SkillBigAlt" unique_id=1385789086]
+visible = false
 custom_minimum_size = Vector2(180, 180)
 anchors_preset = 0
 offset_right = 180.0
@@ -716,6 +747,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="_Control_64832" type="Control" parent="SkillBigAlt" unique_id=575904465]
+visible = false
 custom_minimum_size = Vector2(180, 180)
 anchors_preset = 0
 offset_right = 180.0
@@ -762,3 +794,10 @@ theme_override_font_sizes/font_size = 15
 text = "4"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="SkillDiamondWidgetPrefab" parent="SkillBigAlt" unique_id=1857946003 instance=ExtResource("11_large")]
+layout_mode = 0
+offset_left = 5.0
+offset_top = -1.0
+offset_right = 185.0
+offset_bottom = 179.0

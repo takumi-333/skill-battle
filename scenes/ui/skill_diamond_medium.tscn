@@ -1,0 +1,101 @@
+[gd_scene format=3 uid="uid://dcmhvhexphowe"]
+
+[ext_resource type="PackedScene" uid="uid://d08oiin2drpew" path="res://scenes/ui/skill_diamond_widget.tscn" id="1_base"]
+[ext_resource type="Texture2D" uid="uid://8u4udnaltlir" path="res://assets/ui/skill_diamond_frames/skill_diamond_medium_ready.png" id="2_frame"]
+[ext_resource type="Texture2D" uid="uid://s3d4gi32nk8f" path="res://assets/ui/skill_diamond_frames/skill_diamond_medium_hole_mask.png" id="3_mask"]
+
+[sub_resource type="Shader" id="Shader_icyse"]
+code = "
+	shader_type canvas_item;
+	uniform float progress = 1.0;
+	uniform bool unavailable = false;
+	uniform sampler2D hole_mask;
+	uniform vec2 hole_center = vec2(0.5, 0.43);
+	void fragment() {
+		if (texture(hole_mask, UV).a < 0.5) discard;
+		vec4 source = texture(TEXTURE, UV);
+		if (false) {
+			vec2 point = UV - hole_center;
+			float angle = atan(point.x, -point.y);
+			if (angle < 0.0) angle += 6.28318530718;
+			float lit = step(angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		} else {
+			COLOR = source;
+		}
+	}
+	"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_1xrdv"]
+shader = SubResource("Shader_icyse")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("3_mask")
+shader_parameter/hole_center = Vector2(0.5, 0.43)
+
+[sub_resource type="Gradient" id="Gradient_g36mf"]
+colors = PackedColorArray(0.14494118, 0.19184314, 0.16658825, 1, 0.059294123, 0.10211765, 0.079058826, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_pjetu"]
+gradient = SubResource("Gradient_g36mf")
+width = 256
+height = 256
+fill_from = Vector2(0.5, 0)
+fill_to = Vector2(0.5, 1)
+
+[sub_resource type="Shader" id="Shader_7bm2n"]
+code = "
+	shader_type canvas_item;
+	uniform float progress = 1.0;
+	uniform bool unavailable = false;
+	uniform sampler2D hole_mask;
+	uniform vec2 hole_center = vec2(0.5, 0.43);
+	void fragment() {
+		if (texture(hole_mask, UV).a < 0.5) discard;
+		vec4 source = texture(TEXTURE, UV);
+		if (true) {
+			vec2 point = UV - hole_center;
+			float angle = atan(point.x, -point.y);
+			if (angle < 0.0) angle += 6.28318530718;
+			float lit = step(angle, progress * 6.28318530718);
+			float brightness = unavailable ? 0.16 : mix(0.18, 1.0, lit);
+			COLOR = vec4(source.rgb * brightness, source.a);
+		} else {
+			COLOR = source;
+		}
+	}
+	"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_8agg7"]
+shader = SubResource("Shader_7bm2n")
+shader_parameter/progress = 1.0
+shader_parameter/unavailable = false
+shader_parameter/hole_mask = ExtResource("3_mask")
+shader_parameter/hole_center = Vector2(0.5, 0.401)
+
+[node name="SkillDiamondMedium" unique_id=2023948426 instance=ExtResource("1_base")]
+custom_minimum_size = Vector2(142, 142)
+offset_right = 142.0
+offset_bottom = 142.0
+preview_frame = ExtResource("2_frame")
+preview_hole_mask = ExtResource("3_mask")
+preview_key = "2"
+
+[node name="Background" parent="." index="0" unique_id=363655734]
+material = SubResource("ShaderMaterial_1xrdv")
+texture = SubResource("GradientTexture2D_pjetu")
+
+[node name="Icon" parent="." index="1" unique_id=722608361]
+material = SubResource("ShaderMaterial_8agg7")
+
+[node name="Frame" parent="." index="2" unique_id=1647679511]
+texture = ExtResource("2_frame")
+
+[node name="KeyLabel" parent="." index="3" unique_id=467882769]
+offset_left = -27.000004
+offset_top = 7.6999893
+offset_right = 45.0
+offset_bottom = 37.69999
+scale = Vector2(0.755, 0.755)
+text = "2"

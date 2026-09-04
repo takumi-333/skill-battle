@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://dgxqih6pjxjtp" path="res://scripts/match_prototype.gd" id="1_match"]
 [ext_resource type="Resource" uid="uid://b3b81awgvecge" path="res://resources/menu_layout.tres" id="2_menu_layout"]
 [ext_resource type="PackedScene" path="res://scenes/ui/menu_background.tscn" id="3_yq6so"]
-[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_fv21b"]
+[ext_resource type="PackedScene" uid="uid://bimgye7r4idai" path="res://scenes/ui/hud.tscn" id="5_fv21b"]
 [ext_resource type="Script" uid="uid://daqjnsqvf4ct1" path="res://scripts/ui_trace_canvas.gd" id="7_trace"]
 [ext_resource type="PackedScene" uid="uid://bqr00m77mt8tx" path="res://scenes/ui/lobby_screen.tscn" id="14_tel4y"]
 [ext_resource type="AudioStream" uid="uid://mrar0ioa71qq" path="res://assets/audio/ui_click.wav" id="17_2wyq8"]
@@ -14,9 +14,9 @@
 [ext_resource type="PackedScene" uid="uid://b0p7ned1tbk0q" path="res://scenes/ui/home_screen.tscn" id="23_j8jky"]
 [ext_resource type="PackedScene" uid="uid://ivc74gheh83m" path="res://scenes/ui/practice_screen.tscn" id="25_kmb1v"]
 [ext_resource type="PackedScene" uid="uid://dryw4nkuq3y4u" path="res://scenes/ui/debug_screen.tscn" id="26_fuf3a"]
-[ext_resource type="PackedScene" path="res://scenes/ui/character_screen.tscn" id="27_character"]
+[ext_resource type="PackedScene" uid="uid://db64jtnbdduy2" path="res://scenes/ui/character_screen.tscn" id="27_character"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a8y0u"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jkv2x"]
 bg_color = Color(0, 0, 0, 0)
 border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
 corner_radius_top_left = 12
@@ -24,17 +24,9 @@ corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jkv2x"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jbj1t"]
 bg_color = Color(0.06666667, 0.105882354, 0.20392157, 0.9607843)
 border_color = Color(1, 0.76862746, 0.36862746, 1)
-corner_radius_top_left = 12
-corner_radius_top_right = 12
-corner_radius_bottom_right = 12
-corner_radius_bottom_left = 12
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jbj1t"]
-bg_color = Color(0, 0, 0, 0)
-border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
 corner_radius_top_left = 12
 corner_radius_top_right = 12
 corner_radius_bottom_right = 12
@@ -43,20 +35,28 @@ corner_radius_bottom_left = 12
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_muem4"]
 bg_color = Color(0, 0, 0, 0)
 border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dp3eg"]
 bg_color = Color(0, 0, 0, 0)
-border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
+border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0ld40"]
 bg_color = Color(0, 0, 0, 0)
-border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
+border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gqmmt"]
 bg_color = Color(0, 0, 0, 0)
-border_color = Color(1, 0.76862746, 0.36862746, 1)
+border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yc10j"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(1, 0.76862746, 0.36862746, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jscy8"]
 bg_color = Color(0.06666667, 0.105882354, 0.20392157, 0.9098039)
 border_width_left = 2
 border_width_top = 2
@@ -68,14 +68,14 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jscy8"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pm3ni"]
 bg_color = Color(0.14901961, 0.20392157, 0.32156864, 1)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pm3ni"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_y6deb"]
 bg_color = Color(1, 0.76862746, 0.36862746, 1)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
@@ -85,6 +85,7 @@ corner_radius_bottom_left = 4
 [node name="MatchPrototype" type="Node2D" unique_id=480063608]
 script = ExtResource("1_match")
 menu_layout = ExtResource("2_menu_layout")
+metadata/_edit_horizontal_guides_ = [1382.0]
 
 [node name="UIRoot" type="CanvasLayer" parent="." unique_id=362002795]
 metadata/editor_ui_preview = true
@@ -94,32 +95,32 @@ metadata/editor_ui_preview = true
 [node name="HUD" parent="UIRoot" unique_id=141761890 instance=ExtResource("5_fv21b")]
 
 [node name="Lobby" parent="UIRoot" unique_id=1458327289 instance=ExtResource("14_tel4y")]
-theme_override_styles/panel = SubResource("StyleBoxFlat_a8y0u")
+theme_override_styles/panel = SubResource("StyleBoxFlat_jkv2x")
 
 [node name="Result" parent="UIRoot" unique_id=1656071126 instance=ExtResource("19_qkpxi")]
 visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_jkv2x")
+theme_override_styles/panel = SubResource("StyleBoxFlat_jbj1t")
 
 [node name="Connection" parent="UIRoot" unique_id=2103258824 instance=ExtResource("20_5q0nq")]
-theme_override_styles/panel = SubResource("StyleBoxFlat_jbj1t")
+theme_override_styles/panel = SubResource("StyleBoxFlat_muem4")
 
 [node name="Title" parent="UIRoot" unique_id=2107525488 instance=ExtResource("21_dgi5k")]
 visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_muem4")
+theme_override_styles/panel = SubResource("StyleBoxFlat_dp3eg")
 
 [node name="Home" parent="UIRoot" unique_id=2035756316 instance=ExtResource("23_j8jky")]
 visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_dp3eg")
+theme_override_styles/panel = SubResource("StyleBoxFlat_0ld40")
 
 [node name="Practice" parent="UIRoot" unique_id=215515393 instance=ExtResource("25_kmb1v")]
 visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_0ld40")
+theme_override_styles/panel = SubResource("StyleBoxFlat_gqmmt")
 
 [node name="Debug" parent="UIRoot" unique_id=12031905 instance=ExtResource("26_fuf3a")]
 visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_gqmmt")
+theme_override_styles/panel = SubResource("StyleBoxFlat_yc10j")
 
-[node name="Character" parent="UIRoot" instance=ExtResource("27_character")]
+[node name="Character" parent="UIRoot" unique_id=1631461301 instance=ExtResource("27_character")]
 
 [node name="ChallengeLayer" type="CanvasLayer" parent="." unique_id=470598353]
 layer = 2
@@ -138,7 +139,7 @@ offset_left = 250.0
 offset_top = 185.0
 offset_right = 1030.0
 offset_bottom = 585.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/panel = SubResource("StyleBoxFlat_jscy8")
 
 [node name="Content" type="VBoxContainer" parent="ChallengeLayer/Challenge" unique_id=1619514541]
 layout_mode = 2
@@ -147,8 +148,8 @@ theme_override_constants/separation = 10
 [node name="TimeBar" type="ProgressBar" parent="ChallengeLayer/Challenge/Content" unique_id=1458569988]
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2
-theme_override_styles/background = SubResource("StyleBoxFlat_jscy8")
-theme_override_styles/fill = SubResource("StyleBoxFlat_pm3ni")
+theme_override_styles/background = SubResource("StyleBoxFlat_pm3ni")
+theme_override_styles/fill = SubResource("StyleBoxFlat_y6deb")
 max_value = 1.0
 value = 1.0
 show_percentage = false
