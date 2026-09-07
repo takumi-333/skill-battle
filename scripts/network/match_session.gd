@@ -105,11 +105,12 @@ func _reset_simulation_preserving_loadouts() -> void:
 		loadouts[slot] = {
 			"character": _character_index(str(player.get("character_id", "blade"))),
 			"big_skill": str(player.get("big_skill_id", "typist_trident")),
+			"display_name": str(player.get("name", "")),
 		}
 	simulation.reset()
 	for slot in [1, 2]:
 		var loadout: Dictionary = loadouts[slot]
-		simulation.configure_loadout(slot, int(loadout["character"]), str(loadout["big_skill"]))
+		simulation.configure_loadout(slot, int(loadout["character"]), str(loadout["big_skill"]), str(loadout["display_name"]))
 
 
 func _character_index(character_id: String) -> int:

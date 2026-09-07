@@ -61,7 +61,7 @@ func reset() -> void:
 	configure_loadout(1, 0, "typist_trident")
 	configure_loadout(2, 1, "typist_trident")
 
-func configure_loadout(slot: int, character: int, big_skill: String) -> void:
+func configure_loadout(slot: int, character: int, big_skill: String, display_name: String = "") -> void:
 	if not state["players"].has(slot):
 		return
 	var player: Dictionary = state["players"][slot]
@@ -71,7 +71,9 @@ func configure_loadout(slot: int, character: int, big_skill: String) -> void:
 	var colors := [Color("ef6b73"), Color("7498ff"), Color("b98aff")]
 	player["character_id"] = ids[character]
 	player["visual_id"] = visuals[character]
-	player["name"] = names[character]
+	var sanitized_display_name := display_name.strip_edges()
+	player["name"] = sanitized_display_name if not sanitized_display_name.is_empty() else names[character]
+	player["has_display_name"] = not sanitized_display_name.is_empty()
 	player["color"] = colors[character]
 	player["normal_damage"] = [12, 10, 11][character]
 	player["small_skill_id"] = "%s_small_0" % ids[character]
@@ -90,7 +92,7 @@ func handle_event(slot: int, event: Dictionary) -> bool:
 	match event_type:
 		"loadout":
 			var setup: Dictionary = payload
-			configure_loadout(slot, int(setup["character"]), str(setup["big_skill"]))
+			configure_loadout(slot, int(setup["character"]), str(setup["big_skill"]), str(setup.get("display_name", "")))
 			return true
 		"attack":
 			return _try_normal_attack(slot)

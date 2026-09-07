@@ -1,6 +1,8 @@
 [gd_scene format=3 uid="uid://b0p7ned1tbk0q"]
 
 [ext_resource type="Texture2D" uid="uid://dmr80hkkao2i4" path="res://assets/ui/button_primary.png" id="2_fl3wj"]
+[ext_resource type="Texture2D" path="res://assets/ui/icon_user_settings.png" id="3_user_settings"]
+[ext_resource type="Texture2D" path="res://assets/ui/icon_close.png" id="4_close"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_r4ag1"]
 bg_color = Color(0, 0, 0, 0)
@@ -73,13 +75,125 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_4ue30")
 text = "オンライン対戦"
 metadata/ui_callback_bound = true
 
+[node name="SettingsIcon" type="TextureRect" parent="."]
+z_index = 2
+layout_mode = 0
+offset_left = 758.0
+offset_top = 20.0
+offset_right = 818.0
+offset_bottom = 80.0
+mouse_filter = 2
+texture = ExtResource("3_user_settings")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="SettingsButton" type="Button" parent="."]
+z_index = 10
+layout_mode = 0
+offset_left = 750.0
+offset_top = 12.0
+offset_right = 826.0
+offset_bottom = 88.0
+tooltip_text = "ユーザー設定"
+theme_override_styles/normal = SubResource("StyleBoxEmpty_vrx01")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_1uevf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_tc087")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_73205")
+
+[node name="UserSettingsModal" type="Control" parent="."]
+visible = false
+z_index = 100
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 0
+
+[node name="Dimmer" type="ColorRect" parent="UserSettingsModal"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 0
+color = Color(0.015, 0.02, 0.055, 0.82)
+
+[node name="Panel" type="Panel" parent="UserSettingsModal"]
+layout_mode = 0
+offset_left = 365.0
+offset_top = 185.0
+offset_right = 915.0
+offset_bottom = 535.0
+mouse_filter = 0
+
+[node name="Title" type="Label" parent="UserSettingsModal/Panel"]
+layout_mode = 0
+offset_left = 48.0
+offset_top = 35.0
+offset_right = 420.0
+offset_bottom = 85.0
+theme_override_font_sizes/font_size = 28
+text = "ユーザー設定"
+
+[node name="NameLabel" type="Label" parent="UserSettingsModal/Panel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 118.0
+offset_right = 440.0
+offset_bottom = 154.0
+theme_override_font_sizes/font_size = 18
+text = "ユーザー名（20文字まで）"
+
+[node name="NameInput" type="LineEdit" parent="UserSettingsModal/Panel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 160.0
+offset_right = 500.0
+offset_bottom = 215.0
+max_length = 20
+placeholder_text = "ユーザー名を入力"
+
+[node name="Validation" type="Label" parent="UserSettingsModal/Panel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 226.0
+offset_right = 500.0
+offset_bottom = 258.0
+theme_override_colors/font_color = Color(1, 0.55, 0.48, 1)
+
+[node name="SaveButton" type="Button" parent="UserSettingsModal/Panel"]
+layout_mode = 0
+offset_left = 292.0
+offset_top = 280.0
+offset_right = 500.0
+offset_bottom = 328.0
+text = "保存"
+
+[node name="CloseIcon" type="TextureRect" parent="UserSettingsModal/Panel"]
+z_index = 2
+layout_mode = 0
+offset_left = 482.0
+offset_top = 18.0
+offset_right = 526.0
+offset_bottom = 62.0
+mouse_filter = 2
+texture = ExtResource("4_close")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CloseButton" type="Button" parent="UserSettingsModal/Panel"]
+z_index = 3
+layout_mode = 0
+offset_left = 476.0
+offset_top = 12.0
+offset_right = 534.0
+offset_bottom = 70.0
+tooltip_text = "閉じる"
+
 [node name="PracticeButton" type="Button" parent="." unique_id=1082743163]
 z_index = 10
 layout_mode = 0
 offset_left = 755.42
-offset_top = 59.16
+offset_top = 101.16
 offset_right = 1199.4202
-offset_bottom = 193.16
+offset_bottom = 235.16
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_k42av")
@@ -126,9 +240,9 @@ expand_mode = 1
 z_index = 10
 layout_mode = 0
 offset_left = 756.0
-offset_top = 539.0
+offset_top = 581.0
 offset_right = 1156.0
-offset_bottom = 669.0
+offset_bottom = 711.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_0tljd")
@@ -142,9 +256,9 @@ metadata/ui_callback_bound = true
 z_index = 10
 layout_mode = 0
 offset_left = 749.0
-offset_top = 296.0
+offset_top = 338.0
 offset_right = 1229.0
-offset_bottom = 426.0
+offset_bottom = 468.0
 tooltip_text = "キャラクター育成画面は準備中です"
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20

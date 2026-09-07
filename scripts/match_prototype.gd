@@ -414,6 +414,7 @@ var pending_client_input: Dictionary = {}
 var network_target_players: Dictionary = {}
 var character_animation_elapsed: float = 0.0
 var title_animation_elapsed: float = 0.0
+var user_display_name := "プレイヤー"
 
 var player_one_label: Label
 var player_two_label: Label
@@ -467,6 +468,10 @@ const DEDICATED_INTERPOLATION_SECONDS := 1.0 / 20.0
 var title_panel: Panel
 var title_prompt: Label
 var home_panel: Panel
+var user_settings_modal: Control
+var user_settings_panel: Panel
+var user_settings_name_input: LineEdit
+var user_settings_validation: Label
 var practice_panel: Panel
 var debug_panel: Panel
 var character_panel: Panel
@@ -574,6 +579,7 @@ class NormalAttackHitArea:
 
 
 func _ready() -> void:
+	load_user_settings()
 	load_focus_particle_textures()
 	if menu_layout == null:
 		menu_layout = MenuLayoutData.new()
@@ -1907,10 +1913,11 @@ func reset_match() -> void:
 
 func show_result(winner_id: int) -> void:
 	phase = "result"
-	var result_title: String = "引き分け" if winner_id == 0 else "%sの勝利" % players[winner_id]["name"]
 	var first: Dictionary = players[1]
 	var second: Dictionary = players[2]
-	result_label.text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [result_title, first["name"], first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], second["name"], second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	var winner_name := result_player_display_name(winner_id)
+	var display_title := "引き分け" if winner_id == 0 else "%sの勝利" % winner_name
+	result_label.text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [display_title, result_player_display_name(1), first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], result_player_display_name(2), second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
 	apply_screen_state("result")
 	if network_mode == "host":
 		rpc("receive_network_state", make_network_state())
@@ -1948,6 +1955,15 @@ func request_return_to_lobby() -> void:
 func average_score(player: Dictionary) -> float:
 	var count: int = int(player["challenge_count"])
 	return 0.0 if count == 0 else float(player["challenge_score_total"]) / float(count)
+
+
+func result_player_display_name(player_id: int) -> String:
+	if player_id > 0 and players.has(player_id):
+		var player: Dictionary = players[player_id]
+		var display_name := str(player.get("name", "")).strip_edges()
+		if bool(player.get("has_display_name", false)) and MatchProtocol.valid_display_name(display_name):
+			return display_name
+	return "プレイヤー%d" % player_id
 
 
 func create_hud() -> void:
@@ -2046,6 +2062,75 @@ func _on_screen_changed(next_screen: String) -> void:
 	if not is_gameplay_screen:
 		set_challenge_overlay_visible(false)
 		close_skill_detail()
+	if next_screen != "home":
+		close_user_settings()
+
+
+func create_user_settings_ui() -> void:
+	user_settings_modal = $UIRoot/Home/UserSettingsModal
+	user_settings_panel = $UIRoot/Home/UserSettingsModal/Panel
+	user_settings_name_input = $UIRoot/Home/UserSettingsModal/Panel/NameInput
+	user_settings_validation = $UIRoot/Home/UserSettingsModal/Panel/Validation
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("111b34")
+	panel_style.border_color = Color("8fa8e8")
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(12)
+	user_settings_panel.add_theme_stylebox_override("panel", panel_style)
+	style_menu_button($UIRoot/Home/SettingsButton as Button)
+	style_menu_button($UIRoot/Home/UserSettingsModal/Panel/SaveButton as Button)
+	style_menu_button($UIRoot/Home/UserSettingsModal/Panel/CloseButton as Button)
+	connect_button_once($UIRoot/Home/SettingsButton as Button, open_user_settings)
+	connect_button_once($UIRoot/Home/UserSettingsModal/Panel/SaveButton as Button, save_user_settings)
+	connect_button_once($UIRoot/Home/UserSettingsModal/Panel/CloseButton as Button, close_user_settings)
+	user_settings_modal.visible = false
+
+
+func open_user_settings() -> void:
+	user_settings_name_input.text = user_display_name
+	user_settings_validation.text = ""
+	user_settings_modal.visible = true
+	user_settings_name_input.grab_focus()
+
+
+func close_user_settings() -> void:
+	if user_settings_modal:
+		user_settings_modal.visible = false
+
+
+func load_user_settings() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://settings.cfg") != OK:
+		return
+	var saved_name := str(config.get_value("user", "display_name", "")).strip_edges()
+	if MatchProtocol.valid_display_name(saved_name):
+		user_display_name = saved_name
+
+
+func save_user_settings() -> void:
+	var candidate := user_settings_name_input.text.strip_edges()
+	if not MatchProtocol.valid_display_name(candidate):
+		user_settings_validation.text = "1〜%d文字のユーザー名を入力してください。" % MatchProtocol.MAX_DISPLAY_NAME_LENGTH
+		return
+	user_display_name = candidate
+	var config := ConfigFile.new()
+	config.set_value("user", "display_name", user_display_name)
+	if config.save("user://settings.cfg") != OK:
+		user_settings_validation.text = "保存できませんでした。"
+		return
+	_apply_user_display_name_to_local_player()
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		_send_dedicated_loadout(p1_selection if local_player_id == 1 else p2_selection)
+	refresh_lobby_label()
+	close_user_settings()
+
+
+func _apply_user_display_name_to_local_player() -> void:
+	var player_id := local_player_id if network_mode == "client" else 1
+	if players.has(player_id):
+		var player: Dictionary = players[player_id]
+		player["name"] = user_display_name
+		players[player_id] = player
 
 
 func create_lobby_ui() -> void:
@@ -2164,7 +2249,7 @@ func _send_dedicated_loadout(selection: int) -> void:
 	var big_skill := "typist_trident"
 	if selection == 0 and int(character_skill_selection.get("typist", [0, 0, 0])[1]) == 1:
 		big_skill = "typist_keycap_ii"
-	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill})
+	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill, "display_name": user_display_name})
 
 
 func toggle_lobby_ready(player_id: int) -> void:
@@ -2685,6 +2770,7 @@ func create_navigation_ui() -> void:
 	connect_button_once(character_button, show_character_screen)
 	connect_button_once(home_debug_button, show_debug_select)
 	character_button.tooltip_text = "Open character customization"
+	create_user_settings_ui()
 
 	practice_panel = make_menu_panel(NodePath("UIRoot/Practice"), Color("71d6ba"))
 	practice_preview = $UIRoot/Practice/Preview
@@ -3499,6 +3585,14 @@ func refresh_lobby_label() -> void:
 	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else "対戦相手"
 	set_lobby_status_icon(lobby_p1_status_icon, p1_ready, local_side == 1 or remote_connected)
 	set_lobby_status_icon(lobby_p2_status_icon, p2_ready, local_side == 2 or remote_connected)
+	lobby_p1_info.text = ("あなた\n%s" % _lobby_player_display_name(1, p1_selection)) if local_side == 1 else ("対戦相手\n%s" % _lobby_player_display_name(1, p1_selection))
+	lobby_p2_info.text = ("あなた\n%s" % _lobby_player_display_name(2, p2_selection)) if local_side == 2 else ("対戦相手\n%s" % _lobby_player_display_name(2, p2_selection))
+	if local_side == 1:
+		lobby_p1_info.text = "あなた　%s" % names[p1_selection]
+		lobby_p2_info.text = _remote_lobby_display_name(2) if remote_connected else ""
+	else:
+		lobby_p1_info.text = _remote_lobby_display_name(1) if remote_connected else ""
+		lobby_p2_info.text = "あなた　%s" % names[p2_selection]
 	if local_side == 1:
 		lobby_p1_preview.texture = get_idle_texture(visual_ids[p1_selection])
 		lobby_p2_preview.texture = SHADOW_IDLE_TEXTURE if remote_connected else null
@@ -3567,6 +3661,26 @@ func get_local_lobby_ready_button() -> Button:
 	return lobby_p1_ready if local_player_id == 1 else lobby_p2_ready
 
 
+func _lobby_player_display_name(player_id: int, selection: int) -> String:
+	if player_id == (local_player_id if network_mode == "client" else 1):
+		return user_display_name
+	if players.has(player_id):
+		var player: Dictionary = players[player_id]
+		var synchronized_name := str(player.get("name", "")).strip_edges()
+		if dedicated_connection and dedicated_connection.has_pending_join() and not synchronized_name.is_empty():
+			return synchronized_name
+	var character_names := ["打鍵士", "算術士", "詠唱者"]
+	return character_names[clampi(selection, 0, character_names.size() - 1)]
+
+
+func _remote_lobby_display_name(player_id: int) -> String:
+	if not players.has(player_id):
+		return ""
+	var player: Dictionary = players[player_id]
+	var display_name := str(player.get("name", "")).strip_edges()
+	return display_name if bool(player.get("has_display_name", false)) and MatchProtocol.valid_display_name(display_name) else ""
+
+
 func get_idle_texture(visual_id: String) -> Texture2D:
 	if visual_id == "arithmetician":
 		return preload("res://assets/characters/portraits/arithmetician_idle.png")
@@ -3632,7 +3746,9 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["big_skill_id"] = "typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else "typist_trident"
 	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ""
 	player["visual_id"] = visual_ids[selection]
-	player["name"] = names[selection]
+	var is_local_player := player_id == (local_player_id if network_mode == "client" else 1)
+	player["name"] = user_display_name if is_local_player else names[selection]
+	player["has_display_name"] = is_local_player
 	player["color"] = colors[selection]
 	player["normal_damage"] = 12 if selection == 0 else (10 if selection == 1 else 11)
 	player["hp"] = 100

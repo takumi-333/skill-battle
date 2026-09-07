@@ -16,6 +16,7 @@ func _init() -> void:
 	_test_delayed_keycap_targets_from_launch_position()
 	_test_decoy_flash_expires()
 	_test_snapshot_dictionary_array_conversion()
+	_test_display_name_loadout_validation()
 	print("server-authoritative match simulation tests passed")
 	quit()
 
@@ -31,6 +32,19 @@ func _test_state_and_normal_attack() -> void:
 	assert(simulation.handle_event(1, {"type": "attack"}))
 	assert(int(simulation.state["players"][2]["hp"]) == 88)
 	assert(not simulation.handle_event(1, {"type": "attack"}))
+
+
+func _test_display_name_loadout_validation() -> void:
+	assert(MatchProtocol.valid_display_name("プレイヤー01"))
+	assert(not MatchProtocol.valid_display_name("   "))
+	assert(not MatchProtocol.valid_display_name("a".repeat(MatchProtocol.MAX_DISPLAY_NAME_LENGTH + 1)))
+	assert(MatchProtocol.valid_event(MatchProtocol.make_event(1, "loadout", {"character": 0, "big_skill": "typist_trident", "display_name": "名前テスト"}), -1))
+	assert(not MatchProtocol.valid_event(MatchProtocol.make_event(1, "loadout", {"character": 0, "big_skill": "typist_trident", "display_name": ""}), -1))
+	var simulation := MatchSimulation.new()
+	assert(simulation.handle_event(1, {"type": "loadout", "payload": {"character": 2, "big_skill": "typist_trident", "display_name": "同期名"}}))
+	assert(str(simulation.state["players"][1]["name"]) == "同期名")
+	assert(bool(simulation.state["players"][1]["has_display_name"]))
+	assert(not bool(simulation.state["players"][2]["has_display_name"]))
 
 func _test_typist_skills() -> void:
 	var simulation := MatchSimulation.new()

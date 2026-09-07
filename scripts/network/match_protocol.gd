@@ -11,6 +11,7 @@ const MAX_INPUT_SEQUENCE_GAP := 120
 const MAX_EVENT_SEQUENCE_GAP := 120
 const MAX_CHALLENGE_TEXT_LENGTH := 64
 const MAX_TRACE_POINTS := 512
+const MAX_DISPLAY_NAME_LENGTH := 20
 const EVENT_TYPES := ["attack", "small_skill", "big_skill", "skill3", "challenge_character", "challenge_submit", "challenge_trace", "challenge_cancel", "loadout"]
 
 static func make_input(sequence: int, move: Vector2) -> Dictionary:
@@ -42,9 +43,13 @@ static func valid_event(value: Variant, previous_sequence: int) -> bool:
 		"challenge_trace":
 			return payload is PackedVector2Array and (payload as PackedVector2Array).size() <= MAX_TRACE_POINTS
 		"loadout":
-			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii"]
+			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii"] and valid_display_name(payload.get("display_name", ""))
 		_:
 			return payload == null
+
+
+static func valid_display_name(value: Variant) -> bool:
+	return value is String and not (value as String).strip_edges().is_empty() and (value as String).length() <= MAX_DISPLAY_NAME_LENGTH
 
 ## RPC/JSON deserialization returns an untyped Array even when every element
 ## is a Dictionary. Copy valid entries into a genuinely typed container before
@@ -59,7 +64,7 @@ static func dictionary_array(value: Variant) -> Array[Dictionary]:
 	return result
 
 const PLAYER_SNAPSHOT_KEYS := [
-	"name", "character_id", "visual_id", "is_moving", "position", "facing", "attack_facing", "color", "hp",
+	"name", "has_display_name", "character_id", "visual_id", "is_moving", "position", "facing", "attack_facing", "color", "hp",
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
