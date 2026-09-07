@@ -101,6 +101,26 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.set("local_player_id", 2)
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
+	prototype.set("local_player_id", 1)
+	var result_snapshot: Dictionary = typing_snapshot.duplicate(true)
+	result_snapshot["phase"] = "result"
+	result_snapshot["match_over"] = true
+	result_snapshot["winner_id"] = 1
+	result_snapshot["challenges"] = {}
+	result_snapshot["rematch_ready"] = {1: true, 2: false}
+	prototype.call("_on_dedicated_snapshot_received", result_snapshot)
+	var rematch_button := prototype.get_node("UIRoot/Result/RematchButton") as Button
+	assert(str(prototype.get("screen")) == "result")
+	assert(rematch_button.disabled)
+	assert(rematch_button.text == "再戦を待機中")
+	var return_to_lobby_snapshot: Dictionary = result_snapshot.duplicate(true)
+	return_to_lobby_snapshot["phase"] = "lobby"
+	return_to_lobby_snapshot["match_over"] = false
+	return_to_lobby_snapshot["rematch_ready"] = {1: false, 2: false}
+	return_to_lobby_snapshot["connected_slots"] = [1]
+	prototype.call("_on_dedicated_snapshot_received", return_to_lobby_snapshot)
+	assert(str(prototype.get("screen")) == "online_waiting")
+	assert(not rematch_button.get_parent().visible)
 	_test_room_list_modal(prototype)
 
 

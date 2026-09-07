@@ -7,7 +7,7 @@ func _init() -> void:
 	var client_contract := _read_rpc_contract(CLIENT_PATH)
 	var server_contract := _read_rpc_contract(SERVER_PATH)
 	assert(client_contract == server_contract)
-	assert(client_contract.get("receive_dedicated_snapshot", "") == "@rpc(\"authority\", \"reliable\")")
+	assert(client_contract.get("receive_dedicated_snapshot", "") == "@rpc(\"authority\", \"unreliable_ordered\")")
 	assert(client_contract.has("request_result_action"))
 	print("dedicated RPC contract tests passed")
 	quit()

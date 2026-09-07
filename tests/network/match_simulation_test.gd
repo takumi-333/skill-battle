@@ -11,6 +11,7 @@ func _init() -> void:
 	_test_session_event_deduplication()
 	_test_session_ready_start()
 	_test_session_result_actions()
+	_test_session_disconnect_transitions()
 	_test_snapshot_metadata_and_recipient_filtering()
 	_test_visual_snapshot_interpolation()
 	_test_delayed_keycap_targets_from_launch_position()
@@ -219,6 +220,10 @@ func _test_session_result_actions() -> void:
 	session.simulation.state["match_over"] = true
 	assert(not session.request_result_action(999, "rematch"))
 	assert(session.request_result_action(11, "rematch"))
+	assert(session.phase == "result")
+	assert(bool(session.make_snapshot()["rematch_ready"][1]))
+	assert(not bool(session.make_snapshot()["rematch_ready"][2]))
+	assert(session.request_result_action(12, "rematch"))
 	assert(session.phase == "match")
 	assert(not bool(session.simulation.state["match_over"]))
 	assert(str(session.simulation.state["players"][1]["character_id"]) == "arithmetic")
@@ -228,6 +233,28 @@ func _test_session_result_actions() -> void:
 	assert(session.phase == "lobby")
 	assert(not bool(session.make_snapshot()["ready"][1]))
 	assert(not bool(session.make_snapshot()["ready"][2]))
+	assert(not bool(session.make_snapshot()["rematch_ready"][1]))
+	assert(not bool(session.make_snapshot()["rematch_ready"][2]))
+
+
+func _test_session_disconnect_transitions() -> void:
+	var lobby_session := MatchSession.new("lobby-disconnect-room")
+	assert(lobby_session.join(11, 1) == 1)
+	assert(lobby_session.join(12, 2) == 2)
+	lobby_session.set_ready(12, true)
+	assert(lobby_session.leave(12))
+	assert(lobby_session.phase == "lobby")
+	assert(not bool(lobby_session.simulation.state["match_over"]))
+	assert(lobby_session.make_snapshot()["connected_slots"] == [1])
+	assert(not bool(lobby_session.make_snapshot()["ready"][2]))
+	var match_session := MatchSession.new("match-disconnect-room")
+	assert(match_session.join(11, 1) == 1)
+	assert(match_session.join(12, 2) == 2)
+	match_session.phase = "match"
+	assert(match_session.leave(12))
+	assert(match_session.phase == "result")
+	assert(bool(match_session.simulation.state["match_over"]))
+	assert(int(match_session.simulation.state["winner_id"]) == 1)
 
 
 func _test_delayed_keycap_targets_from_launch_position() -> void:

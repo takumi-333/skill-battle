@@ -533,6 +533,8 @@ var lobby_p2_right_frame: TextureRect
 var lobby_start_button: Button
 var lobby_debug_last_signature := ""
 var lobby_ready_mouse_down := false
+var result_rematch_ready := {1: false, 2: false}
+var result_summary_text := ""
 @onready var ui_click_player: AudioStreamPlayer = $UIAudioPlayer
 var menu_background: TextureRect
 var menu_background_root: Control
@@ -1917,7 +1919,8 @@ func show_result(winner_id: int) -> void:
 	var second: Dictionary = players[2]
 	var winner_name := result_player_display_name(winner_id)
 	var display_title := "引き分け" if winner_id == 0 else "%sの勝利" % winner_name
-	result_label.text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [display_title, result_player_display_name(1), first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], result_player_display_name(2), second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	result_summary_text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [display_title, result_player_display_name(1), first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], result_player_display_name(2), second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	refresh_result_action_ui()
 	apply_screen_state("result")
 	if network_mode == "host":
 		rpc("receive_network_state", make_network_state())
@@ -1936,6 +1939,9 @@ func request_rematch() -> void:
 			return
 		rpc_id(1, "receive_remote_result_action", "rematch")
 		return
+	if network_mode == "host":
+		_handle_legacy_result_action(1, "rematch")
+		return
 	rematch_from_result()
 
 
@@ -1949,7 +1955,33 @@ func request_return_to_lobby() -> void:
 	if network_mode == "local" or network_mode == "practice":
 		show_home()
 		return
+	if network_mode == "host":
+		_handle_legacy_result_action(1, "lobby")
+		return
 	show_lobby()
+
+
+func refresh_result_action_ui() -> void:
+	if result_rematch_button == null or result_label == null:
+		return
+	var is_online_result := phase == "result" and network_mode in ["host", "client"]
+	if not is_online_result:
+		result_rematch_button.disabled = false
+		result_rematch_button.text = "もう一度対戦"
+		result_label.text = result_summary_text
+		return
+	var local_slot := local_player_id if network_mode == "client" else 1
+	var remote_slot := 2 if local_slot == 1 else 1
+	var local_requested := bool(result_rematch_ready.get(local_slot, false))
+	var remote_requested := bool(result_rematch_ready.get(remote_slot, false))
+	result_rematch_button.disabled = local_requested
+	result_rematch_button.text = "再戦を待機中" if local_requested else "もう一度対戦"
+	var decision_text := "両者が再戦を選ぶと再戦を開始します。"
+	if local_requested and not remote_requested:
+		decision_text = "相手の再戦選択を待っています。"
+	elif remote_requested and not local_requested:
+		decision_text = "相手が再戦を希望しています。"
+	result_label.text = "%s\n\n%s" % [result_summary_text, decision_text]
 
 
 func average_score(player: Dictionary) -> float:
@@ -2465,6 +2497,7 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	match_state.winner_id = int(snapshot.get("winner_id", 0))
 	phase = str(snapshot.get("phase", "lobby"))
 	status_text = str(snapshot.get("status_text", ""))
+	result_rematch_ready = snapshot.get("rematch_ready", {1: false, 2: false}).duplicate()
 	dedicated_input_acknowledgements = snapshot.get("input_acknowledgements", {}).duplicate()
 	var ready: Dictionary = snapshot.get("ready", {})
 	p1_ready = bool(ready.get(1, false))
@@ -2493,6 +2526,8 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 		apply_screen_state("match")
 	elif phase == "result" and screen != "result":
 		show_result(match_state.winner_id)
+	if phase == "result":
+		refresh_result_action_ui()
 
 
 func interpolate_dedicated_snapshot(delta: float) -> void:
@@ -3368,6 +3403,7 @@ func make_network_state() -> Dictionary:
 		"p2_ready": p2_ready,
 		"countdown_remaining": countdown_remaining,
 		"status_text": status_text,
+		"rematch_ready": result_rematch_ready,
 		"skill_projectiles": skill_projectiles,
 		"magic_zones": magic_zones,
 		"shockwaves": shockwaves,
@@ -3411,6 +3447,7 @@ func receive_network_state(state: Dictionary) -> void:
 	p2_ready = bool(state["p2_ready"])
 	countdown_remaining = float(state["countdown_remaining"])
 	status_text = str(state["status_text"])
+	result_rematch_ready = state.get("rematch_ready", {1: false, 2: false}).duplicate()
 	skill_projectiles = MatchProtocol.dictionary_array(state.get("skill_projectiles", []))
 	magic_zones = MatchProtocol.dictionary_array(state.get("magic_zones", []))
 	shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
@@ -3461,6 +3498,7 @@ func update_client_ui_from_state() -> void:
 	if phase == "result":
 		if screen != "result":
 			show_result(match_state.winner_id)
+		refresh_result_action_ui()
 		return
 	var player_is_challenging: bool = challenge_owner == local_player_id and phase == "match"
 	set_challenge_overlay_visible(player_is_challenging)
@@ -3543,14 +3581,29 @@ func receive_remote_trace(trace_points: PackedVector2Array) -> void:
 func receive_remote_result_action(action: String) -> void:
 	if network_mode != "host" or multiplayer.get_remote_sender_id() <= 0 or phase != "result":
 		return
-	if action == "rematch":
-		rematch_from_result()
-	else:
+	_handle_legacy_result_action(2, action)
+
+
+func _handle_legacy_result_action(player_id: int, action: String) -> void:
+	if phase != "result" or action not in ["rematch", "lobby"]:
+		return
+	if action == "lobby":
+		result_rematch_ready = {1: false, 2: false}
 		show_lobby()
+	else:
+		result_rematch_ready[player_id] = true
+		if bool(result_rematch_ready[1]) and bool(result_rematch_ready[2]):
+			rematch_from_result()
+		else:
+			status_text = "両者の再戦選択を待っています。"
+			refresh_result_action_ui()
+	if network_mode == "host":
+		rpc("receive_network_state", make_network_state())
 
 
 func show_lobby() -> void:
 	phase = "lobby"
+	result_rematch_ready = {1: false, 2: false}
 	match_state.reset()
 	players = match_state.players
 	p1_ready = false

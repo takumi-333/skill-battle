@@ -15,6 +15,7 @@ var known_presentation_ids: Dictionary = {}
 const INPUT_STALE_TICKS := 15
 var event_sequences := {1: -1, 2: -1}
 var ready := {1: false, 2: false}
+var rematch_ready := {1: false, 2: false}
 var phase := "lobby"
 var status := "対戦相手を待っています。"
 
@@ -33,11 +34,17 @@ func leave(peer_id: int) -> bool:
 	if not peer_slots.has(peer_id):
 		return false
 	var slot: int = peer_slots[peer_id]
+	var was_match := phase == "match"
 	peer_slots.erase(peer_id)
 	peers.erase(slot)
-	phase = "result"
-	simulation.finish_by_disconnect(slot)
-	status = "対戦相手との接続が切れました。"
+	ready[slot] = false
+	rematch_ready[slot] = false
+	if was_match:
+		phase = "result"
+		simulation.finish_by_disconnect(slot)
+		status = "対戦相手との接続が切れました。"
+	else:
+		status = "対戦相手を待っています。"
 	return true
 
 func submit_input(peer_id: int, input: Dictionary) -> bool:
@@ -87,12 +94,20 @@ func start(requesting_peer_id: int) -> bool:
 func request_result_action(peer_id: int, action: String) -> bool:
 	if phase != "result" or not peer_slots.has(peer_id) or action not in ["rematch", "lobby"]:
 		return false
-	_reset_simulation_preserving_loadouts()
-	ready = {1: false, 2: false}
 	if action == "rematch":
+		rematch_ready[peer_slots[peer_id]] = true
+		if not bool(rematch_ready[1]) or not bool(rematch_ready[2]):
+			status = "両者の再戦選択を待っています。"
+			return true
+		_reset_simulation_preserving_loadouts()
+		ready = {1: false, 2: false}
+		rematch_ready = {1: false, 2: false}
 		phase = "match"
 		status = "再戦開始！"
 	else:
+		_reset_simulation_preserving_loadouts()
+		ready = {1: false, 2: false}
+		rematch_ready = {1: false, 2: false}
 		phase = "lobby"
 		status = "キャラクターを選択して準備完了してください。"
 	return true
@@ -136,6 +151,7 @@ func step(delta: float) -> void:
 func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 	var value := MatchProtocol.snapshot(room_id, simulation.state, phase, status, recipient_slot, server_tick, input_sequences)
 	value["ready"] = ready.duplicate()
+	value["rematch_ready"] = rematch_ready.duplicate()
 	value["connected_slots"] = peers.keys()
 	return value
 
