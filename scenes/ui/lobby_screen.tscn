@@ -120,10 +120,10 @@ horizontal_alignment = 1
 
 [node name="PlayerOnePreview" type="TextureRect" parent="." unique_id=117460151]
 layout_mode = 0
-offset_left = 250.0
-offset_top = 280.0
-offset_right = 550.0
-offset_bottom = 500.0
+offset_left = 246.0
+offset_top = 232.0
+offset_right = 546.0
+offset_bottom = 452.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
@@ -141,38 +141,38 @@ stretch_mode = 5
 
 [node name="PlayerOneInfo" type="Label" parent="." unique_id=766903822]
 layout_mode = 0
-offset_left = 290.0
-offset_top = 230.0
-offset_right = 610.0
-offset_bottom = 282.0
+offset_left = 241.0
+offset_top = 183.0
+offset_right = 561.0
+offset_bottom = 235.0
 theme_override_font_sizes/font_size = 20
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="PlayerTwoInfo" type="Label" parent="." unique_id=1019448470]
 layout_mode = 0
-offset_left = 675.0
-offset_top = 230.0
-offset_right = 995.0
-offset_bottom = 282.0
+offset_left = 731.0
+offset_top = 181.0
+offset_right = 1051.0
+offset_bottom = 233.0
 theme_override_font_sizes/font_size = 20
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="PlayerOneStatus" type="Control" parent="." unique_id=1691566107]
 anchors_preset = 0
-offset_left = 555.0
-offset_top = 235.0
-offset_right = 603.0
-offset_bottom = 283.0
+offset_left = 473.0
+offset_top = 192.0
+offset_right = 521.0
+offset_bottom = 240.0
 script = ExtResource("3_nr3vt")
 
 [node name="PlayerTwoStatus" type="Control" parent="." unique_id=561997173]
 anchors_preset = 0
-offset_left = 940.0
-offset_top = 235.0
-offset_right = 988.0
-offset_bottom = 283.0
+offset_left = 961.0
+offset_top = 192.0
+offset_right = 1009.0
+offset_bottom = 240.0
 script = ExtResource("3_nr3vt")
 
 [node name="PlayerOneLeftFrame" type="TextureRect" parent="." unique_id=153933344]
@@ -306,10 +306,10 @@ text = "▶"
 visible = false
 z_index = 10
 layout_mode = 0
-offset_left = 649.0
-offset_top = 599.0
-offset_right = 899.0
-offset_bottom = 657.0
+offset_left = 480.0
+offset_top = 600.0
+offset_right = 730.0
+offset_bottom = 658.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_tm6hj")
@@ -333,7 +333,7 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_ty1g6")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_j2jfr")
 text = "準備完了"
 
-[node name="StartButtonFrame" type="TextureRect" parent="."]
+[node name="StartButtonFrame" type="TextureRect" parent="." unique_id=869070615]
 z_index = 1
 layout_mode = 0
 offset_left = 1000.0
@@ -360,13 +360,13 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_ty1g6")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_j2jfr")
 text = "ゲーム開始"
 
-[node name="HomeButtonFrame" type="TextureRect" parent="."]
+[node name="HomeButtonFrame" type="TextureRect" parent="." unique_id=548849370]
 z_index = 1
 layout_mode = 0
 offset_left = 32.0
 offset_top = 24.0
 offset_right = 242.0
-offset_bottom = 76.0
+offset_bottom = 86.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
@@ -374,10 +374,10 @@ expand_mode = 1
 [node name="HomeButton" type="Button" parent="." unique_id=398506999]
 z_index = 10
 layout_mode = 0
-offset_left = 32.0
-offset_top = 24.0
-offset_right = 242.0
-offset_bottom = 76.0
+offset_left = 41.0
+offset_top = 26.0
+offset_right = 251.0
+offset_bottom = 78.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ro3en")
