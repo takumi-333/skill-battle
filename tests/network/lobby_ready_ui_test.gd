@@ -82,8 +82,14 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	var lobby_snapshot: Dictionary = typing_snapshot.duplicate(true)
 	lobby_snapshot["phase"] = "lobby"
 	lobby_snapshot["challenges"] = {}
+	lobby_snapshot["connected_slots"] = [1]
 	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)
 	assert(str(prototype.get("screen")) == "online_waiting")
+	var opponent_preview := prototype.get_node("UIRoot/Lobby/PlayerTwoPreview") as TextureRect
+	assert(not opponent_preview.visible)
+	lobby_snapshot["connected_slots"] = [1, 2]
+	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)
+	assert(opponent_preview.visible)
 	var start_button := prototype.get_node("UIRoot/Lobby/StartButton") as Button
 	assert(start_button.visible)
 	assert(start_button.disabled)
@@ -95,6 +101,30 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.set("local_player_id", 2)
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
+	_test_room_list_modal(prototype)
+
+
+func _test_room_list_modal(prototype: Node) -> void:
+	var join_button := prototype.get_node("UIRoot/Connection/JoinButton") as Button
+	assert(_has_connection(join_button, "open_room_list_modal"))
+	prototype.call("_on_dedicated_rooms_received", [
+		{"id": "alpha", "name": "アルファ", "players": 1},
+		{"id": "beta", "name": "ベータ", "players": 0},
+	])
+	var rows := prototype.get_node("UIRoot/Connection/RoomListModal/RoomRowsScroll/RoomRows") as VBoxContainer
+	assert(rows.get_child_count() == 2)
+	for row in rows.get_children():
+		var enter_button := (row as HBoxContainer).get_child(1) as Button
+		assert(enter_button.text == "入室")
+		assert(_has_connection(enter_button, "_join_dedicated_room"))
+
+
+func _has_connection(button: Button, method_name: String) -> bool:
+	for connection in button.pressed.get_connections():
+		var callback: Callable = connection.get("callable")
+		if callback.get_method() == method_name:
+			return true
+	return false
 
 
 func _test_dedicated_trace_persistence(prototype: Node) -> void:

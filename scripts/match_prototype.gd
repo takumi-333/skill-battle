@@ -443,10 +443,13 @@ var skill_hud_signature := ""
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
-var network_room_list: ItemList
+var network_room_list_modal: Control
+var network_room_rows: VBoxContainer
 var network_refresh_button: Button
+var network_room_list_close_button: Button
 var dedicated_connection: DedicatedClientConnection
 var dedicated_rooms: Array = []
+var dedicated_connected_slots: Array[int] = []
 var dedicated_action_down := {"attack": false, "small_skill": false, "big_skill": false, "skill3": false}
 var dedicated_challenge_type := ""
 var dedicated_challenge_limit := 0.0
@@ -518,6 +521,10 @@ var lobby_p1_ready: Button
 var lobby_p2_left: Button
 var lobby_p2_right: Button
 var lobby_p2_ready: Button
+var lobby_p1_left_frame: TextureRect
+var lobby_p1_right_frame: TextureRect
+var lobby_p2_left_frame: TextureRect
+var lobby_p2_right_frame: TextureRect
 var lobby_start_button: Button
 var lobby_debug_last_signature := ""
 var lobby_ready_mouse_down := false
@@ -2065,10 +2072,13 @@ func create_lobby_ui() -> void:
 	lobby_p2_left = $UIRoot/Lobby/PlayerTwoLeft
 	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
 	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
+	lobby_p1_left_frame = $UIRoot/Lobby/PlayerOneLeftFrame
+	lobby_p1_right_frame = $UIRoot/Lobby/PlayerOneRightFrame
+	lobby_p2_left_frame = $UIRoot/Lobby/PlayerTwoLeftFrame
+	lobby_p2_right_frame = $UIRoot/Lobby/PlayerTwoRightFrame
 	lobby_start_button = $UIRoot/Lobby/StartButton
 	lobby_start_button.text = "ゲーム開始"
 	lobby_home_button = $UIRoot/Lobby/HomeButton
-	add_menu_texture(lobby_panel, UI_BUTTON_PRIMARY, Vector2(1000.0, 598.0), Vector2(248.0, 58.0))
 	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_start_button, lobby_home_button]:
 		style_menu_button(button)
 	connect_button_once(lobby_p1_left, func(): set_lobby_selection(1, -1))
@@ -2232,16 +2242,19 @@ func create_network_ui() -> void:
 	network_panel.add_theme_stylebox_override("panel", style)
 	network_address_input = $UIRoot/Connection/AddressInput
 	network_status_label = $UIRoot/Connection/Status
-	network_room_list = $UIRoot/Connection/RoomList
-	network_refresh_button = $UIRoot/Connection/RefreshButton
+	network_room_list_modal = $UIRoot/Connection/RoomListModal
+	network_room_rows = $UIRoot/Connection/RoomListModal/RoomRowsScroll/RoomRows
+	network_refresh_button = $UIRoot/Connection/RoomListModal/RefreshButton
+	network_room_list_close_button = $UIRoot/Connection/RoomListModal/CloseButton
 	var host_button: Button = $UIRoot/Connection/HostButton
 	var join_button: Button = $UIRoot/Connection/JoinButton
 	network_back_button = $UIRoot/Connection/BackButton
-	for button in [host_button, join_button, network_back_button, network_refresh_button]:
+	for button in [host_button, join_button, network_back_button, network_refresh_button, network_room_list_close_button]:
 		style_menu_button(button, 23 if button != network_back_button else 20)
 	connect_button_once(host_button, start_host)
-	connect_button_once(join_button, join_host)
+	connect_button_once(join_button, open_room_list_modal)
 	connect_button_once(network_refresh_button, refresh_dedicated_rooms)
+	connect_button_once(network_room_list_close_button, close_room_list_modal)
 	connect_button_once(network_back_button, return_to_home)
 
 
@@ -2263,10 +2276,75 @@ func refresh_dedicated_rooms() -> void:
 
 func _on_dedicated_rooms_received(rooms: Array) -> void:
 	dedicated_rooms = rooms
-	network_room_list.clear()
-	for room in rooms:
-		network_room_list.add_item("%s  (%d/2)" % [str(room.get("name", "無名ルーム")), int(room.get("players", 0))])
+	_refresh_room_list_rows()
 	network_status_label.text = "%d 件の公開ルーム" % rooms.size()
+
+
+func open_room_list_modal() -> void:
+	if dedicated_connection == null:
+		return
+	network_room_list_modal.visible = true
+	refresh_dedicated_rooms()
+
+
+func close_room_list_modal() -> void:
+	network_room_list_modal.visible = false
+
+
+func _refresh_room_list_rows() -> void:
+	for row in network_room_rows.get_children():
+		row.queue_free()
+	if dedicated_rooms.is_empty():
+		var empty_label := Label.new()
+		empty_label.custom_minimum_size = Vector2(0.0, 56.0)
+		empty_label.text = "公開されているルームはありません。"
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_label.add_theme_font_size_override("font_size", 18)
+		network_room_rows.add_child(empty_label)
+		return
+	for room in dedicated_rooms:
+		var room_id := str(room.get("id", ""))
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0.0, 56.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var room_label := Label.new()
+		room_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		room_label.text = "%s  (%d/2)" % [str(room.get("name", "無名ルーム")), int(room.get("players", 0))]
+		room_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		room_label.add_theme_font_size_override("font_size", 18)
+		row.add_child(room_label)
+		var enter_button := Button.new()
+		enter_button.custom_minimum_size = Vector2(160.0, 48.0)
+		enter_button.text = "入室"
+		_style_room_entry_button(enter_button)
+		enter_button.pressed.connect(play_ui_click)
+		enter_button.pressed.connect(_join_dedicated_room.bind(room_id))
+		row.add_child(enter_button)
+		network_room_rows.add_child(row)
+
+
+func _style_room_entry_button(button: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("1b3158")
+	normal.border_color = Color("71d6ba")
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(6)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("315a82")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("fff0c9"))
+	button.add_theme_font_size_override("font_size", 18)
+
+
+func _join_dedicated_room(room_id: String) -> void:
+	if dedicated_connection == null or room_id.is_empty():
+		return
+	close_room_list_modal()
+	dedicated_connection.join_room(room_id)
+	network_status_label.text = "参加予約を取得しています..."
 
 
 func _on_dedicated_reservation_received(connection: Dictionary) -> void:
@@ -2306,6 +2384,11 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	var ready: Dictionary = snapshot.get("ready", {})
 	p1_ready = bool(ready.get(1, false))
 	p2_ready = bool(ready.get(2, false))
+	dedicated_connected_slots.clear()
+	for value in snapshot.get("connected_slots", []):
+		var slot := int(value)
+		if slot in [1, 2]:
+			dedicated_connected_slots.append(slot)
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	_update_dedicated_trident_screen_shake()
 	_apply_dedicated_challenges_snapshot(snapshot.get("challenges", {}))
@@ -3077,6 +3160,7 @@ func start_debug_match() -> void:
 
 func show_connection() -> void:
 	phase = "connection"
+	close_room_list_modal()
 	network_status_label.text = "ルーム名を入力して作成、または一覧から選んで参加してください。"
 	if dedicated_connection:
 		dedicated_connection.refresh_rooms()
@@ -3102,15 +3186,11 @@ func start_host() -> void:
 func join_host() -> void:
 	if dedicated_connection == null:
 		return
-	var selected := network_room_list.get_selected_items()
 	var room_id := network_address_input.text.strip_edges()
-	if not selected.is_empty() and int(selected[0]) < dedicated_rooms.size():
-		room_id = str(dedicated_rooms[int(selected[0])]["id"])
 	if room_id.is_empty():
-		network_status_label.text = "参加するルームを選択してください。"
+		open_room_list_modal()
 		return
-	dedicated_connection.join_room(room_id)
-	network_status_label.text = "参加予約を取得しています..."
+	_join_dedicated_room(room_id)
 
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -3410,11 +3490,11 @@ func refresh_lobby_label() -> void:
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	lobby_label.text = "オンライン対戦 - 待機画面"
 	var local_side := local_player_id if network_mode == "client" else 1
-	var remote_connected := multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
+	var remote_connected := is_remote_lobby_player_connected(local_side)
 	# Both cards remain visible so the opponent slot can communicate connection
 	# state with the shadow portrait. The status icon still indicates readiness.
-	lobby_p1_preview.visible = true
-	lobby_p2_preview.visible = true
+	lobby_p1_preview.visible = local_side == 1 or remote_connected
+	lobby_p2_preview.visible = local_side == 2 or remote_connected
 	lobby_p1_info.text = "あなた\n%s" % names[p1_selection] if local_side == 1 else "対戦相手"
 	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else "対戦相手"
 	set_lobby_status_icon(lobby_p1_status_icon, p1_ready, local_side == 1 or remote_connected)
@@ -3433,6 +3513,10 @@ func refresh_lobby_label() -> void:
 		var should_show := local_side == 2
 		if button.visible != should_show:
 			button.visible = should_show
+	for frame in [lobby_p1_left_frame, lobby_p1_right_frame]:
+		frame.visible = local_side == 1
+	for frame in [lobby_p2_left_frame, lobby_p2_right_frame]:
+		frame.visible = local_side == 2
 	var is_dedicated_lobby := dedicated_connection != null and dedicated_connection.has_pending_join()
 	if is_dedicated_lobby:
 		lobby_p1_ready.visible = local_side == 1
@@ -3470,6 +3554,13 @@ func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> v
 	icon.visible = is_present
 	if is_present:
 		icon.call("set_ready", is_ready)
+
+
+func is_remote_lobby_player_connected(local_side: int) -> bool:
+	if dedicated_connection != null and dedicated_connection.has_pending_join():
+		var remote_side := 2 if local_side == 1 else 1
+		return remote_side in dedicated_connected_slots
+	return multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
 
 
 func get_local_lobby_ready_button() -> Button:

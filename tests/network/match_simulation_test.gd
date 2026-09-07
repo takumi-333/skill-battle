@@ -182,6 +182,7 @@ func _test_session_ready_start() -> void:
 	var session := MatchSession.new("ready-room")
 	assert(session.join(11, 1) == 1)
 	assert(session.join(12, 2) == 2)
+	assert(session.make_snapshot()["connected_slots"] == [1, 2])
 	session.set_ready(11, true)
 	assert(session.phase == "lobby")
 	assert(bool(session.make_snapshot()["ready"][1]))

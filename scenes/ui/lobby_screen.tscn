@@ -176,12 +176,12 @@ offset_bottom = 283.0
 script = ExtResource("3_nr3vt")
 
 [node name="PlayerOneLeftFrame" type="TextureRect" parent="." unique_id=153933344]
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 249.0
-offset_top = 500.0
+offset_top = 476.0
 offset_right = 339.0
-offset_bottom = 546.0
+offset_bottom = 522.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
@@ -202,12 +202,12 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_2cjbq")
 text = "◀"
 
 [node name="PlayerOneRightFrame" type="TextureRect" parent="." unique_id=466335135]
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 469.0
-offset_top = 500.0
+offset_top = 476.0
 offset_right = 559.0
-offset_bottom = 546.0
+offset_bottom = 522.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
@@ -228,12 +228,12 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_txyw0")
 text = "▶"
 
 [node name="PlayerTwoLeftFrame" type="TextureRect" parent="." unique_id=94963022]
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 730.0
-offset_top = 500.0
+offset_top = 476.0
 offset_right = 820.0
-offset_bottom = 546.0
+offset_bottom = 522.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
@@ -254,18 +254,18 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
 text = "◀"
 
 [node name="PlayerTwoRightFrame" type="TextureRect" parent="." unique_id=307338389]
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 943.0
-offset_top = 500.0
+offset_top = 474.0
 offset_right = 1033.0
-offset_bottom = 546.0
+offset_bottom = 520.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
 [node name="_TextureRect_64833" type="TextureRect" parent="." unique_id=294841029]
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 480.0
 offset_top = 597.0
@@ -277,7 +277,7 @@ expand_mode = 1
 
 [node name="_TextureRect_64834" type="TextureRect" parent="." unique_id=468945609]
 visible = false
-z_index = -1
+z_index = 1
 layout_mode = 0
 offset_left = 643.0
 offset_top = 601.0
@@ -333,6 +333,17 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_ty1g6")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_j2jfr")
 text = "準備完了"
 
+[node name="StartButtonFrame" type="TextureRect" parent="."]
+z_index = 1
+layout_mode = 0
+offset_left = 1000.0
+offset_top = 598.0
+offset_right = 1248.0
+offset_bottom = 656.0
+mouse_filter = 2
+texture = ExtResource("4_avu5f")
+expand_mode = 1
+
 [node name="StartButton" type="Button" parent="." unique_id=146356370]
 visible = false
 z_index = 10
@@ -348,6 +359,17 @@ theme_override_styles/pressed = SubResource("StyleBoxEmpty_nvyfr")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_ty1g6")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_j2jfr")
 text = "ゲーム開始"
+
+[node name="HomeButtonFrame" type="TextureRect" parent="."]
+z_index = 1
+layout_mode = 0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 242.0
+offset_bottom = 76.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
 
 [node name="HomeButton" type="Button" parent="." unique_id=398506999]
 z_index = 10

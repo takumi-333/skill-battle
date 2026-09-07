@@ -135,6 +135,7 @@ func step(delta: float) -> void:
 func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 	var value := MatchProtocol.snapshot(room_id, simulation.state, phase, status, recipient_slot, server_tick, input_sequences)
 	value["ready"] = ready.duplicate()
+	value["connected_slots"] = peers.keys()
 	return value
 
 func take_presentations() -> Array[Dictionary]:
