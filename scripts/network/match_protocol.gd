@@ -58,8 +58,9 @@ static func dictionary_array(value: Variant) -> Array[Dictionary]:
 	return result
 
 static func snapshot(room_id: String, state: Dictionary, phase: String, status: String) -> Dictionary:
-	var challenge: Dictionary = state.get("challenge", {}).duplicate(true)
-	challenge.erase("answer")
+	var challenges: Dictionary = state.get("challenges", {}).duplicate(true)
+	for challenge in challenges.values():
+		(challenge as Dictionary).erase("answer")
 	return {
 		"room_id": room_id,
 		"phase": phase,
@@ -68,7 +69,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"match_over": state["match_over"],
 		"winner_id": state["winner_id"],
 		"status_text": status,
-		"challenge": challenge,
+		"challenges": challenges,
 		"skill_projectiles": state.get("skill_projectiles", []).duplicate(true),
 		"magic_zones": state.get("magic_zones", []).duplicate(true),
 		"shockwaves": state.get("shockwaves", []).duplicate(true),

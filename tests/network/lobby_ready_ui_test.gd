@@ -19,6 +19,7 @@ func _run() -> void:
 	prototype.set("local_player_id", 2)
 	assert(prototype.call("get_local_lobby_ready_button") == player_two_ready)
 	_test_dedicated_snapshot_ui(prototype)
+	_test_dedicated_trident_landing_shake(prototype)
 	print("online lobby ready UI tests passed")
 	quit()
 
@@ -51,14 +52,31 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 		"trident_impacts": [],
 		"decoys": [],
 		"hammer_spins": [],
-		"challenge": {"owner": 1, "skill": "small_typing", "prompt": "Track", "typed": "Tr", "type": "typing", "limit": 6.0, "elapsed": 1.0, "target": PackedVector2Array(), "trace": PackedVector2Array()},
+		"challenges": {
+			1: {"id": 11, "owner": 1, "skill": "small_typing", "prompt": "Track", "typed": "Tr", "type": "typing", "limit": 6.0, "elapsed": 1.0, "target": PackedVector2Array(), "trace": PackedVector2Array(), "miss_sequence": 0},
+			2: {"id": 12, "owner": 2, "skill": "small_arithmetic", "prompt": "12 + 3 * 8 = ?", "typed": "", "type": "arithmetic", "limit": 7.0, "elapsed": 2.0, "target": PackedVector2Array(), "trace": PackedVector2Array(), "miss_sequence": 0},
+		},
 	}
 	prototype.call("_on_dedicated_snapshot_received", typing_snapshot)
 	var typing_input := prototype.get_node("ChallengeLayer/Challenge/Content/Input") as LineEdit
 	assert(typing_input.text == "Tr")
+	var miss_snapshot: Dictionary = typing_snapshot.duplicate(true)
+	miss_snapshot["challenges"][1]["miss_sequence"] = 1
+	prototype.call("_on_dedicated_snapshot_received", miss_snapshot)
+	assert(float(prototype.get("challenge_miss_flash")) > 0.0)
+	assert(float(prototype.get("challenge_shake")) > 0.0)
+	prototype.set("challenge_miss_flash", 0.1)
+	prototype.call("_on_dedicated_snapshot_received", miss_snapshot)
+	assert(is_equal_approx(float(prototype.get("challenge_miss_flash")), 0.1))
+	prototype.set("local_player_id", 2)
+	prototype.call("_on_dedicated_snapshot_received", typing_snapshot)
+	assert(int(prototype.get("challenge_owner")) == 2)
+	var prompt := prototype.get_node("ChallengeLayer/Challenge/Content/Prompt") as Label
+	assert(prompt.text == "12 + 3 * 8 = ?")
+	prototype.set("local_player_id", 1)
 	var lobby_snapshot: Dictionary = typing_snapshot.duplicate(true)
 	lobby_snapshot["phase"] = "lobby"
-	lobby_snapshot["challenge"] = {}
+	lobby_snapshot["challenges"] = {}
 	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)
 	assert(str(prototype.get("screen")) == "online_waiting")
 	var start_button := prototype.get_node("UIRoot/Lobby/StartButton") as Button
@@ -72,3 +90,35 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.set("local_player_id", 2)
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
+
+
+func _test_dedicated_trident_landing_shake(prototype: Node) -> void:
+	prototype.set("local_player_id", 1)
+	prototype.set("network_mode", "client")
+	prototype.set("dedicated_trident_release_states", {})
+	prototype.set("screen_shake_time", 0.0)
+	var snapshot := {
+		"players": prototype.get("players"),
+		"time_remaining": 80.0,
+		"match_over": false,
+		"winner_id": 0,
+		"phase": "match",
+		"status_text": "三叉震槌",
+		"ready": {1: false, 2: false},
+		"skill_projectiles": [],
+		"magic_zones": [],
+		"shockwaves": [],
+		"trident_impacts": [{"impact_id": 99, "owner_id": 1, "origin": Vector2(300, 390), "facing": Vector2.RIGHT, "score": 80, "elapsed": 0.9, "strike_duration": 1.0, "duration": 1.9, "released": false}],
+		"decoys": [],
+		"hammer_spins": [],
+		"challenges": {},
+	}
+	prototype.call("_on_dedicated_snapshot_received", snapshot)
+	assert(is_zero_approx(float(prototype.get("screen_shake_time"))))
+	var landed_snapshot: Dictionary = snapshot.duplicate(true)
+	landed_snapshot["trident_impacts"][0]["released"] = true
+	prototype.call("_on_dedicated_snapshot_received", landed_snapshot)
+	assert(float(prototype.get("screen_shake_time")) > 0.0)
+	prototype.set("screen_shake_time", 0.0)
+	prototype.call("_on_dedicated_snapshot_received", landed_snapshot)
+	assert(is_zero_approx(float(prototype.get("screen_shake_time"))))

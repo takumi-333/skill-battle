@@ -371,6 +371,7 @@ var status_text := "開始！ 距離を取りながら相手に通常攻撃を�
 var skill_projectiles: Array[Dictionary] = []
 var key_cap_projectile_nodes: Dictionary = {}
 var next_projectile_id: int = 1
+var next_trident_impact_id: int = 1
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
 var trident_impacts: Array[Dictionary] = []
@@ -449,6 +450,9 @@ var dedicated_rooms: Array = []
 var dedicated_action_down := {"attack": false, "small_skill": false, "big_skill": false, "skill3": false}
 var dedicated_challenge_type := ""
 var dedicated_challenge_limit := 0.0
+var dedicated_challenge_id := 0
+var dedicated_challenge_miss_sequence := 0
+var dedicated_trident_release_states: Dictionary = {}
 @export var lobby_api_url := "http://127.0.0.1:8000"
 var title_panel: Panel
 var title_prompt: Label
@@ -1342,8 +1346,8 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 				for index in range(challenge_typed_characters.length()):
 					spawn_projectile(owner_id, score, false, 0.0, float(index) * TYPING_II_PROJECTILE_INTERVAL, challenge_typed_characters[index])
 				return
-			trigger_screen_shake(score)
 			trident_impacts.append({
+				"impact_id": next_trident_impact_id,
 				"owner_id": owner_id,
 				"origin": get_player_hitbox_center(owner["position"]),
 				"facing": owner.get("facing", Vector2.DOWN),
@@ -1353,6 +1357,7 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 				"duration": TRIDENT_IMPACT_DURATION,
 				"released": false,
 			})
+			next_trident_impact_id += 1
 	elif character_id == "arithmetic":
 		if not is_big:
 			# 再発動時は、前回のデコイをすべて消してから新しく生成する。
@@ -1509,6 +1514,7 @@ func update_trident_impacts(delta: float) -> void:
 		if not bool(impact.get("released", false)) and float(impact["elapsed"]) >= float(impact.get("strike_duration", TRIDENT_STRIKE_DURATION)):
 			spawn_trident_attack(impact)
 			impact["released"] = true
+			trigger_screen_shake(int(impact.get("score", 0)))
 		if float(impact["elapsed"]) >= float(impact.get("duration", 0.55)):
 			trident_impacts.remove_at(index)
 		else:
@@ -2291,9 +2297,10 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	magic_zones = MatchProtocol.dictionary_array(snapshot.get("magic_zones", []))
 	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
+	_update_dedicated_trident_screen_shake()
 	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
 	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
-	_apply_dedicated_challenge_snapshot(snapshot.get("challenge", {}))
+	_apply_dedicated_challenges_snapshot(snapshot.get("challenges", {}))
 	if phase == "lobby":
 		if screen != "online_waiting":
 			apply_screen_state("online_waiting")
@@ -2304,17 +2311,36 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 		show_result(match_state.winner_id)
 
 
-func _apply_dedicated_challenge_snapshot(challenge: Dictionary) -> void:
+func _update_dedicated_trident_screen_shake() -> void:
+	var current_states: Dictionary = {}
+	for impact in trident_impacts:
+		var impact_id := int(impact.get("impact_id", 0))
+		if impact_id <= 0:
+			continue
+		var released := bool(impact.get("released", false))
+		if released and not bool(dedicated_trident_release_states.get(impact_id, false)):
+			trigger_screen_shake(int(impact.get("score", 0)))
+		current_states[impact_id] = released
+	dedicated_trident_release_states = current_states
+
+
+func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
+	var challenge: Dictionary = challenges.get(local_player_id, {})
 	if challenge.is_empty():
-		if challenge_owner == local_player_id:
-			set_challenge_overlay_visible(false)
-			typing_input.text = ""
+		set_challenge_overlay_visible(false)
+		typing_input.text = ""
 		challenge_owner = 0
 		challenge_skill = ""
 		dedicated_challenge_type = ""
 		dedicated_challenge_limit = 0.0
+		dedicated_challenge_id = 0
+		dedicated_challenge_miss_sequence = 0
 		return
-	challenge_owner = int(challenge.get("owner", 0))
+	var challenge_id := int(challenge.get("id", 0))
+	if challenge_id != dedicated_challenge_id:
+		dedicated_challenge_id = challenge_id
+		dedicated_challenge_miss_sequence = 0
+	challenge_owner = local_player_id
 	challenge_skill = str(challenge.get("skill", ""))
 	challenge_prompt = str(challenge.get("prompt", ""))
 	challenge_typed_characters = str(challenge.get("typed", ""))
@@ -2323,16 +2349,19 @@ func _apply_dedicated_challenge_snapshot(challenge: Dictionary) -> void:
 	dedicated_challenge_type = str(challenge.get("type", ""))
 	dedicated_challenge_limit = float(challenge.get("limit", 0.0))
 	challenge_definition = null
-	var local_owner := challenge_owner == local_player_id
-	set_challenge_overlay_visible(local_owner)
+	var miss_sequence := int(challenge.get("miss_sequence", 0))
+	if miss_sequence > dedicated_challenge_miss_sequence:
+		challenge_miss_flash = 0.22
+		challenge_shake = 0.22
+	dedicated_challenge_miss_sequence = miss_sequence
+	set_challenge_overlay_visible(true)
 	typing_input.visible = dedicated_challenge_type != "tracing"
 	challenge_trace_canvas.visible = dedicated_challenge_type == "tracing"
-	if local_owner:
-		apply_challenge_layout(str(players[local_player_id].get("character_id", "blade")))
-		if dedicated_challenge_type == "typing":
-			typing_input.text = challenge_typed_characters
-			typing_input.caret_column = typing_input.text.length()
-		update_challenge_ui(float(challenge.get("elapsed", 0.0)))
+	apply_challenge_layout(str(players[local_player_id].get("character_id", "blade")))
+	if dedicated_challenge_type == "typing":
+		typing_input.text = challenge_typed_characters
+		typing_input.caret_column = typing_input.text.length()
+	update_challenge_ui(float(challenge.get("elapsed", 0.0)))
 
 
 @rpc("authority", "reliable")
@@ -2617,6 +2646,8 @@ func return_to_home() -> void:
 	magic_zones.clear()
 	shockwaves.clear()
 	trident_impacts.clear()
+	next_trident_impact_id = 1
+	dedicated_trident_release_states.clear()
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
@@ -3394,6 +3425,8 @@ func reset_match_runtime_state() -> void:
 	magic_zones.clear()
 	shockwaves.clear()
 	trident_impacts.clear()
+	next_trident_impact_id = 1
+	dedicated_trident_release_states.clear()
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
@@ -4006,18 +4039,6 @@ func draw_trident_impact(impact: Dictionary) -> void:
 	var hammer_center := get_trident_hammer_tip(origin, facing, int(score))
 	var radius := lerpf(8.0, 116.0, ripple_progress)
 
-	# 地面の亀裂と衝撃リングは、発動地点から一気に広がる。
-	draw_circle(hammer_center, lerpf(22.0, 8.0, ripple_progress), Color(1.0, 0.74, 0.30, 0.22 * ripple_fade), true)
-	draw_arc(hammer_center, radius, 0.0, TAU, 40, Color(1.0, 0.82, 0.40, 0.85 * ripple_fade), 5.0, true)
-	for crack_index in range(8):
-		var crack_angle := TAU * float(crack_index) / 8.0 + facing.angle() * 0.18
-		var crack_direction := Vector2.from_angle(crack_angle)
-		var crack_length := lerpf(20.0, 78.0 + score * 0.25, ripple_progress)
-		var crack_start := hammer_center + crack_direction * 12.0
-		var crack_end := hammer_center + crack_direction * crack_length
-		draw_line(crack_start, crack_end, Color(0.98, 0.68, 0.28, 0.72 * ripple_fade), 3.0, true)
-		draw_line(crack_end, crack_end + crack_direction.rotated(0.55) * 12.0, Color(1.0, 0.84, 0.48, 0.52 * ripple_fade), 2.0, true)
-
 	# ハンマーは短い予備動作から正面へ振り下ろす。
 	var source_size := TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE.get_size()
 	var normalized_source_size := Vector2(source_size) / float(maxi(source_size.x, source_size.y))
@@ -4048,6 +4069,18 @@ func draw_trident_impact(impact: Dictionary) -> void:
 	draw_set_transform(hammer_origin + get_world_draw_offset(), strike_angle, Vector2.ONE)
 	draw_texture_rect(TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE, Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size), false, Color.WHITE)
 	draw_set_transform(get_world_draw_offset())
+
+	# 地面の亀裂と衝撃リングはハンマーの前面に描き、着地点から連続して見せる。
+	draw_circle(hammer_center, lerpf(22.0, 8.0, ripple_progress), Color(1.0, 0.74, 0.30, 0.22 * ripple_fade), true)
+	draw_arc(hammer_center, radius, 0.0, TAU, 40, Color(1.0, 0.82, 0.40, 0.85 * ripple_fade), 5.0, true)
+	for crack_index in range(8):
+		var crack_angle := TAU * float(crack_index) / 8.0 + facing.angle() * 0.18
+		var crack_direction := Vector2.from_angle(crack_angle)
+		var crack_length := lerpf(20.0, 78.0 + score * 0.25, ripple_progress)
+		var crack_start := hammer_center + crack_direction * 12.0
+		var crack_end := hammer_center + crack_direction * crack_length
+		draw_line(crack_start, crack_end, Color(0.98, 0.68, 0.28, 0.72 * ripple_fade), 3.0, true)
+		draw_line(crack_end, crack_end + crack_direction.rotated(0.55) * 12.0, Color(1.0, 0.84, 0.48, 0.52 * ripple_fade), 2.0, true)
 
 
 func draw_decoy(decoy: Dictionary, alpha: float) -> void:

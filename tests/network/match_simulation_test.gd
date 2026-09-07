@@ -6,6 +6,8 @@ func _init() -> void:
 	_test_arithmetician_skills()
 	_test_chanter_skills()
 	_test_focus_interruption()
+	_test_simultaneous_challenges_and_individual_interruption()
+	_test_challenge_miss_sequence_and_snapshot()
 	_test_session_event_deduplication()
 	_test_session_ready_start()
 	_test_session_result_actions()
@@ -32,12 +34,14 @@ func _test_typist_skills() -> void:
 	var simulation := MatchSimulation.new()
 	assert(simulation.handle_event(1, {"type": "small_skill"}))
 	_complete_typing(simulation, 1)
-	assert(simulation.state["challenge"].is_empty())
+	assert(simulation.state["challenges"].is_empty())
 	assert(not simulation.state["skill_projectiles"].is_empty())
 	var big_simulation := MatchSimulation.new()
 	assert(big_simulation.handle_event(1, {"type": "big_skill"}))
 	_complete_typing(big_simulation, 1)
+	assert(int(big_simulation.state["trident_impacts"][0]["impact_id"]) > 0)
 	big_simulation.step(1.1, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(bool(big_simulation.state["trident_impacts"][0]["released"]))
 	assert(not big_simulation.state["trident_impacts"].is_empty() or not big_simulation.state["skill_projectiles"].is_empty())
 	var skill3_simulation := MatchSimulation.new()
 	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
@@ -60,14 +64,14 @@ func _test_chanter_skills() -> void:
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(1, 2, "typist_trident")
 	assert(simulation.handle_event(1, {"type": "small_skill"}))
-	var target: PackedVector2Array = simulation.state["challenge"]["target"]
+	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
 	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
-	assert(simulation.state["challenge"].is_empty())
+	assert(simulation.state["challenges"].is_empty())
 	assert(simulation.state["magic_zones"].size() == 3)
 	var big_simulation := MatchSimulation.new()
 	big_simulation.configure_loadout(1, 2, "typist_trident")
 	assert(big_simulation.handle_event(1, {"type": "big_skill"}))
-	var big_target: PackedVector2Array = big_simulation.state["challenge"]["target"]
+	var big_target: PackedVector2Array = big_simulation.state["challenges"][1]["target"]
 	assert(big_simulation.handle_event(1, {"type": "challenge_trace", "payload": big_target}))
 	assert(not big_simulation.state["skill_projectiles"].is_empty())
 
@@ -81,7 +85,32 @@ func _test_focus_interruption() -> void:
 	for index in 3:
 		simulation.handle_event(1, {"type": "attack"})
 		simulation.state["players"][1]["attack_cooldown"] = 0.0
-	assert(simulation.state["challenge"].is_empty())
+	assert(simulation.state["challenges"].is_empty())
+
+func _test_simultaneous_challenges_and_individual_interruption() -> void:
+	var simulation := MatchSimulation.new()
+	assert(simulation.handle_event(1, {"type": "small_skill"}))
+	assert(simulation.handle_event(2, {"type": "small_skill"}))
+	assert(simulation.state["challenges"].size() == 2)
+	assert(bool(simulation.state["players"][1]["focused"]))
+	assert(bool(simulation.state["players"][2]["focused"]))
+	simulation.call("_apply_damage", 1, 30, "test")
+	assert(not simulation.state["challenges"].has(1))
+	assert(simulation.state["challenges"].has(2))
+	_complete_arithmetic(simulation, 2)
+	assert(simulation.state["challenges"].is_empty())
+
+func _test_challenge_miss_sequence_and_snapshot() -> void:
+	var simulation := MatchSimulation.new()
+	assert(simulation.handle_event(1, {"type": "small_skill"}))
+	assert(simulation.handle_event(1, {"type": "challenge_character", "payload": "?"}))
+	var challenge: Dictionary = simulation.state["challenges"][1]
+	assert(int(challenge["miss_sequence"]) == 1)
+	assert(is_equal_approx(float(challenge["elapsed"]), 1.8))
+	var snapshot := MatchProtocol.snapshot("test", simulation.state, "match", "")
+	var snapshot_challenge: Dictionary = snapshot["challenges"][1]
+	assert(int(snapshot_challenge["miss_sequence"]) == 1)
+	assert(not snapshot_challenge.has("answer"))
 
 func _test_session_event_deduplication() -> void:
 	var session := MatchSession.new("test-room")
@@ -162,10 +191,10 @@ func _test_snapshot_dictionary_array_conversion() -> void:
 	assert(MatchProtocol.dictionary_array(["invalid", 10]).is_empty())
 
 func _complete_typing(simulation: MatchSimulation, slot: int) -> void:
-	var answer := str(simulation.state["challenge"]["answer"])
+	var answer := str(simulation.state["challenges"][slot]["answer"])
 	for character in answer:
 		assert(simulation.handle_event(slot, {"type": "challenge_character", "payload": character}))
 
 func _complete_arithmetic(simulation: MatchSimulation, slot: int) -> void:
-	var answer := str(simulation.state["challenge"]["answer"])
+	var answer := str(simulation.state["challenges"][slot]["answer"])
 	assert(simulation.handle_event(slot, {"type": "challenge_submit", "payload": answer}))

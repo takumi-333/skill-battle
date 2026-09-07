@@ -31,6 +31,7 @@ const ARITH_BIG := ["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 +
 var state: Dictionary
 var _challenge_nonce := 0
 var _next_projectile_id := 1
+var _next_trident_impact_id := 1
 var _trace_evaluator := TraceEvaluator.new()
 
 func _init() -> void:
@@ -44,7 +45,7 @@ func reset() -> void:
 		"match_over": false,
 		"winner_id": 0,
 		"status_text": "対戦準備中",
-		"challenge": {},
+		"challenges": {},
 		"skill_projectiles": [],
 		"magic_zones": [],
 		"shockwaves": [],
@@ -110,7 +111,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	state["time_remaining"] = maxf(0.0, float(state["time_remaining"]) - delta)
 	for slot in [1, 2]:
 		_update_player(slot, delta, inputs.get(slot, {"move": Vector2.ZERO}))
-	_update_challenge(delta)
+	_update_challenges(delta)
 	_update_projectiles(delta)
 	_update_zones(delta)
 	_update_shockwaves(delta)
@@ -168,7 +169,8 @@ func _try_normal_attack(slot: int) -> bool:
 	return true
 
 func _start_challenge(slot: int, tier: String) -> bool:
-	if not state["challenge"].is_empty():
+	var challenges: Dictionary = state["challenges"]
+	if challenges.has(slot):
 		return false
 	var player: Dictionary = state["players"][slot]
 	if bool(player["focused"]):
@@ -187,7 +189,8 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	player["interrupt_gauge"] = player["interrupt_gauge_max"]
 	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	state["players"][slot] = player
-	state["challenge"] = challenge
+	challenges[slot] = challenge
+	state["challenges"] = challenges
 	state["status_text"] = "%sが%sの集中を開始！" % [str(player["name"]), {"small": "スキル1", "big": "スキル2", "skill3": "スキル3"}[tier]]
 	return true
 
@@ -236,81 +239,81 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 	else:
 		prompt = "星形をなぞってください" if tier == "big" else "円をなぞってください"
 		target = _make_trace_target(tier == "big")
-	return {"owner": slot, "tier": tier, "skill": skill, "type": challenge_type, "prompt": prompt, "answer": answer, "elapsed": 0.0, "limit": limit, "typed": "", "target": target, "trace": PackedVector2Array()}
+	return {"id": _challenge_nonce, "owner": slot, "tier": tier, "skill": skill, "type": challenge_type, "prompt": prompt, "answer": answer, "elapsed": 0.0, "limit": limit, "typed": "", "target": target, "trace": PackedVector2Array(), "miss_sequence": 0}
 
 func _receive_challenge_character(slot: int, character: String) -> bool:
-	var challenge: Dictionary = state["challenge"]
-	if challenge.is_empty() or int(challenge["owner"]) != slot or str(challenge["type"]) != "typing":
+	var challenge: Dictionary = _challenge_for(slot)
+	if challenge.is_empty() or str(challenge["type"]) != "typing":
 		return false
 	var typed := str(challenge["typed"])
 	var answer := str(challenge["answer"])
 	if typed.length() >= answer.length() or character != answer.substr(typed.length(), 1):
-		_challenge_miss(challenge)
+		_challenge_miss(slot, challenge)
 		return true
 	challenge["typed"] = typed + character
-	state["challenge"] = challenge
+	_set_challenge(slot, challenge)
 	if str(challenge["typed"]).length() >= answer.length():
-		_end_challenge(true, _score_challenge(challenge), "")
+		_end_challenge(slot, true, _score_challenge(challenge), "")
 	return true
 
 func _submit_challenge(slot: int, submitted: String) -> bool:
-	var challenge: Dictionary = state["challenge"]
-	if challenge.is_empty() or int(challenge["owner"]) != slot or str(challenge["type"]) != "arithmetic":
+	var challenge: Dictionary = _challenge_for(slot)
+	if challenge.is_empty() or str(challenge["type"]) != "arithmetic":
 		return false
 	if submitted.strip_edges() == str(challenge["answer"]):
-		_end_challenge(true, _score_challenge(challenge), "")
+		_end_challenge(slot, true, _score_challenge(challenge), "")
 	else:
-		_challenge_miss(challenge)
+		_challenge_miss(slot, challenge)
 	return true
 
 func _submit_trace(slot: int, trace: PackedVector2Array) -> bool:
-	var challenge: Dictionary = state["challenge"]
-	if challenge.is_empty() or int(challenge["owner"]) != slot or str(challenge["type"]) != "tracing":
+	var challenge: Dictionary = _challenge_for(slot)
+	if challenge.is_empty() or str(challenge["type"]) != "tracing":
 		return false
 	challenge["trace"] = trace
-	state["challenge"] = challenge
+	_set_challenge(slot, challenge)
 	var result := _trace_evaluator.evaluate(challenge["target"], trace)
 	if not bool(result.get("ng", true)) and int(result.get("score", 0)) >= 45:
-		_end_challenge(true, int(result["score"]), "")
+		_end_challenge(slot, true, int(result["score"]), "")
 	else:
-		_end_challenge(false, 0, "なぞりに失敗した。")
+		_end_challenge(slot, false, 0, "なぞりに失敗した。")
 	return true
 
 func _cancel_challenge(slot: int) -> bool:
-	var challenge: Dictionary = state["challenge"]
-	if challenge.is_empty() or int(challenge["owner"]) != slot:
+	if _challenge_for(slot).is_empty():
 		return false
-	_end_challenge(false, 0, "課題を中止した。")
+	_end_challenge(slot, false, 0, "課題を中止した。")
 	return true
 
-func _challenge_miss(challenge: Dictionary) -> void:
-	var owner := int(challenge["owner"])
+func _challenge_miss(owner: int, challenge: Dictionary) -> void:
 	var player: Dictionary = state["players"][owner]
 	player["challenge_errors"] = int(player.get("challenge_errors", 0)) + 1
 	challenge["elapsed"] = minf(float(challenge["limit"]), float(challenge["elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
+	challenge["miss_sequence"] = int(challenge.get("miss_sequence", 0)) + 1
 	player["challenge_elapsed"] = challenge["elapsed"]
 	state["players"][owner] = player
-	state["challenge"] = challenge
+	_set_challenge(owner, challenge)
 	state["status_text"] = "課題入力を間違えた。残り時間が減少した。"
 
-func _update_challenge(delta: float) -> void:
-	var challenge: Dictionary = state["challenge"]
-	if challenge.is_empty():
-		return
-	challenge["elapsed"] = float(challenge["elapsed"]) + delta
-	var owner := int(challenge["owner"])
-	var player: Dictionary = state["players"][owner]
-	player["challenge_elapsed"] = challenge["elapsed"]
-	state["players"][owner] = player
-	state["challenge"] = challenge
-	if float(challenge["elapsed"]) >= float(challenge["limit"]):
-		_end_challenge(false, 0, "時間切れ。課題は失敗した。")
+func _update_challenges(delta: float) -> void:
+	var owners: Array = state["challenges"].keys()
+	for value in owners:
+		var owner := int(value)
+		var challenge: Dictionary = _challenge_for(owner)
+		if challenge.is_empty():
+			continue
+		challenge["elapsed"] = float(challenge["elapsed"]) + delta
+		var player: Dictionary = state["players"][owner]
+		player["challenge_elapsed"] = challenge["elapsed"]
+		state["players"][owner] = player
+		_set_challenge(owner, challenge)
+		if float(challenge["limit"]) > 0.0 and float(challenge["elapsed"]) >= float(challenge["limit"]):
+			_end_challenge(owner, false, 0, "時間切れ。課題は失敗した。")
 
-func _end_challenge(success: bool, score: int, message: String) -> void:
-	var challenge: Dictionary = state["challenge"]
+func _end_challenge(owner: int, success: bool, score: int, message: String) -> void:
+	var challenge: Dictionary = _challenge_for(owner)
 	if challenge.is_empty():
 		return
-	var owner := int(challenge["owner"])
 	var player: Dictionary = state["players"][owner]
 	var tier := str(challenge["tier"])
 	player["focused"] = false
@@ -332,12 +335,18 @@ func _end_challenge(success: bool, score: int, message: String) -> void:
 		player["challenge_score_total"] = int(player.get("challenge_score_total", 0)) + score
 		player["challenge_best_score"] = maxi(int(player.get("challenge_best_score", 0)), score)
 	state["players"][owner] = player
-	state["challenge"] = {}
+	state["challenges"].erase(owner)
 	if success:
 		_spawn_skill(owner, score, challenge)
 		state["status_text"] = "%sの%sが発動！ スコア %d点" % [str(player["name"]), {"small": "スキル1", "big": "スキル2", "skill3": "スキル3"}[tier], score]
 	else:
 		state["status_text"] = message
+
+func _challenge_for(slot: int) -> Dictionary:
+	return state["challenges"].get(slot, {})
+
+func _set_challenge(slot: int, challenge: Dictionary) -> void:
+	state["challenges"][slot] = challenge
 
 func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 	var player: Dictionary = state["players"][owner]
@@ -347,7 +356,8 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 		if tier == "skill3":
 			state["hammer_spins"].append({"owner_id": owner, "score": score, "angle": 0.0, "lifetime": _hammer_duration(score), "hit_timer": 0.0, "keycap_timer": 0.5})
 		elif tier == "big" and str(player.get("big_skill_id", "")) == "typist_trident":
-			state["trident_impacts"].append({"owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
+			state["trident_impacts"].append({"impact_id": _next_trident_impact_id, "owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
+			_next_trident_impact_id += 1
 		else:
 			var interval := 0.3 if tier == "big" else 0.5
 			var typed := str(challenge.get("typed", ""))
@@ -551,13 +561,12 @@ func _apply_damage(target_slot: int, damage: int, attack_name: String) -> void:
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
 	state["players"][target_slot] = target
-	var challenge: Dictionary = state["challenge"]
-	if not challenge.is_empty() and int(challenge["owner"]) == target_slot:
+	if not _challenge_for(target_slot).is_empty():
 		target["interrupt_gauge"] = maxf(0.0, float(target["interrupt_gauge"]) - damage)
 		target["interrupt_gauge_display"] = target["interrupt_gauge"]
 		state["players"][target_slot] = target
 		if float(target["interrupt_gauge"]) <= 0.0:
-			_end_challenge(false, 0, "%sで中断ゲージが尽きた。課題は失敗した。" % attack_name)
+			_end_challenge(target_slot, false, 0, "%sで中断ゲージが尽きた。課題は失敗した。" % attack_name)
 	if int(target["hp"]) <= 0:
 		state["match_over"] = true
 		state["winner_id"] = _other(target_slot)
