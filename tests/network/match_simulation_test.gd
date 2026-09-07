@@ -78,7 +78,12 @@ func _test_chanter_skills() -> void:
 	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var big_target: PackedVector2Array = big_simulation.state["challenges"][1]["target"]
 	assert(big_simulation.handle_event(1, {"type": "challenge_trace", "payload": big_target}))
-	assert(not big_simulation.state["skill_projectiles"].is_empty())
+	assert(big_simulation.state["skill_projectiles"].size() == 16)
+	# Shot 5 is perpendicular to the owner's default right-facing direction.
+	# Its direction must remain radial after its delayed launch time elapses.
+	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var radial_projectile: Dictionary = big_simulation.state["skill_projectiles"][4]
+	assert(Vector2(radial_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
 
 func _test_focus_interruption() -> void:
 	var simulation := MatchSimulation.new()
@@ -137,16 +142,19 @@ func _test_visual_snapshot_interpolation() -> void:
 	var previous := {
 		"players": {1: {"position": Vector2(0, 0), "facing": Vector2.RIGHT}},
 		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(10, 0), "velocity": Vector2.RIGHT, "lifetime": 2.0}],
-		"magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+		"magic_zones": [{"presentation_id": 8, "owner_id": 1, "position": Vector2.ZERO, "spawned": false}],
+		"shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
 	}
 	var current := {
 		"players": {1: {"position": Vector2(20, 0), "facing": Vector2.DOWN}},
 		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(30, 0), "velocity": Vector2.DOWN, "lifetime": 1.0}],
-		"magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+		"magic_zones": [{"presentation_id": 8, "owner_id": 1, "position": Vector2(600, 400), "spawned": true}],
+		"shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
 	}
 	var blended := MatchProtocol.interpolate_visual_state(previous, current, 0.5)
 	assert(Vector2(blended["players"][1]["position"]).is_equal_approx(Vector2(10, 0)))
 	assert(Vector2(blended["skill_projectiles"][0]["position"]).is_equal_approx(Vector2(20, 0)))
+	assert(Vector2(blended["magic_zones"][0]["position"]).is_equal_approx(Vector2(600, 400)))
 	assert(is_equal_approx(float(blended["skill_projectiles"][0]["lifetime"]), 1.5))
 	assert(absf(MatchProtocol.lerp_angle_shortest(6.2, 0.1, 0.5) - 0.008407) < 0.02)
 

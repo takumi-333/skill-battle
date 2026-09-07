@@ -19,6 +19,7 @@ func _run() -> void:
 	prototype.set("local_player_id", 2)
 	assert(prototype.call("get_local_lobby_ready_button") == player_two_ready)
 	_test_dedicated_snapshot_ui(prototype)
+	_test_dedicated_trace_persistence(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
 	# The test supplies a pending reservation to exercise dedicated-only UI.
 	# Clear it before the next frame so the scene never attempts a real RPC.
@@ -94,6 +95,38 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.set("local_player_id", 2)
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
+
+
+func _test_dedicated_trace_persistence(prototype: Node) -> void:
+	prototype.set("local_player_id", 1)
+	prototype.set("network_mode", "client")
+	var dedicated_connection: Node = prototype.get("dedicated_connection")
+	dedicated_connection.set("_join_data", {"room": {"id": "trace-test"}})
+	var players: Dictionary = prototype.get("players").duplicate(true)
+	players[1]["character_id"] = "chanter"
+	players[1]["visual_id"] = "chanter"
+	var trace_snapshot := {
+		"players": players,
+		"time_remaining": 80.0,
+		"match_over": false,
+		"winner_id": 0,
+		"phase": "match",
+		"status_text": "tracing",
+		"ready": {1: false, 2: false},
+		"skill_projectiles": [], "magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+		"challenges": {
+			1: {"id": 31, "owner": 1, "skill": "small_trace", "prompt": "円をなぞってください", "typed": "", "type": "tracing", "limit": 0.0, "elapsed": 1.0, "target": PackedVector2Array([Vector2(100, 100), Vector2(120, 100)]), "trace": PackedVector2Array(), "miss_sequence": 0},
+		},
+	}
+	prototype.call("_on_dedicated_snapshot_received", trace_snapshot)
+	var local_trace := PackedVector2Array([Vector2(100, 100), Vector2(105, 103), Vector2(110, 108)])
+	prototype.set("challenge_trace_points", local_trace)
+	prototype.call("_on_dedicated_snapshot_received", trace_snapshot)
+	assert(prototype.get("challenge_trace_points") == local_trace)
+	var new_trace_snapshot: Dictionary = trace_snapshot.duplicate(true)
+	new_trace_snapshot["challenges"][1]["id"] = 32
+	prototype.call("_on_dedicated_snapshot_received", new_trace_snapshot)
+	assert((prototype.get("challenge_trace_points") as PackedVector2Array).is_empty())
 
 
 func _test_dedicated_trident_landing_shake(prototype: Node) -> void:

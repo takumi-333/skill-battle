@@ -2403,15 +2403,19 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 		dedicated_challenge_miss_sequence = 0
 		return
 	var challenge_id := int(challenge.get("id", 0))
-	if challenge_id != dedicated_challenge_id:
+	var is_new_challenge := challenge_id != dedicated_challenge_id
+	if is_new_challenge:
 		dedicated_challenge_id = challenge_id
 		dedicated_challenge_miss_sequence = 0
+		# The server only receives the trace when the player releases the mouse.
+		# Until then its snapshot contains an empty trace, so only initialize the
+		# local canvas when the challenge itself changes.
+		challenge_trace_points = challenge.get("trace", PackedVector2Array())
 	challenge_owner = local_player_id
 	challenge_skill = str(challenge.get("skill", ""))
 	challenge_prompt = str(challenge.get("prompt", ""))
 	challenge_typed_characters = str(challenge.get("typed", ""))
 	challenge_target_points = challenge.get("target", PackedVector2Array())
-	challenge_trace_points = challenge.get("trace", PackedVector2Array())
 	dedicated_challenge_type = str(challenge.get("type", ""))
 	dedicated_challenge_limit = float(challenge.get("limit", 0.0))
 	challenge_definition = null

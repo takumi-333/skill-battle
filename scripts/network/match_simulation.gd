@@ -405,7 +405,10 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 		return
 	var player: Dictionary = state["players"][owner]
 	var facing := Vector2(player["facing"]).rotated(angle_offset)
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": (50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1)), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": false, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big})
+	# Chanter's large-skill projectiles are radial shots. They must retain the
+	# direction assigned above instead of using the delayed, target-seeking
+	# launch path for typist projectiles.
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": (50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1)), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big})
 	_next_projectile_id += 1
 
 func _update_projectiles(delta: float) -> void:

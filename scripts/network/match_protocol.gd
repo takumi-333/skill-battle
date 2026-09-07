@@ -145,6 +145,11 @@ static func _matching_entity(previous: Array, incoming: Dictionary, fallback_ind
 static func _interpolate_dictionary(previous: Dictionary, current: Dictionary, ratio: float) -> Dictionary:
 	var result := current.duplicate(true)
 	for key in INTERPOLATED_VECTOR_KEYS:
+		# A zone is hidden while unspawned and receives its target position only
+		# when it appears. Blending that transition makes it look as if it flies
+		# in from the hidden Vector2.ZERO placeholder.
+		if key == "position" and not bool(previous.get("spawned", true)) and bool(current.get("spawned", true)):
+			continue
 		if previous.get(key, null) is Vector2 and current.get(key, null) is Vector2:
 			var blended := Vector2(previous[key]).lerp(Vector2(current[key]), ratio)
 			if key in ["facing", "attack_facing"] and blended.length_squared() > 0.0001:
