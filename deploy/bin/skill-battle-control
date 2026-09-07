@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Root-owned, fixed-function bridge for the authenticated Lobby management UI.
+set -euo pipefail
+
+readonly LOBBY_SERVICE="skill-battle-lobby.service"
+readonly DEDICATED_SERVICE="skill-battle-server.service"
+
+case "${1:-}" in
+  status)
+    systemctl show "$LOBBY_SERVICE" "$DEDICATED_SERVICE" \
+      --property=Id,ActiveState,SubState,MainPID,ActiveEnterTimestamp --no-pager
+    ;;
+  logs)
+    journalctl -u "$LOBBY_SERVICE" -u "$DEDICATED_SERVICE" -n 120 --no-pager -o short-iso
+    ;;
+  start|stop|restart)
+    systemctl "$1" "$LOBBY_SERVICE" "$DEDICATED_SERVICE"
+    ;;
+  *)
+    echo "Unsupported Skill Battle control action." >&2
+    exit 64
+    ;;
+esac

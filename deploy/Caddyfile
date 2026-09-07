@@ -1,0 +1,5 @@
+${SKILL_BATTLE_DOMAIN} {
+	@internal path /internal/*
+	respond @internal "not found" 404
+    reverse_proxy 127.0.0.1:8000
+}

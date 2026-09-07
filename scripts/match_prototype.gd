@@ -442,6 +442,14 @@ var skill_hud_signature := ""
 var network_panel: Panel
 var network_address_input: LineEdit
 var network_status_label: Label
+var network_room_list: ItemList
+var network_refresh_button: Button
+var dedicated_connection: DedicatedClientConnection
+var dedicated_rooms: Array = []
+var dedicated_action_down := {"attack": false, "small_skill": false, "big_skill": false, "skill3": false}
+var dedicated_challenge_type := ""
+var dedicated_challenge_limit := 0.0
+@export var lobby_api_url := "http://127.0.0.1:8000"
 var title_panel: Panel
 var title_prompt: Label
 var home_panel: Panel
@@ -586,6 +594,7 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	setup_dedicated_connection()
 	show_title()
 	lobby_debug_log("ready complete; screen=%s mode=%s phase=%s" % [screen, network_mode, phase])
 	queue_redraw()
@@ -1115,6 +1124,8 @@ func _is_trace_challenge() -> bool:
 
 
 func _get_challenge_type() -> String:
+	if dedicated_connection and dedicated_connection.has_pending_join() and not dedicated_challenge_type.is_empty():
+		return dedicated_challenge_type
 	if challenge_definition != null:
 		return str(challenge_definition.challenge_type)
 	if challenge_skill == "skill3_typing" or challenge_skill.contains("typing"):
@@ -1128,6 +1139,11 @@ func _get_challenge_type() -> String:
 
 func _process_arithmetic_character(character: String) -> void:
 	if challenge_owner == 0 or not _is_arithmetic_challenge():
+		return
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if challenge_owner == local_player_id:
+			typing_input.text += character
+			typing_input.caret_column = typing_input.text.length()
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -1146,6 +1162,11 @@ func _process_arithmetic_character(character: String) -> void:
 
 func _submit_arithmetic_answer(submitted_text: String) -> void:
 	if challenge_owner == 0 or not _is_arithmetic_challenge():
+		return
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if challenge_owner == local_player_id:
+			dedicated_connection.send_event("challenge_submit", submitted_text)
+			typing_input.text = ""
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -1174,6 +1195,16 @@ func _submit_arithmetic_answer(submitted_text: String) -> void:
 
 func _process_typing_character(character: String) -> void:
 	if challenge_owner == 0 or not _is_typing_challenge():
+		return
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if challenge_owner == local_player_id:
+			var local_typing_index := typing_input.text.length()
+			var is_correct := local_typing_index < challenge_prompt.length() and character == challenge_prompt.substr(local_typing_index, 1)
+			if is_correct:
+				typing_input.text += character
+				typing_input.caret_column = typing_input.text.length()
+				emit_typist_typing_key_sound()
+			dedicated_connection.send_event("challenge_character", character)
 		return
 	if network_mode == "client":
 		if challenge_owner == local_player_id:
@@ -1219,6 +1250,8 @@ func calc_score_by_time_only(remaining_time: float, time_limit: float, curve_amo
 
 
 func get_challenge_time_limit() -> float:
+	if dedicated_connection and dedicated_connection.has_pending_join() and not dedicated_challenge_type.is_empty():
+		return dedicated_challenge_limit
 	if challenge_definition != null and challenge_definition.no_time_limit:
 		return 0.0
 	if challenge_definition != null:
@@ -1870,6 +1903,9 @@ func rematch_from_result() -> void:
 
 func request_rematch() -> void:
 	if network_mode == "client":
+		if dedicated_connection and dedicated_connection.has_pending_join():
+			rpc_id(1, "request_result_action", "rematch")
+			return
 		rpc_id(1, "receive_remote_result_action", "rematch")
 		return
 	rematch_from_result()
@@ -1877,6 +1913,9 @@ func request_rematch() -> void:
 
 func request_return_to_lobby() -> void:
 	if network_mode == "client":
+		if dedicated_connection and dedicated_connection.has_pending_join():
+			rpc_id(1, "request_result_action", "lobby")
+			return
 		rpc_id(1, "receive_remote_result_action", "lobby")
 		return
 	if network_mode == "local" or network_mode == "practice":
@@ -2013,6 +2052,7 @@ func create_lobby_ui() -> void:
 	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
 	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
 	lobby_start_button = $UIRoot/Lobby/StartButton
+	lobby_start_button.text = "ゲーム開始"
 	lobby_home_button = $UIRoot/Lobby/HomeButton
 	add_menu_texture(lobby_panel, UI_BUTTON_PRIMARY, Vector2(1000.0, 598.0), Vector2(248.0, 58.0))
 	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_start_button, lobby_home_button]:
@@ -2022,6 +2062,7 @@ func create_lobby_ui() -> void:
 	connect_button_once(lobby_p1_ready, toggle_local_lobby_ready)
 	connect_button_once(lobby_p2_left, func(): set_lobby_selection(2, -1))
 	connect_button_once(lobby_p2_right, func(): set_lobby_selection(2, 1))
+	connect_button_once(lobby_p2_ready, toggle_local_lobby_ready)
 	connect_button_once(lobby_start_button, start_lobby_match)
 	connect_button_once(lobby_home_button, return_to_home)
 
@@ -2065,6 +2106,19 @@ func make_status_icon(icon_position: Vector2) -> StatusIcon:
 
 func set_lobby_selection(player_id: int, step: int) -> void:
 	lobby_debug_log("selection requested; player_id=%d step=%d mode=%s local_id=%d" % [player_id, step, network_mode, local_player_id])
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if player_id != local_player_id:
+			return
+		if player_id == 1:
+			p1_selection = posmod(p1_selection + step, 3)
+			p1_ready = false
+		else:
+			p2_selection = posmod(p2_selection + step, 3)
+			p2_ready = false
+		dedicated_connection.set_ready(false)
+		_send_dedicated_loadout(p1_selection if player_id == 1 else p2_selection)
+		refresh_lobby_label()
+		return
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
@@ -2080,8 +2134,23 @@ func set_lobby_selection(player_id: int, step: int) -> void:
 	refresh_lobby_label()
 
 
+func _send_dedicated_loadout(selection: int) -> void:
+	if dedicated_connection == null:
+		return
+	var big_skill := "typist_trident"
+	if selection == 0 and int(character_skill_selection.get("typist", [0, 0, 0])[1]) == 1:
+		big_skill = "typist_keycap_ii"
+	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill})
+
+
 func toggle_lobby_ready(player_id: int) -> void:
 	lobby_debug_log("ready requested; player_id=%d mode=%s local_id=%d before p1=%s p2=%s" % [player_id, network_mode, local_player_id, str(p1_ready), str(p2_ready)])
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if player_id != local_player_id:
+			return
+		var next_ready := not (p1_ready if player_id == 1 else p2_ready)
+		dedicated_connection.set_ready(next_ready)
+		return
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
@@ -2098,10 +2167,15 @@ func toggle_lobby_ready(player_id: int) -> void:
 
 func toggle_local_lobby_ready() -> void:
 	lobby_debug_log("local ready button pressed; mode=%s local_id=%d" % [network_mode, local_player_id])
-	toggle_lobby_ready(2 if network_mode == "client" else 1)
+	toggle_lobby_ready(local_player_id if dedicated_connection and dedicated_connection.has_pending_join() else (2 if network_mode == "client" else 1))
 
 
 func start_lobby_match() -> void:
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		if local_player_id != 1 or not p1_ready or not p2_ready:
+			return
+		rpc_id(1, "request_match_start")
+		return
 	if network_mode != "host" or not p1_ready or not p2_ready:
 		return
 	phase = "countdown"
@@ -2144,14 +2218,172 @@ func create_network_ui() -> void:
 	network_panel.add_theme_stylebox_override("panel", style)
 	network_address_input = $UIRoot/Connection/AddressInput
 	network_status_label = $UIRoot/Connection/Status
+	network_room_list = $UIRoot/Connection/RoomList
+	network_refresh_button = $UIRoot/Connection/RefreshButton
 	var host_button: Button = $UIRoot/Connection/HostButton
 	var join_button: Button = $UIRoot/Connection/JoinButton
 	network_back_button = $UIRoot/Connection/BackButton
-	for button in [host_button, join_button, network_back_button]:
+	for button in [host_button, join_button, network_back_button, network_refresh_button]:
 		style_menu_button(button, 23 if button != network_back_button else 20)
 	connect_button_once(host_button, start_host)
 	connect_button_once(join_button, join_host)
+	connect_button_once(network_refresh_button, refresh_dedicated_rooms)
 	connect_button_once(network_back_button, return_to_home)
+
+
+func setup_dedicated_connection() -> void:
+	dedicated_connection = DedicatedClientConnection.new()
+	dedicated_connection.lobby_url = lobby_api_url
+	add_child(dedicated_connection)
+	dedicated_connection.rooms_received.connect(_on_dedicated_rooms_received)
+	dedicated_connection.reservation_received.connect(_on_dedicated_reservation_received)
+	dedicated_connection.connection_error.connect(_on_dedicated_connection_error)
+	dedicated_connection.joined.connect(_on_dedicated_joined)
+	dedicated_connection.snapshot_received.connect(_on_dedicated_snapshot_received)
+
+
+func refresh_dedicated_rooms() -> void:
+	if dedicated_connection:
+		dedicated_connection.refresh_rooms()
+
+
+func _on_dedicated_rooms_received(rooms: Array) -> void:
+	dedicated_rooms = rooms
+	network_room_list.clear()
+	for room in rooms:
+		network_room_list.add_item("%s  (%d/2)" % [str(room.get("name", "無名ルーム")), int(room.get("players", 0))])
+	network_status_label.text = "%d 件の公開ルーム" % rooms.size()
+
+
+func _on_dedicated_reservation_received(connection: Dictionary) -> void:
+	network_status_label.text = "予約済み。対戦サーバーへ接続しています..."
+	dedicated_connection.connect_reserved_room(connection)
+
+
+func _on_dedicated_connection_error(message: String) -> void:
+	network_status_label.text = message
+
+
+func _on_dedicated_joined(room_id: String, slot: int) -> void:
+	network_mode = "client"
+	local_player_id = slot
+	phase = "lobby"
+	_send_dedicated_loadout(p1_selection if slot == 1 else p2_selection)
+	status_text = "ルーム %s に参加しました。" % room_id.left(8)
+	show_lobby()
+
+
+func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
+	var incoming_players: Dictionary = snapshot.get("players", {})
+	if incoming_players.is_empty():
+		return
+	players = incoming_players
+	match_state.players = players
+	match_state.time_remaining = float(snapshot.get("time_remaining", MATCH_DURATION))
+	match_state.match_over = bool(snapshot.get("match_over", false))
+	match_state.winner_id = int(snapshot.get("winner_id", 0))
+	phase = str(snapshot.get("phase", "lobby"))
+	status_text = str(snapshot.get("status_text", ""))
+	var ready: Dictionary = snapshot.get("ready", {})
+	p1_ready = bool(ready.get(1, false))
+	p2_ready = bool(ready.get(2, false))
+	skill_projectiles = MatchProtocol.dictionary_array(snapshot.get("skill_projectiles", []))
+	magic_zones = MatchProtocol.dictionary_array(snapshot.get("magic_zones", []))
+	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
+	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
+	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
+	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
+	_apply_dedicated_challenge_snapshot(snapshot.get("challenge", {}))
+	if phase == "lobby":
+		if screen != "online_waiting":
+			apply_screen_state("online_waiting")
+		refresh_lobby_label()
+	elif phase == "match" and screen != "match":
+		apply_screen_state("match")
+	elif phase == "result" and screen != "result":
+		show_result(match_state.winner_id)
+
+
+func _apply_dedicated_challenge_snapshot(challenge: Dictionary) -> void:
+	if challenge.is_empty():
+		if challenge_owner == local_player_id:
+			set_challenge_overlay_visible(false)
+			typing_input.text = ""
+		challenge_owner = 0
+		challenge_skill = ""
+		dedicated_challenge_type = ""
+		dedicated_challenge_limit = 0.0
+		return
+	challenge_owner = int(challenge.get("owner", 0))
+	challenge_skill = str(challenge.get("skill", ""))
+	challenge_prompt = str(challenge.get("prompt", ""))
+	challenge_typed_characters = str(challenge.get("typed", ""))
+	challenge_target_points = challenge.get("target", PackedVector2Array())
+	challenge_trace_points = challenge.get("trace", PackedVector2Array())
+	dedicated_challenge_type = str(challenge.get("type", ""))
+	dedicated_challenge_limit = float(challenge.get("limit", 0.0))
+	challenge_definition = null
+	var local_owner := challenge_owner == local_player_id
+	set_challenge_overlay_visible(local_owner)
+	typing_input.visible = dedicated_challenge_type != "tracing"
+	challenge_trace_canvas.visible = dedicated_challenge_type == "tracing"
+	if local_owner:
+		apply_challenge_layout(str(players[local_player_id].get("character_id", "blade")))
+		if dedicated_challenge_type == "typing":
+			typing_input.text = challenge_typed_characters
+			typing_input.caret_column = typing_input.text.length()
+		update_challenge_ui(float(challenge.get("elapsed", 0.0)))
+
+
+@rpc("authority", "reliable")
+func joined_room(room_id: String, slot: int) -> void:
+	if dedicated_connection:
+		dedicated_connection.joined.emit(room_id, slot)
+
+
+@rpc("authority", "reliable")
+func join_rejected(message: String) -> void:
+	if dedicated_connection:
+		dedicated_connection.connection_error.emit(message)
+
+
+@rpc("authority", "reliable")
+func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
+	if dedicated_connection:
+		dedicated_connection.snapshot_received.emit(snapshot)
+
+
+# DedicatedClientConnection sends these calls through this root node so that
+# the client and server have the same RPC path. The server implementation owns
+# the behavior; these client-side declarations provide the matching contract.
+@rpc("any_peer", "reliable")
+func join_room(_room_id: String, _requested_slot: int, _token: String) -> void:
+	pass
+
+
+@rpc("any_peer", "unreliable")
+func submit_match_input(_input: Dictionary) -> void:
+	pass
+
+
+@rpc("any_peer", "reliable")
+func submit_match_event(_event: Dictionary) -> void:
+	pass
+
+
+@rpc("any_peer", "reliable")
+func set_room_ready(_is_ready: bool) -> void:
+	pass
+
+
+@rpc("any_peer", "reliable")
+func request_match_start() -> void:
+	pass
+
+
+@rpc("any_peer", "reliable")
+func request_result_action(_action: String) -> void:
+	pass
 
 
 func make_menu_panel(node_path: NodePath, border_color: Color) -> Panel:
@@ -2735,7 +2967,9 @@ func start_debug_match() -> void:
 
 func show_connection() -> void:
 	phase = "connection"
-	network_status_label.text = "ホスト作成、またはIP:ポートを入力して参加してください。"
+	network_status_label.text = "ルーム名を入力して作成、または一覧から選んで参加してください。"
+	if dedicated_connection:
+		dedicated_connection.refresh_rooms()
 	network_back_button.visible = true
 	apply_screen_state("connection")
 
@@ -2745,33 +2979,28 @@ func start_local_debug() -> void:
 
 
 func start_host() -> void:
-	var peer := ENetMultiplayerPeer.new()
-	var result: int = peer.create_server(NETWORK_PORT, 1)
-	if result != OK:
-		network_status_label.text = "ポート%dを開けませんでした: %s" % [NETWORK_PORT, error_string(result)]
+	if dedicated_connection == null:
 		return
-	multiplayer.multiplayer_peer = peer
-	network_mode = "host"
-	local_player_id = 1
-	lobby_debug_log("host started; unique_id=%d port=%d" % [multiplayer.get_unique_id(), NETWORK_PORT])
-	show_lobby()
-	status_text = "ルームを作成しました。参加者を待っています。"
+	var room_name := network_address_input.text.strip_edges()
+	if room_name.is_empty():
+		network_status_label.text = "ルーム名を入力してください。"
+		return
+	dedicated_connection.create_room(room_name)
+	network_status_label.text = "ルームを作成しています..."
 
 
 func join_host() -> void:
-	var address_parts: PackedStringArray = network_address_input.text.strip_edges().split(":", false, 1)
-	var host_address: String = address_parts[0] if not address_parts.is_empty() else "127.0.0.1"
-	var host_port: int = int(address_parts[1]) if address_parts.size() == 2 else NETWORK_PORT
-	var peer := ENetMultiplayerPeer.new()
-	var result: int = peer.create_client(host_address, host_port)
-	if result != OK:
-		network_status_label.text = "接続を開始できませんでした: %s" % error_string(result)
+	if dedicated_connection == null:
 		return
-	multiplayer.multiplayer_peer = peer
-	network_mode = "client"
-	local_player_id = 2
-	lobby_debug_log("client connection requested; address=%s:%d unique_id=%d" % [host_address, host_port, multiplayer.get_unique_id()])
-	network_status_label.text = "接続中..."
+	var selected := network_room_list.get_selected_items()
+	var room_id := network_address_input.text.strip_edges()
+	if not selected.is_empty() and int(selected[0]) < dedicated_rooms.size():
+		room_id = str(dedicated_rooms[int(selected[0])]["id"])
+	if room_id.is_empty():
+		network_status_label.text = "参加するルームを選択してください。"
+		return
+	dedicated_connection.join_room(room_id)
+	network_status_label.text = "参加予約を取得しています..."
 
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -2783,6 +3012,8 @@ func _on_peer_connected(peer_id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		return
 	lobby_debug_log("connected_to_server; unique_id=%d mode=%s screen_before=%s" % [multiplayer.get_unique_id(), network_mode, screen])
 	phase = "lobby"
 	apply_screen_state("online_waiting")
@@ -2820,7 +3051,22 @@ func process_client_network_input(_delta: float) -> void:
 		"big": Input.is_key_pressed(KEY_3),
 		"skill3": Input.is_key_pressed(KEY_4),
 	}
-	rpc_id(1, "receive_remote_input", pending_client_input)
+	if dedicated_connection:
+		dedicated_connection.send_input(pending_client_input["move"])
+		if challenge_owner == 0:
+			_send_dedicated_action("attack", bool(pending_client_input["attack"]))
+			_send_dedicated_action("small_skill", bool(pending_client_input["small"]))
+			_send_dedicated_action("big_skill", bool(pending_client_input["big"]))
+			_send_dedicated_action("skill3", bool(pending_client_input["skill3"]))
+	else:
+		rpc_id(1, "receive_remote_input", pending_client_input)
+
+
+func _send_dedicated_action(action: String, pressed: bool) -> void:
+	var was_pressed := bool(dedicated_action_down.get(action, false))
+	if pressed and not was_pressed and dedicated_connection:
+		dedicated_connection.send_event(action)
+	dedicated_action_down[action] = pressed
 
 
 func sync_network_state(delta: float) -> void:
@@ -2889,12 +3135,12 @@ func receive_network_state(state: Dictionary) -> void:
 	p2_ready = bool(state["p2_ready"])
 	countdown_remaining = float(state["countdown_remaining"])
 	status_text = str(state["status_text"])
-	skill_projectiles = state["skill_projectiles"]
-	magic_zones = state["magic_zones"]
-	shockwaves = state.get("shockwaves", [])
-	trident_impacts = state.get("trident_impacts", [])
-	hammer_spins = state.get("hammer_spins", [])
-	decoys = state.get("decoys", [])
+	skill_projectiles = MatchProtocol.dictionary_array(state.get("skill_projectiles", []))
+	magic_zones = MatchProtocol.dictionary_array(state.get("magic_zones", []))
+	shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
+	trident_impacts = MatchProtocol.dictionary_array(state.get("trident_impacts", []))
+	hammer_spins = MatchProtocol.dictionary_array(state.get("hammer_spins", []))
+	decoys = MatchProtocol.dictionary_array(state.get("decoys", []))
 	arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
 	arithmetic_flash_center = state.get("arithmetic_flash_center", Vector2.ZERO)
 	arithmetic_flash_owner_id = int(state.get("arithmetic_flash_owner_id", 0))
@@ -3053,7 +3299,7 @@ func refresh_lobby_label() -> void:
 	var names: Array[String] = ["打鍵士", "算術士", "詠唱者"]
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	lobby_label.text = "オンライン対戦 - 待機画面"
-	var local_side := 2 if network_mode == "client" else 1
+	var local_side := local_player_id if network_mode == "client" else 1
 	var remote_connected := multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
 	# Both cards remain visible so the opponent slot can communicate connection
 	# state with the shadow portrait. The status icon still indicates readiness.
@@ -3077,21 +3323,31 @@ func refresh_lobby_label() -> void:
 		var should_show := local_side == 2
 		if button.visible != should_show:
 			button.visible = should_show
-	if not lobby_p1_ready.visible:
-		lobby_p1_ready.visible = true
-	if lobby_p2_ready.visible:
-		lobby_p2_ready.visible = false
-	var should_show_start := network_mode == "host"
+	var is_dedicated_lobby := dedicated_connection != null and dedicated_connection.has_pending_join()
+	if is_dedicated_lobby:
+		lobby_p1_ready.visible = local_side == 1
+		lobby_p2_ready.visible = local_side == 2
+	else:
+		# Legacy player-hosted lobby keeps the original single visible ready button.
+		if not lobby_p1_ready.visible:
+			lobby_p1_ready.visible = true
+		if lobby_p2_ready.visible:
+			lobby_p2_ready.visible = false
+	var local_is_host := local_side == 1
+	var should_show_start := (network_mode == "host" and not is_dedicated_lobby) or (is_dedicated_lobby and local_is_host)
 	if lobby_start_button.visible != should_show_start:
 		lobby_start_button.visible = should_show_start
 	var should_disable_start := not (p1_ready and p2_ready)
 	if lobby_start_button.disabled != should_disable_start:
 		lobby_start_button.disabled = should_disable_start
+	if lobby_start_button.text != "ゲーム開始":
+		lobby_start_button.text = "ゲーム開始"
 	var next_ready_text := "準備完了済み" if (p2_ready if local_side == 2 else p1_ready) else "準備完了"
-	var ready_was_pressed := lobby_p1_ready.button_pressed
-	var ready_text_before := lobby_p1_ready.text
+	var local_ready_button := get_local_lobby_ready_button()
+	var ready_was_pressed := local_ready_button.button_pressed
+	var ready_text_before := local_ready_button.text
 	if ready_text_before != next_ready_text:
-		lobby_p1_ready.text = next_ready_text
+		local_ready_button.text = next_ready_text
 	if ready_was_pressed or ready_text_before != next_ready_text:
 		lobby_debug_log("ready button refreshed while active; pressed=%s text=%s->%s visible=%s disabled=%s" % [str(ready_was_pressed), ready_text_before, next_ready_text, str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled)])
 	var debug_signature := "%s|%s|%s|%s|%s|%s|%s" % [network_mode, screen, str(remote_connected), str(p1_ready), str(p2_ready), str(lobby_p1_ready.visible), str(lobby_home_button.visible)]
@@ -3104,6 +3360,10 @@ func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> v
 	icon.visible = is_present
 	if is_present:
 		icon.call("set_ready", is_ready)
+
+
+func get_local_lobby_ready_button() -> Button:
+	return lobby_p1_ready if local_player_id == 1 else lobby_p2_ready
 
 
 func get_idle_texture(visual_id: String) -> Texture2D:
@@ -3839,9 +4099,12 @@ func _input(event: InputEvent) -> void:
 		lobby_debug_log("mouse %s; pos=%s screen=%s mode=%s phase=%s hovered=%s ready_pressed=%s ready_text=%s" % ["pressed" if event.pressed else "released", str(event.position), screen, network_mode, phase, lobby_debug_control_name(hovered), str(lobby_p1_ready.button_pressed if lobby_p1_ready else false), lobby_p1_ready.text if lobby_p1_ready else "<none>"])
 		# クライアントでは、ネットワーク受信とGUI処理の競合でButtonの
 		# pressedシグナルが発火しない場合があるため、準備完了だけは
-		# マウスの押下・解放を直接ローカル操作へ変換する。
-		if network_mode == "client" and phase == "lobby" and screen == "online_waiting" and lobby_p1_ready and event.button_index == MOUSE_BUTTON_LEFT:
-			var is_over_ready_button := lobby_p1_ready.get_global_rect().has_point(event.position)
+		# マウスの押下・解放を直接ローカル操作へ変換する。Dedicated
+		# Server ロビーでは slot ごとに可視ボタンが異なるため、現在の
+		# ローカル slot のボタンを必ず対象にする。
+		var local_ready_button := get_local_lobby_ready_button()
+		if network_mode == "client" and phase == "lobby" and screen == "online_waiting" and local_ready_button and event.button_index == MOUSE_BUTTON_LEFT:
+			var is_over_ready_button := local_ready_button.get_global_rect().has_point(event.position)
 			if event.pressed and is_over_ready_button:
 				lobby_ready_mouse_down = true
 				get_viewport().set_input_as_handled()
@@ -3888,6 +4151,25 @@ func _input(event: InputEvent) -> void:
 			return_to_home()
 			return
 		if phase == "lobby":
+			if dedicated_connection and dedicated_connection.has_pending_join():
+				var dedicated_selection := p1_selection if local_player_id == 1 else p2_selection
+				if event.keycode == KEY_1:
+					dedicated_selection = 0
+				elif event.keycode == KEY_2:
+					dedicated_selection = 1
+				elif event.keycode == KEY_3:
+					dedicated_selection = 2
+				elif event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+					toggle_local_lobby_ready()
+					return
+				else:
+					return
+				if local_player_id == 1:
+					p1_selection = dedicated_selection
+				else:
+					p2_selection = dedicated_selection
+				_send_dedicated_loadout(dedicated_selection)
+				return
 			if network_mode == "client":
 				if event.keycode == KEY_1 or event.keycode == KEY_7:
 					p2_selection = 0
@@ -3917,7 +4199,10 @@ func _input(event: InputEvent) -> void:
 				p2_ready = not p2_ready
 			return
 		if event.keycode == KEY_ESCAPE and challenge_owner != 0:
-			end_active_challenge(false, 0, "課題を中止した。")
+			if dedicated_connection and dedicated_connection.has_pending_join() and challenge_owner == local_player_id:
+				dedicated_connection.send_event("challenge_cancel")
+			else:
+				end_active_challenge(false, 0, "課題を中止した。")
 			return
 	if event is InputEventMouseButton and challenge_owner != 0 and _is_trace_challenge():
 		if network_mode == "host" and challenge_owner != 1:
@@ -3929,6 +4214,9 @@ func _input(event: InputEvent) -> void:
 			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
 			update_trace_canvas()
 		else:
+			if dedicated_connection and dedicated_connection.has_pending_join():
+				dedicated_connection.send_event("challenge_trace", challenge_trace_points)
+				return
 			if network_mode == "client":
 				rpc_id(1, "receive_remote_trace", challenge_trace_points)
 				return

@@ -1,0 +1,17 @@
+[Unit]
+Description=Skill Battle dedicated ENet server
+After=network-online.target skill-battle-lobby.service
+Wants=network-online.target skill-battle-lobby.service
+
+[Service]
+User=skill-battle
+WorkingDirectory=/opt/skill-battle/server/current
+EnvironmentFile=/etc/skill-battle/server.env
+ExecStart=/opt/skill-battle/server/current/skill-battle-server --headless --scene res://scenes/server_main.tscn
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

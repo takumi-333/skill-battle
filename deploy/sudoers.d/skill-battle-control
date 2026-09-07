@@ -1,0 +1,3 @@
+# Install as root-owned /etc/sudoers.d/skill-battle-control with mode 0440.
+# The dashboard can only invoke fixed operations in skill-battle-control.
+skill-battle ALL=(root) NOPASSWD: /usr/local/sbin/skill-battle-control status, /usr/local/sbin/skill-battle-control logs, /usr/local/sbin/skill-battle-control start, /usr/local/sbin/skill-battle-control stop, /usr/local/sbin/skill-battle-control restart

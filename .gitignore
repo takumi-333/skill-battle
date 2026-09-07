@@ -5,6 +5,8 @@
 **/*.import
 project.godot
 work/
+.local-server/
+server/lobby/lobby.db
 **/__pycache__/
 **/issue_list.md
 docs/issues/issue-list.md
