@@ -20,6 +20,10 @@ func _run() -> void:
 	assert(prototype.call("get_local_lobby_ready_button") == player_two_ready)
 	_test_dedicated_snapshot_ui(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
+	# The test supplies a pending reservation to exercise dedicated-only UI.
+	# Clear it before the next frame so the scene never attempts a real RPC.
+	(prototype.get("dedicated_connection") as Node).set("_join_data", {})
+	prototype.set("phase", "result")
 	print("online lobby ready UI tests passed")
 	quit()
 

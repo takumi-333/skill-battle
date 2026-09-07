@@ -11,6 +11,8 @@ func _init() -> void:
 	_test_session_event_deduplication()
 	_test_session_ready_start()
 	_test_session_result_actions()
+	_test_snapshot_metadata_and_recipient_filtering()
+	_test_visual_snapshot_interpolation()
 	_test_delayed_keycap_targets_from_launch_position()
 	_test_decoy_flash_expires()
 	_test_snapshot_dictionary_array_conversion()
@@ -47,6 +49,7 @@ func _test_typist_skills() -> void:
 	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
 	_complete_typing(skill3_simulation, 1)
 	assert(not skill3_simulation.state["hammer_spins"].is_empty())
+	assert(int(skill3_simulation.state["hammer_spins"][0]["presentation_id"]) > 0)
 
 func _test_arithmetician_skills() -> void:
 	var simulation := MatchSimulation.new()
@@ -64,6 +67,7 @@ func _test_chanter_skills() -> void:
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(1, 2, "typist_trident")
 	assert(simulation.handle_event(1, {"type": "small_skill"}))
+	simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
 	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
 	assert(simulation.state["challenges"].is_empty())
@@ -71,6 +75,7 @@ func _test_chanter_skills() -> void:
 	var big_simulation := MatchSimulation.new()
 	big_simulation.configure_loadout(1, 2, "typist_trident")
 	assert(big_simulation.handle_event(1, {"type": "big_skill"}))
+	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var big_target: PackedVector2Array = big_simulation.state["challenges"][1]["target"]
 	assert(big_simulation.handle_event(1, {"type": "challenge_trace", "payload": big_target}))
 	assert(not big_simulation.state["skill_projectiles"].is_empty())
@@ -107,10 +112,43 @@ func _test_challenge_miss_sequence_and_snapshot() -> void:
 	var challenge: Dictionary = simulation.state["challenges"][1]
 	assert(int(challenge["miss_sequence"]) == 1)
 	assert(is_equal_approx(float(challenge["elapsed"]), 1.8))
-	var snapshot := MatchProtocol.snapshot("test", simulation.state, "match", "")
+	var snapshot := MatchProtocol.snapshot("test", simulation.state, "match", "", 1, 42, {1: 7, 2: 3})
 	var snapshot_challenge: Dictionary = snapshot["challenges"][1]
 	assert(int(snapshot_challenge["miss_sequence"]) == 1)
 	assert(not snapshot_challenge.has("answer"))
+	assert(int(snapshot["server_tick"]) == 42)
+	assert(int(snapshot["input_acknowledgements"][1]) == 7)
+
+
+func _test_snapshot_metadata_and_recipient_filtering() -> void:
+	var simulation := MatchSimulation.new()
+	assert(simulation.handle_event(1, {"type": "small_skill"}))
+	assert(simulation.handle_event(2, {"type": "small_skill"}))
+	var snapshot := MatchProtocol.snapshot("test", simulation.state, "match", "", 1, 120, {1: 15, 2: 18})
+	assert(snapshot["challenges"].has(1))
+	assert(not snapshot["challenges"].has(2))
+	assert(not (snapshot["challenges"][1] as Dictionary).has("answer"))
+	assert(not (snapshot["players"][1] as Dictionary).has("normal_damage"))
+	assert(not (snapshot["players"][1] as Dictionary).has("attack_damage_buff"))
+	assert(is_equal_approx(MatchProtocol.TICK_SECONDS, 1.0 / 60.0))
+
+
+func _test_visual_snapshot_interpolation() -> void:
+	var previous := {
+		"players": {1: {"position": Vector2(0, 0), "facing": Vector2.RIGHT}},
+		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(10, 0), "velocity": Vector2.RIGHT, "lifetime": 2.0}],
+		"magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+	}
+	var current := {
+		"players": {1: {"position": Vector2(20, 0), "facing": Vector2.DOWN}},
+		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(30, 0), "velocity": Vector2.DOWN, "lifetime": 1.0}],
+		"magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+	}
+	var blended := MatchProtocol.interpolate_visual_state(previous, current, 0.5)
+	assert(Vector2(blended["players"][1]["position"]).is_equal_approx(Vector2(10, 0)))
+	assert(Vector2(blended["skill_projectiles"][0]["position"]).is_equal_approx(Vector2(20, 0)))
+	assert(is_equal_approx(float(blended["skill_projectiles"][0]["lifetime"]), 1.5))
+	assert(absf(MatchProtocol.lerp_angle_shortest(6.2, 0.1, 0.5) - 0.008407) < 0.02)
 
 func _test_session_event_deduplication() -> void:
 	var session := MatchSession.new("test-room")
@@ -119,6 +157,18 @@ func _test_session_event_deduplication() -> void:
 	session.phase = "match"
 	assert(session.submit_event(11, MatchProtocol.make_event(1, "small_skill")))
 	assert(not session.submit_event(11, MatchProtocol.make_event(1, "small_skill")))
+	assert(session.submit_input(11, MatchProtocol.make_input(4, Vector2.RIGHT)))
+	var snapshot := session.make_snapshot(1, 99)
+	assert(int(snapshot["server_tick"]) == 99)
+	assert(int(snapshot["input_acknowledgements"][1]) == 4)
+	var start_position := Vector2(session.simulation.state["players"][1]["position"])
+	session.step(MatchProtocol.TICK_SECONDS)
+	assert(Vector2(session.simulation.state["players"][1]["position"]).x > start_position.x)
+	for index in MatchSession.INPUT_STALE_TICKS + 1:
+		session.step(MatchProtocol.TICK_SECONDS)
+	var stale_position := Vector2(session.simulation.state["players"][1]["position"])
+	session.step(MatchProtocol.TICK_SECONDS)
+	assert(Vector2(session.simulation.state["players"][1]["position"]).is_equal_approx(stale_position))
 
 func _test_session_ready_start() -> void:
 	var session := MatchSession.new("ready-room")

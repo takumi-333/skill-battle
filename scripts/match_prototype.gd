@@ -453,6 +453,13 @@ var dedicated_challenge_limit := 0.0
 var dedicated_challenge_id := 0
 var dedicated_challenge_miss_sequence := 0
 var dedicated_trident_release_states: Dictionary = {}
+var dedicated_previous_snapshot: Dictionary = {}
+var dedicated_current_snapshot: Dictionary = {}
+var dedicated_snapshot_received_msec := 0
+var dedicated_last_server_tick := -1
+var dedicated_input_acknowledgements: Dictionary = {}
+var dedicated_hammer_presentation_angles: Dictionary = {}
+const DEDICATED_INTERPOLATION_SECONDS := 1.0 / 20.0
 @export var lobby_api_url := "http://127.0.0.1:8000"
 var title_panel: Panel
 var title_prompt: Label
@@ -769,6 +776,7 @@ func _process(delta: float) -> void:
 		return
 	if network_mode == "client":
 		process_client_network_input(delta)
+		interpolate_dedicated_snapshot(delta)
 		interpolate_network_players(delta)
 		if challenge_owner == local_player_id:
 			var challenge_player: Dictionary = players[local_player_id]
@@ -2274,6 +2282,7 @@ func _on_dedicated_joined(room_id: String, slot: int) -> void:
 	network_mode = "client"
 	local_player_id = slot
 	phase = "lobby"
+	_clear_dedicated_snapshot_buffer()
 	_send_dedicated_loadout(p1_selection if slot == 1 else p2_selection)
 	status_text = "ルーム %s に参加しました。" % room_id.left(8)
 	show_lobby()
@@ -2283,24 +2292,31 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	var incoming_players: Dictionary = snapshot.get("players", {})
 	if incoming_players.is_empty():
 		return
-	players = incoming_players
-	match_state.players = players
+	var incoming_tick := int(snapshot.get("server_tick", 0))
+	if incoming_tick < dedicated_last_server_tick:
+		return
+	dedicated_last_server_tick = incoming_tick
+	match_state.players = incoming_players
 	match_state.time_remaining = float(snapshot.get("time_remaining", MATCH_DURATION))
 	match_state.match_over = bool(snapshot.get("match_over", false))
 	match_state.winner_id = int(snapshot.get("winner_id", 0))
 	phase = str(snapshot.get("phase", "lobby"))
 	status_text = str(snapshot.get("status_text", ""))
+	dedicated_input_acknowledgements = snapshot.get("input_acknowledgements", {}).duplicate()
 	var ready: Dictionary = snapshot.get("ready", {})
 	p1_ready = bool(ready.get(1, false))
 	p2_ready = bool(ready.get(2, false))
-	skill_projectiles = MatchProtocol.dictionary_array(snapshot.get("skill_projectiles", []))
-	magic_zones = MatchProtocol.dictionary_array(snapshot.get("magic_zones", []))
-	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	_update_dedicated_trident_screen_shake()
-	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
-	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
 	_apply_dedicated_challenges_snapshot(snapshot.get("challenges", {}))
+	var first_snapshot := dedicated_current_snapshot.is_empty()
+	if first_snapshot:
+		dedicated_previous_snapshot = snapshot.duplicate(true)
+	else:
+		dedicated_previous_snapshot = dedicated_current_snapshot
+	dedicated_current_snapshot = snapshot.duplicate(true)
+	dedicated_snapshot_received_msec = Time.get_ticks_msec()
+	_apply_dedicated_visual_snapshot(dedicated_current_snapshot if first_snapshot or phase != "match" else dedicated_previous_snapshot)
 	if phase == "lobby":
 		if screen != "online_waiting":
 			apply_screen_state("online_waiting")
@@ -2309,6 +2325,56 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 		apply_screen_state("match")
 	elif phase == "result" and screen != "result":
 		show_result(match_state.winner_id)
+
+
+func interpolate_dedicated_snapshot(delta: float) -> void:
+	if dedicated_current_snapshot.is_empty():
+		return
+	var elapsed := float(Time.get_ticks_msec() - dedicated_snapshot_received_msec) / 1000.0
+	var ratio := clampf(elapsed / DEDICATED_INTERPOLATION_SECONDS, 0.0, 1.0)
+	_apply_dedicated_visual_snapshot(MatchProtocol.interpolate_visual_state(dedicated_previous_snapshot, dedicated_current_snapshot, ratio))
+	_advance_hammer_presentations(delta)
+
+
+func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
+	var visual_players: Dictionary = snapshot.get("players", {})
+	if visual_players.is_empty():
+		return
+	players = visual_players
+	skill_projectiles = MatchProtocol.dictionary_array(snapshot.get("skill_projectiles", []))
+	magic_zones = MatchProtocol.dictionary_array(snapshot.get("magic_zones", []))
+	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
+	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
+	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
+	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
+
+func _advance_hammer_presentations(delta: float) -> void:
+	var active_ids := {}
+	for index in hammer_spins.size():
+		var spin: Dictionary = hammer_spins[index]
+		var presentation_id := int(spin.get("presentation_id", 0))
+		if presentation_id <= 0:
+			continue
+		active_ids[presentation_id] = true
+		var current_angle := float(dedicated_hammer_presentation_angles.get(presentation_id, spin.get("angle", 0.0)))
+		var server_angle := float(spin.get("angle", current_angle))
+		var correction := wrapf(server_angle - current_angle, -PI, PI)
+		current_angle = wrapf(current_angle + TAU * 1.35 * delta + correction * minf(1.0, delta * 12.0), 0.0, TAU)
+		dedicated_hammer_presentation_angles[presentation_id] = current_angle
+		spin["angle"] = current_angle
+		hammer_spins[index] = spin
+	for presentation_id in dedicated_hammer_presentation_angles.keys():
+		if not active_ids.has(presentation_id):
+			dedicated_hammer_presentation_angles.erase(presentation_id)
+
+
+func _clear_dedicated_snapshot_buffer() -> void:
+	dedicated_previous_snapshot.clear()
+	dedicated_current_snapshot.clear()
+	dedicated_snapshot_received_msec = 0
+	dedicated_last_server_tick = -1
+	dedicated_input_acknowledgements.clear()
+	dedicated_hammer_presentation_angles.clear()
 
 
 func _update_dedicated_trident_screen_shake() -> void:
@@ -2376,10 +2442,19 @@ func join_rejected(message: String) -> void:
 		dedicated_connection.connection_error.emit(message)
 
 
-@rpc("authority", "reliable")
+@rpc("authority", "unreliable_ordered")
 func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
 	if dedicated_connection:
 		dedicated_connection.snapshot_received.emit(snapshot)
+
+@rpc("authority", "reliable")
+func receive_skill_presentation(presentation: Dictionary) -> void:
+	if str(presentation.get("kind", "")) != "hammer_spins":
+		return
+	var state: Dictionary = presentation.get("state", {})
+	var presentation_id := int(presentation.get("presentation_id", 0))
+	if presentation_id > 0 and not dedicated_hammer_presentation_angles.has(presentation_id):
+		dedicated_hammer_presentation_angles[presentation_id] = float(state.get("angle", 0.0))
 
 
 # DedicatedClientConnection sends these calls through this root node so that

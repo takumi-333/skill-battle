@@ -8,6 +8,11 @@ var peers: Dictionary = {} # slot -> peer ID
 var peer_slots: Dictionary = {} # peer ID -> slot
 var inputs := {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}}
 var input_sequences := {1: -1, 2: -1}
+var input_received_ticks := {1: -999999, 2: -999999}
+var simulation_tick := 0
+var pending_presentations: Array[Dictionary] = []
+var known_presentation_ids: Dictionary = {}
+const INPUT_STALE_TICKS := 15
 var event_sequences := {1: -1, 2: -1}
 var ready := {1: false, 2: false}
 var phase := "lobby"
@@ -43,6 +48,7 @@ func submit_input(peer_id: int, input: Dictionary) -> bool:
 		return false
 	input_sequences[slot] = int(input["sequence"])
 	inputs[slot] = input
+	input_received_ticks[slot] = simulation_tick
 	return true
 
 func submit_event(peer_id: int, event: Dictionary) -> bool:
@@ -58,7 +64,10 @@ func submit_event(peer_id: int, event: Dictionary) -> bool:
 	elif phase != "match":
 		return false
 	event_sequences[slot] = int(event["sequence"])
-	return simulation.handle_event(slot, event)
+	var accepted := simulation.handle_event(slot, event)
+	if accepted:
+		_collect_presentations()
+	return accepted
 
 func set_ready(peer_id: int, is_ready: bool) -> void:
 	if phase != "lobby" or not peer_slots.has(peer_id):
@@ -112,12 +121,40 @@ func _character_index(character_id: String) -> int:
 func step(delta: float) -> void:
 	if phase != "match":
 		return
-	simulation.step(delta, inputs)
+	simulation_tick += 1
+	var active_inputs := inputs.duplicate(true)
+	for slot in [1, 2]:
+		if simulation_tick - int(input_received_ticks[slot]) > INPUT_STALE_TICKS:
+			active_inputs[slot] = {"move": Vector2.ZERO}
+	simulation.step(delta, active_inputs)
+	_collect_presentations()
 	if bool(simulation.state["match_over"]):
 		phase = "result"
 		status = "試合終了"
 
-func make_snapshot() -> Dictionary:
-	var value := MatchProtocol.snapshot(room_id, simulation.state, phase, status)
+func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
+	var value := MatchProtocol.snapshot(room_id, simulation.state, phase, status, recipient_slot, server_tick, input_sequences)
 	value["ready"] = ready.duplicate()
 	return value
+
+func take_presentations() -> Array[Dictionary]:
+	var value := pending_presentations.duplicate(true)
+	pending_presentations.clear()
+	return value
+
+func _collect_presentations() -> void:
+	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "hammer_spins"]:
+		for entity in simulation.state.get(kind, []):
+			var item: Dictionary = entity
+			var presentation_id := int(item.get("presentation_id", 0))
+			if presentation_id <= 0 or known_presentation_ids.has(presentation_id):
+				continue
+			known_presentation_ids[presentation_id] = true
+			pending_presentations.append({"presentation_id": presentation_id, "kind": kind, "state": _presentation_state(item)})
+
+func _presentation_state(source: Dictionary) -> Dictionary:
+	var result := {}
+	for key in ["presentation_id", "owner_id", "visual_id", "position", "velocity", "facing", "origin", "score", "angle", "lifetime", "delay", "duration", "elapsed", "released", "active_duration", "spawned", "chip", "key_cap"]:
+		if source.has(key):
+			result[key] = source[key]
+	return result

@@ -20,6 +20,10 @@ const BIG_INTERRUPT_GAUGE := 50.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
 const MAX_PROJECTILES := 64
+const TRACE_MIN_ELAPSED := 0.35
+const TRACE_MIN_POINTS := 8
+const TRACE_MIN_LENGTH := 80.0
+const TRACE_MAX_SEGMENT_LENGTH := 180.0
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -32,6 +36,7 @@ var state: Dictionary
 var _challenge_nonce := 0
 var _next_projectile_id := 1
 var _next_trident_impact_id := 1
+var _next_presentation_id := 1
 var _trace_evaluator := TraceEvaluator.new()
 
 func _init() -> void:
@@ -270,6 +275,9 @@ func _submit_trace(slot: int, trace: PackedVector2Array) -> bool:
 	var challenge: Dictionary = _challenge_for(slot)
 	if challenge.is_empty() or str(challenge["type"]) != "tracing":
 		return false
+	if not _valid_trace_submission(challenge, trace):
+		_end_challenge(slot, false, 0, "なぞり入力が無効です。")
+		return true
 	challenge["trace"] = trace
 	_set_challenge(slot, challenge)
 	var result := _trace_evaluator.evaluate(challenge["target"], trace)
@@ -278,6 +286,17 @@ func _submit_trace(slot: int, trace: PackedVector2Array) -> bool:
 	else:
 		_end_challenge(slot, false, 0, "なぞりに失敗した。")
 	return true
+
+func _valid_trace_submission(challenge: Dictionary, trace: PackedVector2Array) -> bool:
+	if float(challenge.get("elapsed", 0.0)) < TRACE_MIN_ELAPSED or trace.size() < TRACE_MIN_POINTS:
+		return false
+	var length := 0.0
+	for index in range(1, trace.size()):
+		var segment := trace[index].distance_to(trace[index - 1])
+		if segment > TRACE_MAX_SEGMENT_LENGTH:
+			return false
+		length += segment
+	return length >= TRACE_MIN_LENGTH
 
 func _cancel_challenge(slot: int) -> bool:
 	if _challenge_for(slot).is_empty():
@@ -354,9 +373,9 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 	var tier := str(challenge["tier"])
 	if character_id == "blade":
 		if tier == "skill3":
-			state["hammer_spins"].append({"owner_id": owner, "score": score, "angle": 0.0, "lifetime": _hammer_duration(score), "hit_timer": 0.0, "keycap_timer": 0.5})
+			state["hammer_spins"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "score": score, "angle": 0.0, "lifetime": _hammer_duration(score), "hit_timer": 0.0, "keycap_timer": 0.5})
 		elif tier == "big" and str(player.get("big_skill_id", "")) == "typist_trident":
-			state["trident_impacts"].append({"impact_id": _next_trident_impact_id, "owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
+			state["trident_impacts"].append({"impact_id": _next_trident_impact_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
 			_next_trident_impact_id += 1
 		else:
 			var interval := 0.3 if tier == "big" else 0.5
@@ -386,7 +405,7 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 		return
 	var player: Dictionary = state["players"][owner]
 	var facing := Vector2(player["facing"]).rotated(angle_offset)
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": (50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1)), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": false, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": (50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1)), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": false, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big})
 	_next_projectile_id += 1
 
 func _update_projectiles(delta: float) -> void:
@@ -428,7 +447,7 @@ func _spawn_decoys(owner: int, score: int) -> void:
 	var lifetime := 20.0 if score < 60 else (30.0 if score < 80 else 40.0)
 	for index in count:
 		var angle := TAU * float(index) / float(count)
-		decoys.append({"owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(angle) * (90.0 + 25.0 * index)), "owner_position": Vector2(player["position"]), "movement_offset_angle": angle, "is_moving": false, "animation_phase": float(index) / count, "lifetime": lifetime, "noise_timer": 5.0, "noise_time": 0.0, "noise_phase": angle, "flash_time": 0.25})
+		decoys.append({"presentation_id": _take_presentation_id(), "owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(angle) * (90.0 + 25.0 * index)), "owner_position": Vector2(player["position"]), "movement_offset_angle": angle, "is_moving": false, "animation_phase": float(index) / count, "lifetime": lifetime, "noise_timer": 5.0, "noise_time": 0.0, "noise_phase": angle, "flash_time": 0.25})
 	player["buff_time"] = lifetime
 	player["buff_speed_multiplier"] = 1.1
 	player["attack_damage_buff"] = 5
@@ -452,7 +471,7 @@ func _update_decoys(delta: float) -> void:
 			state["decoys"][index] = decoy
 
 func _spawn_zone(owner: int, score: int, delay: float, duration: float) -> void:
-	state["magic_zones"].append({"owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "damage_timer": 0.3, "damage": 8 + roundi(float(score) * 0.06), "spawned": false, "damage_started": false, "damage_flash": 0.0, "pulse_time": 0.0, "damage_applied": false})
+	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "damage_timer": 0.3, "damage": 8 + roundi(float(score) * 0.06), "spawned": false, "damage_started": false, "damage_flash": 0.0, "pulse_time": 0.0, "damage_applied": false})
 
 func _update_zones(delta: float) -> void:
 	for index in range(state["magic_zones"].size() - 1, -1, -1):
@@ -499,12 +518,12 @@ func _release_trident(impact: Dictionary) -> void:
 		_spawn_projectile_from(owner, score, landing, facing.rotated(angle), true)
 	if score >= 50:
 		for index in 3:
-			state["shockwaves"].append({"owner_id": owner, "origin": landing, "delay": float(index) * 0.5, "elapsed": 0.0, "radius": 0.0, "duration": 1.0, "damage": 0 if score < 80 else 12 + roundi(float(score) * 0.2), "knockback": lerpf(18.0, 48.0, float(score) / 100.0), "hit": false})
+			state["shockwaves"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "origin": landing, "delay": float(index) * 0.5, "elapsed": 0.0, "radius": 0.0, "duration": 1.0, "damage": 0 if score < 80 else 12 + roundi(float(score) * 0.2), "knockback": lerpf(18.0, 48.0, float(score) / 100.0), "hit": false})
 
 func _spawn_projectile_from(owner: int, score: int, position_value: Vector2, facing: Vector2, big: bool) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
 		return
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "owner_id": owner, "position": position_value + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * 300.0, "damage": 50 + roundi(float(score) * 0.2), "lifetime": 5.0, "piercing": big, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": facing.angle(), "key_cap": false})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": position_value + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * 300.0, "damage": 50 + roundi(float(score) * 0.2), "lifetime": 5.0, "piercing": big, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": facing.angle(), "key_cap": false})
 	_next_projectile_id += 1
 
 func _update_shockwaves(delta: float) -> void:
@@ -546,7 +565,7 @@ func _update_hammer_spins(delta: float) -> void:
 		if int(spin["score"]) >= 60 and float(spin["keycap_timer"]) <= 0.0:
 			if state["skill_projectiles"].size() < MAX_PROJECTILES:
 				var keycap_facing := Vector2(player["facing"])
-				state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "owner_id": owner, "position": tip, "velocity": keycap_facing * 800.0, "damage": 10, "lifetime": 3.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": keycap_facing.angle(), "key_cap": true})
+				state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": tip, "velocity": keycap_facing * 800.0, "damage": 10, "lifetime": 3.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": keycap_facing.angle(), "key_cap": true})
 				_next_projectile_id += 1
 			spin["keycap_timer"] = 0.5
 		if float(spin["lifetime"]) <= 0.0:
@@ -654,3 +673,8 @@ func _clamp_to_arena(position_value: Vector2) -> Vector2:
 
 func _other(slot: int) -> int:
 	return 2 if slot == 1 else 1
+
+func _take_presentation_id() -> int:
+	var value := _next_presentation_id
+	_next_presentation_id += 1
+	return value

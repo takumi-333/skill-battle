@@ -68,7 +68,7 @@ func joined_room(room_id: String, slot: int) -> void:
 func join_rejected(message: String) -> void:
 	connection_error.emit(message)
 
-@rpc("authority", "unreliable")
+@rpc("authority", "unreliable_ordered")
 func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
 	snapshot_received.emit(snapshot)
 

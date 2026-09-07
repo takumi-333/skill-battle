@@ -8,13 +8,17 @@ const SERVER_PORT_ENV := "SKILL_BATTLE_SERVER_PORT"
 const MONITOR_URL_ENV := "SKILL_BATTLE_LOBBY_INTERNAL_URL"
 const MONITOR_TOKEN_ENV := "SKILL_BATTLE_INTERNAL_API_TOKEN"
 const HEARTBEAT_INTERVAL := 5.0
-const SERVER_PROTOCOL_REVISION := "host-start-20260907"
+const MAX_FRAME_SECONDS := 0.25
+const MAX_CATCH_UP_TICKS := 5
+const SERVER_PROTOCOL_REVISION := "fixed-tick-sync-20260907"
 @export var port := DEFAULT_PORT
 @export var token_secret := ""
 
 var sessions: Dictionary = {}
 var peer_rooms: Dictionary = {}
+var simulation_elapsed := 0.0
 var snapshot_elapsed := 0.0
+var server_tick := 0
 var monitoring_elapsed := HEARTBEAT_INTERVAL
 var started_at_msec := 0
 var accepted_inputs := 0
@@ -56,13 +60,23 @@ func _ready() -> void:
 	print("Dedicated Server listening on UDP %d (protocol=%s)" % [port, SERVER_PROTOCOL_REVISION])
 
 func _process(delta: float) -> void:
-	for session in sessions.values():
-		(session as MatchSession).step(delta)
-	snapshot_elapsed += delta
+	var bounded_delta := minf(delta, MAX_FRAME_SECONDS)
+	simulation_elapsed += bounded_delta
+	var catch_up_ticks := 0
+	while simulation_elapsed >= MatchProtocol.TICK_SECONDS and catch_up_ticks < MAX_CATCH_UP_TICKS:
+		for session in sessions.values():
+			(session as MatchSession).step(MatchProtocol.TICK_SECONDS)
+		simulation_elapsed -= MatchProtocol.TICK_SECONDS
+		server_tick += 1
+		catch_up_ticks += 1
+	if simulation_elapsed >= MatchProtocol.TICK_SECONDS:
+		# Do not let a stalled process accumulate an unbounded simulation debt.
+		simulation_elapsed = 0.0
+	snapshot_elapsed += bounded_delta
 	if snapshot_elapsed >= 1.0 / MatchProtocol.SNAPSHOT_RATE:
-		snapshot_elapsed = 0.0
+		snapshot_elapsed = fmod(snapshot_elapsed, 1.0 / MatchProtocol.SNAPSHOT_RATE)
 		broadcast_snapshots()
-	monitoring_elapsed += delta
+	monitoring_elapsed += bounded_delta
 	if monitoring_elapsed >= HEARTBEAT_INTERVAL:
 		monitoring_elapsed = 0.0
 		_queue_heartbeat()
@@ -152,8 +166,12 @@ func joined_room(_room_id: String, _slot: int) -> void:
 func join_rejected(_message: String) -> void:
 	pass
 
-@rpc("authority", "reliable")
+@rpc("authority", "unreliable_ordered")
 func receive_dedicated_snapshot(_snapshot: Dictionary) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func receive_skill_presentation(_presentation: Dictionary) -> void:
 	pass
 
 @rpc("authority", "unreliable")
@@ -197,9 +215,12 @@ func broadcast_snapshots() -> void:
 		_broadcast_session(session as MatchSession)
 
 func _broadcast_session(session: MatchSession) -> void:
-	var snapshot := session.make_snapshot()
+	var presentations := session.take_presentations()
 	for peer_id in session.peer_slots.keys():
-		rpc_id(int(peer_id), "receive_dedicated_snapshot", snapshot)
+		for presentation in presentations:
+			rpc_id(int(peer_id), "receive_skill_presentation", presentation)
+		var recipient_slot := int(session.peer_slots[peer_id])
+		rpc_id(int(peer_id), "receive_dedicated_snapshot", session.make_snapshot(recipient_slot, server_tick))
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	var room_id: String = peer_rooms.get(peer_id, "")

@@ -3,6 +3,7 @@ class_name MatchProtocol
 extends RefCounted
 
 const TICK_RATE := 60.0
+const TICK_SECONDS := 1.0 / TICK_RATE
 const SNAPSHOT_RATE := 20.0
 const MAX_ROOMS := 10
 const ROOM_CAPACITY := 2
@@ -57,14 +58,30 @@ static func dictionary_array(value: Variant) -> Array[Dictionary]:
 			result.append((entry as Dictionary).duplicate(true))
 	return result
 
-static func snapshot(room_id: String, state: Dictionary, phase: String, status: String) -> Dictionary:
-	var challenges: Dictionary = state.get("challenges", {}).duplicate(true)
-	for challenge in challenges.values():
-		(challenge as Dictionary).erase("answer")
+const PLAYER_SNAPSHOT_KEYS := [
+	"name", "character_id", "visual_id", "is_moving", "position", "facing", "attack_facing", "color", "hp",
+	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
+	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
+	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
+	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "interrupt_gauge",
+	"interrupt_gauge_max", "interrupt_gauge_display",
+]
+const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin"]
+const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time"]
+
+static func snapshot(room_id: String, state: Dictionary, phase: String, status: String, recipient_slot := 0, server_tick := 0, input_acknowledgements: Dictionary = {}) -> Dictionary:
+	var challenges: Dictionary = {}
+	if recipient_slot > 0:
+		var challenge: Dictionary = state.get("challenges", {}).get(recipient_slot, {}).duplicate(true)
+		challenge.erase("answer")
+		if not challenge.is_empty():
+			challenges[recipient_slot] = challenge
 	return {
 		"room_id": room_id,
+		"server_tick": server_tick,
+		"input_acknowledgements": input_acknowledgements.duplicate(),
 		"phase": phase,
-		"players": state["players"].duplicate(true),
+		"players": snapshot_players(state["players"]),
 		"time_remaining": state["time_remaining"],
 		"match_over": state["match_over"],
 		"winner_id": state["winner_id"],
@@ -77,3 +94,66 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"decoys": state.get("decoys", []).duplicate(true),
 		"hammer_spins": state.get("hammer_spins", []).duplicate(true),
 	}
+
+static func snapshot_players(source: Dictionary) -> Dictionary:
+	var result := {}
+	for slot in source.keys():
+		var player: Dictionary = source[slot]
+		var value := {}
+		for key in PLAYER_SNAPSHOT_KEYS:
+			if player.has(key):
+				value[key] = player[key]
+		result[slot] = value
+	return result
+
+static func interpolate_visual_state(previous: Dictionary, current: Dictionary, ratio: float) -> Dictionary:
+	var value := current.duplicate(true)
+	var clamped_ratio := clampf(ratio, 0.0, 1.0)
+	value["players"] = _interpolate_players(previous.get("players", {}), current.get("players", {}), clamped_ratio)
+	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "hammer_spins"]:
+		value[entity_key] = _interpolate_entities(previous.get(entity_key, []), current.get(entity_key, []), clamped_ratio)
+	return value
+
+static func _interpolate_players(previous: Dictionary, current: Dictionary, ratio: float) -> Dictionary:
+	var result := {}
+	for slot in current.keys():
+		var incoming: Dictionary = current[slot]
+		var older: Dictionary = previous.get(slot, {})
+		result[slot] = _interpolate_dictionary(older, incoming, ratio) if not older.is_empty() else incoming.duplicate(true)
+	return result
+
+static func _interpolate_entities(previous: Array, current: Array, ratio: float) -> Array:
+	var result: Array = []
+	for index in current.size():
+		var incoming: Dictionary = current[index]
+		var older: Dictionary = _matching_entity(previous, incoming, index)
+		result.append(_interpolate_dictionary(older, incoming, ratio) if not older.is_empty() else incoming.duplicate(true))
+	return result
+
+static func _matching_entity(previous: Array, incoming: Dictionary, fallback_index: int) -> Dictionary:
+	for key in ["presentation_id", "projectile_id", "impact_id"]:
+		if incoming.has(key):
+			for entry in previous:
+				if entry is Dictionary and int((entry as Dictionary).get(key, -1)) == int(incoming[key]):
+					return entry as Dictionary
+	if fallback_index < previous.size() and previous[fallback_index] is Dictionary:
+		var candidate: Dictionary = previous[fallback_index]
+		if int(candidate.get("owner_id", -1)) == int(incoming.get("owner_id", -1)):
+			return candidate
+	return {}
+
+static func _interpolate_dictionary(previous: Dictionary, current: Dictionary, ratio: float) -> Dictionary:
+	var result := current.duplicate(true)
+	for key in INTERPOLATED_VECTOR_KEYS:
+		if previous.get(key, null) is Vector2 and current.get(key, null) is Vector2:
+			var blended := Vector2(previous[key]).lerp(Vector2(current[key]), ratio)
+			if key in ["facing", "attack_facing"] and blended.length_squared() > 0.0001:
+				blended = blended.normalized()
+			result[key] = blended
+	for key in INTERPOLATED_NUMBER_KEYS:
+		if previous.has(key) and current.has(key) and previous[key] is float and current[key] is float:
+			result[key] = lerp_angle_shortest(float(previous[key]), float(current[key]), ratio) if key == "angle" else lerpf(float(previous[key]), float(current[key]), ratio)
+	return result
+
+static func lerp_angle_shortest(from: float, to: float, ratio: float) -> float:
+	return wrapf(from + wrapf(to - from, -PI, PI) * clampf(ratio, 0.0, 1.0), 0.0, TAU)
