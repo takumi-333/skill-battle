@@ -7,7 +7,7 @@
 - requirements.md: docs/ideas/20260902-dedicated-online-battle/requirements.md
 - tasklist.md: docs/ideas/20260902-dedicated-online-battle/tasklist.md
 - issue-20.md: docs/issues/issue-20.md
-- スキル3候補一覧.md: docs/specs/キャラ別仕様書/算術士/スキル3候補一覧.md
+- スキル3候補一覧.md: docs/specs/キャラ別スキル仕様書/算術士/スキル3候補一覧.md
 
 ## My request:
 docs\ideas\20260902-dedicated-online-battle
