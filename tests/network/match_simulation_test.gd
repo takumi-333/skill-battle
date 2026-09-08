@@ -124,6 +124,7 @@ func _test_chanter_skill1_timeline() -> void:
 
 	var initial_target_position := Vector2(simulation.state["players"][2]["position"])
 	var damage := int(first_zone["damage"])
+	assert(damage == 7)
 	simulation.step(0.49, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(bool(simulation.state["magic_zones"][0]["spawned"]))
 	assert(Vector2(simulation.state["magic_zones"][0]["position"]).is_equal_approx(initial_target_position))

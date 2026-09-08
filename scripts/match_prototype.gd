@@ -1498,7 +1498,7 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 
 
 func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, active_duration: float = 1.0) -> void:
-	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": CHANTER_ZONE_GROWTH_FRAME_DURATION, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 8 + roundi(float(score) * 0.06), "spawned": false})
+	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": CHANTER_ZONE_GROWTH_FRAME_DURATION, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 1 + roundi(float(score) * 0.06), "spawned": false})
 
 
 func update_magic_zones(delta: float) -> void:

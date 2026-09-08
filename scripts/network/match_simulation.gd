@@ -482,7 +482,7 @@ func _update_decoys(delta: float) -> void:
 			state["decoys"][index] = decoy
 
 func _spawn_zone(owner: int, score: int, delay: float, duration: float) -> void:
-	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": 1.0 / 60.0, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 8 + roundi(float(score) * 0.06), "spawned": false})
+	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": 1.0 / 60.0, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 1 + roundi(float(score) * 0.06), "spawned": false})
 
 func _update_zones(delta: float) -> void:
 	for index in range(state["magic_zones"].size() - 1, -1, -1):
