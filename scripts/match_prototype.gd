@@ -4236,15 +4236,19 @@ func draw_chanter_zone(zone: Dictionary) -> void:
 	draw_texture_rect(CHANTER_AREA_TEXTURE, Rect2(position_value - area_size * 0.5, area_size), false, area_color)
 	if beam_elapsed < 0.0:
 		return
-	var beam_scale := 1.0
+	var beam_width_scale := 1.0
+	var beam_height_scale := 1.0
 	if beam_elapsed < growth_frame_duration * 2.0:
-		beam_scale = 1.0 / 3.0
+		beam_width_scale = 1.0 / 3.0
+		beam_height_scale = 1.0 / 3.0
 	elif beam_elapsed < growth_frame_duration * 4.0:
-		beam_scale = 2.0 / 3.0
+		beam_width_scale = 2.0 / 3.0
+		beam_height_scale = 2.0 / 3.0
 	else:
-		beam_scale = beam_fade
-	var beam_height := maxf(1.0, (position_value.y - ARENA.position.y) * beam_scale)
-	var beam_width := CHANTER_ZONE_RADIUS * 2.0 * beam_scale
+		# 画面上端へ届いた後は高さを維持し、太さだけを細くして消す。
+		beam_width_scale = beam_fade
+	var beam_height := maxf(1.0, (position_value.y - ARENA.position.y) * beam_height_scale)
+	var beam_width := CHANTER_ZONE_RADIUS * 2.0 * beam_width_scale
 	var beam_rect := Rect2(position_value.x - beam_width * 0.5, position_value.y - beam_height, beam_width, beam_height)
 	draw_texture_rect(CHANTER_BEAM_TEXTURE, beam_rect, false, Color(1.0, 1.0, 1.0, beam_fade))
 
