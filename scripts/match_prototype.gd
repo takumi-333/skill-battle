@@ -4695,7 +4695,10 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-58.0, -91.0), player_name, HORIZONTAL_ALIGNMENT_CENTER, 116.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
 		draw_normal_attack_effect(player, position_value, facing)
-		draw_debug_normal_attack_hit_area(position_value, facing)
+		# `local` はデバッグ対戦だけに使うモード。通常対戦・練習・
+		# オンライン対戦では、判定そのものに影響しない赤いデバッグ枠を描画しない。
+		if network_mode == "local":
+			draw_debug_normal_attack_hit_area(position_value, facing)
 
 
 func draw_player_silhouette(player: Dictionary) -> void:

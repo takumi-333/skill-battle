@@ -236,7 +236,10 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	var session: MatchSession = sessions.get(room_id)
 	if session == null:
 		return
-	_queue_monitoring_event("peer_disconnected", room_id, {"peer_id": peer_id})
+	# The Lobby API owns public room occupancy.  Include the slot before
+	# MatchSession.leave() removes it so the matching reservation is released.
+	var slot := int(session.peer_slots.get(peer_id, 0))
+	_queue_monitoring_event("peer_disconnected", room_id, {"peer_id": peer_id, "slot": slot})
 	session.leave(peer_id)
 	_broadcast_session(session)
 	if session.peers.is_empty():

@@ -63,6 +63,11 @@ class LobbyDatabase:
         with self.connection:
             return self.connection.execute("UPDATE rooms SET status=?,updated_at=? WHERE id=?", (status, int(time.time()), room_id)).rowcount == 1
 
+    def release_reservation(self, room_id: str, slot: int) -> bool:
+        """Release a slot after the authoritative game server disconnects its peer."""
+        with self.connection:
+            return self._release_reservation(room_id, slot, int(time.time()))
+
     def record_server_update(self, kind: str, room_id: str | None, payload: dict) -> None:
         now = int(time.time())
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -74,6 +79,13 @@ class LobbyDatabase:
                     (now, encoded),
                 )
             else:
+                # A public room reserves a slot before ENet connects. The
+                # authoritative disconnect event must release that same slot;
+                # otherwise the room remains falsely full until its timeout.
+                if kind == "peer_disconnected" and room_id is not None:
+                    slot = payload.get("slot")
+                    if isinstance(slot, int):
+                        self._release_reservation(room_id, slot, now)
                 self.connection.execute(
                     "INSERT INTO server_events(created_at,kind,room_id,payload) VALUES(?,?,?,?)",
                     (now, kind[:64], room_id, encoded),
@@ -82,6 +94,15 @@ class LobbyDatabase:
                     "DELETE FROM server_events WHERE id NOT IN "
                     "(SELECT id FROM server_events ORDER BY id DESC LIMIT 500)"
                 )
+
+    def _release_reservation(self, room_id: str, slot: int, now: int) -> bool:
+        if slot not in (1, 2):
+            return False
+        column = f"slot{slot}_reserved_until"
+        return self.connection.execute(
+            f"UPDATE rooms SET {column}=NULL,updated_at=? WHERE id=? AND status='open'",
+            (now, room_id),
+        ).rowcount == 1
 
     def server_monitoring(self, event_limit: int = 50) -> dict:
         heartbeat = self.connection.execute(

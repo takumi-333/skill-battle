@@ -20,6 +20,19 @@ def test_expired_empty_room_is_removed_from_public_list(tmp_path):
         db.connection.execute("UPDATE rooms SET slot1_reserved_until=? WHERE id=?", (int(time.time()) - 1, room["id"]))
     assert db.list_rooms() == []
 
+
+def test_disconnected_peer_releases_its_reserved_room_slot(tmp_path):
+    db = LobbyDatabase(str(tmp_path / "lobby.db"))
+    room, first_slot = db.create_room("disconnect")
+    assert first_slot == 1
+    assert db.reserve(room["id"]) == 2
+
+    db.record_server_update("peer_disconnected", room["id"], {"peer_id": 42, "slot": 2})
+
+    rooms = db.list_rooms()
+    assert rooms[0]["players"] == 1
+    assert db.reserve(room["id"]) == 2
+
 def test_server_monitoring_keeps_latest_heartbeat_and_events(tmp_path):
     db = LobbyDatabase(str(tmp_path / "lobby.db"))
     db.record_server_update("heartbeat", None, {"active_rooms": 2, "connected_peers": 3})
