@@ -57,4 +57,5 @@ func create_player(display_name: String, start_position: Vector2, start_facing: 
 		"small_cooldown": 0.0,
 		"big_cooldown": 0.0,
 		"skill3_cooldown": 0.0,
+		"arithmetic_interference_multiplier": 1.0,
 	}

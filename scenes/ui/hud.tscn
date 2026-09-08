@@ -320,6 +320,16 @@ theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
 value = 100.0
 show_percentage = false
 
+[node name="ArithmeticMultiplier" type="Label" parent="."]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 72.0
+offset_right = 350.0
+offset_bottom = 98.0
+theme_override_colors/font_color = Color(0.454902, 0.596078, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "f(x) = x"
+
 [node name="Timer" type="Label" parent="." unique_id=1130374244]
 layout_mode = 0
 offset_left = 1100.0

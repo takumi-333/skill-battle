@@ -4,6 +4,7 @@ func _init() -> void:
 	_test_state_and_normal_attack()
 	_test_typist_skills()
 	_test_arithmetician_skills()
+	_test_arithmetician_interference_points()
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
 	_test_chanter_skill1_candidate_and_skill3()
@@ -78,6 +79,44 @@ func _test_typist_skills() -> void:
 	assert(not skill3_simulation.state["hammer_spins"].is_empty())
 	assert(int(skill3_simulation.state["hammer_spins"][0]["presentation_id"]) > 0)
 
+
+func _test_arithmetician_interference_points() -> void:
+	var owner_attack_simulation := MatchSimulation.new()
+	owner_attack_simulation.configure_loadout(1, 1, "", "", 0, 0)
+	owner_attack_simulation.state["players"][1]["position"] = Vector2(100, 100)
+	owner_attack_simulation.state["players"][1]["facing"] = Vector2.RIGHT
+	owner_attack_simulation.state["players"][2]["position"] = Vector2(1200, 100)
+	owner_attack_simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(180, 100)}]
+	assert(owner_attack_simulation.handle_event(1, {"type": "attack"}))
+	assert(owner_attack_simulation.state["decoys"].size() == 1)
+	assert(is_equal_approx(float(owner_attack_simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
+
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 1, "", "", 0, 0)
+	simulation.state["players"][1]["position"] = Vector2(100, 100)
+	simulation.state["players"][2]["position"] = Vector2(30, 100)
+	simulation.state["players"][2]["facing"] = Vector2.RIGHT
+	simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(100, 100)}]
+	assert(simulation.handle_event(2, {"type": "attack"}))
+	assert(simulation.state["decoys"].is_empty())
+	assert(is_equal_approx(float(simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.1))
+
+	simulation.state["players"][1]["arithmetic_interference_multiplier"] = 1.5
+	simulation.state["players"][1]["position"] = Vector2(100, 100)
+	simulation.state["players"][1]["facing"] = Vector2.RIGHT
+	simulation.state["players"][1]["attack_cooldown"] = 0.0
+	simulation.state["players"][2]["position"] = Vector2(180, 100)
+	simulation.state["players"][2]["hp"] = 100
+	assert(simulation.handle_event(1, {"type": "attack"}))
+	assert(int(simulation.state["players"][2]["hp"]) == 85)
+	assert(is_equal_approx(float(simulation.state["players"][1]["attack_cooldown"]), 0.5 / 1.5))
+
+	simulation.state["players"][1]["arithmetic_interference_multiplier"] = 2.0
+	simulation.state["players"][1]["position"] = Vector2(100, 100)
+	simulation.state["players"][2]["position"] = Vector2(1200, 100)
+	simulation.step(1.0, {1: {"move": Vector2.RIGHT}, 2: {"move": Vector2.ZERO}})
+	assert(is_equal_approx(float(simulation.state["players"][1]["position"].x), 408.0))
+
 func _test_arithmetician_skills() -> void:
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(1, 1, "typist_trident")
@@ -122,13 +161,13 @@ func _test_arithmetician_skills() -> void:
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["big_cooldown"]), 15.0))
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["invisible_time"]), 20.0))
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["buff_speed_multiplier"]), 1.25))
-	assert(int(big_simulation.state["players"][1]["attack_damage_buff"]) == 10)
+	assert(int(big_simulation.state["players"][1]["attack_damage_buff"]) == 1)
 	big_simulation.step(0.01, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
-	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.3)
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.5 - (1.0 / 60.0))
 	big_simulation.step(2.3, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
-	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) < 2.3)
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) < 2.5 - (1.0 / 60.0))
 	big_simulation.step(0.21, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
-	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.3)
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.5 - (1.0 / 60.0))
 	big_simulation._spawn_skill(1, 0, {"tier": "big"})
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["invisible_time"]), 10.0))
 

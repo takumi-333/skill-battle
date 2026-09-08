@@ -469,6 +469,7 @@ var lobby_home_button: Button
 var gameplay_home_button: Button
 var hp_bar: ProgressBar
 var opponent_hp_bar: ProgressBar
+var arithmetic_multiplier_label: Label
 var skill_widgets: Array[Node] = []
 var skill_hud_signature := ""
 var network_panel: Panel
@@ -997,7 +998,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		direction = direction.normalized()
 		player["facing"] = direction
 		var skill3_speed_multiplier := typist_skill3_movement_multiplier(player_id)
-		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * skill3_speed_multiplier * (float(player.get("buff_speed_multiplier", 1.0)) if float(player["buff_time"]) > 0.0 else 1.0)
+		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * skill3_speed_multiplier * arithmetic_movement_multiplier(player) * (float(player.get("buff_speed_multiplier", 1.0)) if float(player["buff_time"]) > 0.0 else 1.0)
 		var next_position := clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
 		if can_move_player_to(player_id, next_position):
 			player["position"] = next_position
@@ -1028,7 +1029,7 @@ func try_attack(player_id: int) -> void:
 		return
 	if player["attack_cooldown"] > 0.0:
 		return
-	player["attack_cooldown"] = ATTACK_COOLDOWN
+	player["attack_cooldown"] = normal_attack_cooldown(player)
 	player["attack_time"] = ATTACK_DURATION
 	var attack_facing: Vector2 = player["facing"]
 	if attack_facing.length_squared() <= 0.0:
@@ -1041,9 +1042,10 @@ func try_attack(player_id: int) -> void:
 	var target_id := 2 if player_id == 1 else 1
 	var target: Dictionary = players[target_id]
 	var hit_area := get_normal_attack_hit_area(player["position"], player["attack_facing"])
+	destroy_decoys_in_normal_attack(player_id, hit_area)
 	var target_center := get_player_hitbox_center(target["position"])
 	if hit_area.intersects_player_hitbox(target_center, PLAYER_HITBOX_RADIUS_X, PLAYER_HITBOX_RADIUS_Y):
-		apply_damage(target_id, int(player["normal_damage"]) + int(player.get("attack_damage_buff", 0)), "%sの斬撃" % player["name"])
+		apply_damage(target_id, normal_attack_damage(player), "%sの斬撃" % player["name"])
 		status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
 		if target["hp"] <= 0:
 			finish_match(player_id)
@@ -1517,7 +1519,7 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 		else:
 			owner["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
 			owner["buff_speed_multiplier"] = 1.25
-			owner["attack_damage_buff"] = 10
+			owner["attack_damage_buff"] = 1
 			owner["invisible_time"] = owner["buff_time"]
 			owner["invisible_flicker"] = 0.0
 			players[owner_id] = owner
@@ -1636,6 +1638,7 @@ func update_magic_zones(delta: float) -> void:
 		if bool(zone.get("spawned", false)):
 			zone["elapsed"] = float(zone.get("elapsed", 0.0)) + delta
 			zone["lifetime"] = maxf(0.0, float(zone["lifetime"]) - delta)
+			destroy_decoys_in_radius(int(zone["owner_id"]), Vector2(zone["position"]), CHANTER_ZONE_RADIUS)
 			var active_duration := float(zone.get("active_duration", 1.0))
 			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
 			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
@@ -1659,6 +1662,7 @@ func update_shockwaves(delta: float) -> void:
 		if float(wave["delay"]) <= 0.0:
 			wave["elapsed"] = float(wave["elapsed"]) + delta
 			wave["radius"] = SHOCKWAVE_SPEED * float(wave["elapsed"])
+			destroy_decoys_in_radius(int(wave["owner_id"]), Vector2(wave["origin"]), float(wave["radius"]))
 			if not bool(wave["hit"]):
 				var target_id := 2 if int(wave["owner_id"]) == 1 else 1
 				var target: Dictionary = players[target_id]
@@ -1697,6 +1701,7 @@ func spawn_trident_attack(impact: Dictionary) -> void:
 	var facing: Vector2 = Vector2(impact.get("facing", Vector2.DOWN)).normalized()
 	var hammer_center := get_trident_hammer_tip(origin, facing, score)
 	var target_id := 2 if owner_id == 1 else 1
+	destroy_decoy_at_point(owner_id, hammer_center, TRIDENT_LANDING_RADIUS)
 	if players.has(target_id) and is_point_in_player_hitbox(hammer_center, players[target_id]["position"], TRIDENT_LANDING_RADIUS):
 		var landing_damage := trident_landing_damage(score)
 		if landing_damage > 0:
@@ -1847,6 +1852,10 @@ func update_skill_projectiles(delta: float) -> void:
 		var target_id: int = 2 if owner_id == 1 else 1
 		var target: Dictionary = players[target_id]
 		var target_position: Vector2 = target["position"]
+		if destroy_decoy_at_point(owner_id, position_value, SKILL_PROJECTILE_RADIUS):
+			if not bool(projectile["piercing"]):
+				skill_projectiles.remove_at(index)
+				continue
 		if is_point_in_player_hitbox(position_value, target_position, SKILL_PROJECTILE_RADIUS):
 			apply_damage(target_id, int(projectile["damage"]), "ブレード弾")
 			status_text = "ブレード弾が%sに命中！" % target["name"]
@@ -1882,6 +1891,7 @@ func update_hammer_spins(delta: float) -> void:
 		var score := int(spin["score"])
 		var hammer_radius := 92.0 + float(score) * 0.42
 		var hammer_position := get_player_hitbox_center(owner["position"]) + Vector2.from_angle(float(spin["angle"])) * hammer_radius
+		destroy_decoys_near_segment(owner_id, get_player_hitbox_center(owner["position"]), hammer_position, PLAYER_HITBOX_RADIUS_Y + 12.0)
 		var target_id := 2 if owner_id == 1 else 1
 		if float(spin["hit_timer"]) <= 0.0 and players.has(target_id) and is_point_near_hammer_segment(get_player_hitbox_center(players[target_id]["position"]), get_player_hitbox_center(owner["position"]), hammer_position, PLAYER_HITBOX_RADIUS_Y + 12.0):
 			apply_damage(target_id, 10 + floori(float(score) * 0.2), "ぶんまわし")
@@ -1978,6 +1988,68 @@ func is_point_near_hammer_segment(point: Vector2, segment_start: Vector2, segmen
 	var projection := clampf((point - segment_start).dot(segment) / segment_length_squared, 0.0, 1.0)
 	var nearest_point := segment_start + segment * projection
 	return point.distance_squared_to(nearest_point) <= padding * padding
+
+
+func arithmetic_movement_multiplier(player: Dictionary) -> float:
+	if str(player.get("character_id", "")) != "arithmetic":
+		return 1.0
+	return 1.0 + (float(player.get("arithmetic_interference_multiplier", 1.0)) - 1.0) * 0.1
+
+
+func normal_attack_cooldown(player: Dictionary) -> float:
+	if str(player.get("character_id", "")) != "arithmetic":
+		return ATTACK_COOLDOWN
+	return ATTACK_COOLDOWN / maxf(float(player.get("arithmetic_interference_multiplier", 1.0)), 0.1)
+
+
+func normal_attack_damage(player: Dictionary) -> int:
+	var attack_power := float(player.get("normal_damage", 0)) + float(player.get("attack_damage_buff", 0))
+	if str(player.get("character_id", "")) == "arithmetic":
+		attack_power *= float(player.get("arithmetic_interference_multiplier", 1.0))
+	return roundi(attack_power)
+
+
+func destroy_decoys_in_normal_attack(attacker_id: int, hit_area: NormalAttackHitArea) -> void:
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		if int(decoy.get("owner_id", 0)) != attacker_id and hit_area.contains_point(Vector2(decoy["position"])):
+			destroy_decoy_at_index(index)
+
+
+func destroy_decoy_at_point(attacker_id: int, point: Vector2, padding: float = 0.0) -> bool:
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		if int(decoy.get("owner_id", 0)) != attacker_id and Vector2(decoy["position"]).distance_to(point) <= PLAYER_HITBOX_RADIUS_Y + padding:
+			destroy_decoy_at_index(index)
+			return true
+	return false
+
+
+func destroy_decoys_in_radius(attacker_id: int, center: Vector2, radius: float) -> void:
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		if int(decoy.get("owner_id", 0)) != attacker_id and Vector2(decoy["position"]).distance_to(center) <= radius + PLAYER_HITBOX_RADIUS_Y:
+			destroy_decoy_at_index(index)
+
+
+func destroy_decoys_near_segment(attacker_id: int, start: Vector2, end: Vector2, padding: float) -> void:
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		if int(decoy.get("owner_id", 0)) != attacker_id and is_point_near_hammer_segment(Vector2(decoy["position"]), start, end, padding + PLAYER_HITBOX_RADIUS_Y):
+			destroy_decoy_at_index(index)
+
+
+func destroy_decoy_at_index(index: int) -> void:
+	var decoy: Dictionary = decoys[index]
+	decoys.remove_at(index)
+	var owner_id := int(decoy.get("owner_id", 0))
+	if not players.has(owner_id):
+		return
+	var owner: Dictionary = players[owner_id]
+	if str(owner.get("character_id", "")) != "arithmetic":
+		return
+	owner["arithmetic_interference_multiplier"] = snappedf(float(owner.get("arithmetic_interference_multiplier", 1.0)) + 0.1, 0.1)
+	players[owner_id] = owner
 
 
 func can_move_player_to(player_id: int, next_position: Vector2) -> bool:
@@ -2162,6 +2234,8 @@ func create_hud() -> void:
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
+	arithmetic_multiplier_label = $UIRoot/HUD/ArithmeticMultiplier
+	arithmetic_multiplier_label.visible = false
 	opponent_hp_bar = $UIRoot/HUD/OpponentHPBar
 	opponent_hp_bar.min_value = 0.0
 	opponent_hp_bar.max_value = 100.0
@@ -2229,6 +2303,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	hud_root.z_index = 100
 	player_one_label.visible = is_visible
 	hp_bar.visible = is_visible
+	arithmetic_multiplier_label.visible = is_visible and arithmetic_multiplier_label.visible
 	opponent_hp_bar.visible = is_visible
 	timer_label.visible = is_visible
 	status_label.visible = false
@@ -4088,6 +4163,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["invisible_flicker"] = 0.0
 	player["small_cooldown"] = 0.0
 	player["big_cooldown"] = 0.0
+	player["arithmetic_interference_multiplier"] = 1.0
 	player["position"] = Vector2(200, ARENA.get_center().y) if player_id == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -4217,11 +4293,16 @@ func update_hud() -> void:
 	configure_skill_icons(own_player)
 	player_one_label.text = "HP %d / 100" % int(own_player["hp"])
 	hp_bar.value = int(own_player["hp"])
+	var is_arithmetician := str(own_player.get("character_id", "")) == "arithmetic"
+	arithmetic_multiplier_label.visible = is_arithmetician
+	if is_arithmetician:
+		var multiplier := float(own_player.get("arithmetic_interference_multiplier", 1.0))
+		arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(multiplier, 1.0) else "f(x) = %.1fx" % multiplier
 	if not opponent_player.is_empty():
 		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
-		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
+		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused)
 		var small_cooldown_duration := CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN
 		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
 		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
@@ -4683,7 +4764,7 @@ func draw_menu_backdrop() -> void:
 func draw_player(player_id: int, player: Dictionary) -> void:
 	var position_value: Vector2 = player["position"]
 	var facing: Vector2 = player["attack_facing"] if float(player["attack_time"]) > 0.0 else player["facing"]
-	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id != local_player_id and float(player.get("invisible_flicker", 0.0)) < 2.3 and float(player["attack_time"]) <= 0.0:
+	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id != local_player_id and float(player.get("invisible_flicker", 0.0)) < 2.5 - (1.0 / 60.0) and float(player["attack_time"]) <= 0.0:
 		return
 	if bool(player["focused"]):
 		draw_focus_particles(player)
@@ -4844,6 +4925,10 @@ func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 		draw_texture_rect_region(texture, Rect2(sprite_rect.position + jitter, sprite_rect.size), source_rect, Color(0.25, 0.85, 1.0, 0.28 * noise_ratio * alpha))
 		draw_texture_rect_region(texture, Rect2(sprite_rect.position - jitter, sprite_rect.size), source_rect, Color(0.35, 0.65, 1.0, 0.24 * noise_ratio * alpha))
 	draw_texture_rect_region(texture, sprite_rect, source_rect, sprite_color)
+	var viewer_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	var owner_id := int(decoy.get("owner_id", 0))
+	if viewer_id != owner_id and players.has(owner_id):
+		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-58.0, -91.0), match_player_display_name(owner_id), HORIZONTAL_ALIGNMENT_CENTER, 116.0, 18, Color("f1f5ff"))
 	if noise_ratio > 0.0:
 		for strip_index in range(3):
 			var strip_y := sprite_rect.position.y + 12.0 + float(strip_index) * 17.0

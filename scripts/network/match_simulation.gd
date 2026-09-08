@@ -37,6 +37,7 @@ const ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL := 10.0
 const ARITHMETICIAN_DECOY_NOISE_DURATION := 0.12
 const ARITHMETICIAN_FLASH_DURATION := 0.2
 const ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL := 2.5
+const ARITHMETICIAN_DECOY_HIT_RADIUS := 30.0
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -90,6 +91,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["has_display_name"] = not sanitized_display_name.is_empty()
 	player["color"] = colors[character]
 	player["normal_damage"] = [12, 10, 11][character]
+	player["arithmetic_interference_multiplier"] = 1.0
 	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
 	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else "")
@@ -163,7 +165,7 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 		var direction := move.normalized()
 		player["facing"] = direction
 		var focus_multiplier := FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0
-		var speed := PLAYER_SPEED * focus_multiplier * float(player.get("buff_speed_multiplier", 1.0)) * _hammer_speed_multiplier(slot)
+		var speed := PLAYER_SPEED * focus_multiplier * float(player.get("buff_speed_multiplier", 1.0)) * _arithmetic_movement_multiplier(player) * _hammer_speed_multiplier(slot)
 		var next_position := _clamp_to_arena(Vector2(player["position"]) + direction * speed * delta)
 		if not _players_overlap(next_position, Vector2(state["players"][_other(slot)]["position"])):
 			player["position"] = next_position
@@ -174,7 +176,7 @@ func _try_normal_attack(slot: int) -> bool:
 	var player: Dictionary = state["players"][slot]
 	if bool(player["focused"]) or float(player["attack_cooldown"]) > 0.0:
 		return false
-	player["attack_cooldown"] = NORMAL_COOLDOWN
+	player["attack_cooldown"] = _normal_attack_cooldown(player)
 	player["attack_time"] = NORMAL_DURATION
 	var facing: Vector2 = Vector2(player["facing"])
 	if facing.length_squared() <= 0.0:
@@ -182,11 +184,12 @@ func _try_normal_attack(slot: int) -> bool:
 	player["facing"] = facing.normalized()
 	player["attack_facing"] = player["facing"]
 	state["players"][slot] = player
+	_destroy_decoys_in_normal_attack(slot, Vector2(player["position"]), Vector2(player["facing"]))
 	var target_slot := _other(slot)
 	var target: Dictionary = state["players"][target_slot]
 	var offset: Vector2 = Vector2(target["position"]) - Vector2(player["position"])
 	if offset.length() <= NORMAL_RANGE and offset.length_squared() > 0.0 and Vector2(player["facing"]).dot(offset.normalized()) >= NORMAL_HALF_ANGLE_DOT:
-		_apply_damage(target_slot, int(player["normal_damage"]) + int(player.get("attack_damage_buff", 0)), "%sの斬撃" % str(player["name"]))
+		_apply_damage(target_slot, _normal_attack_damage(player), "%sの斬撃" % str(player["name"]))
 		state["status_text"] = "%sの斬撃が%sに命中！" % [str(player["name"]), str(target["name"])]
 	else:
 		state["status_text"] = "%sは斬撃を振った。" % str(player["name"])
@@ -406,7 +409,7 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			player = state["players"][owner]
 			player["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
 			player["buff_speed_multiplier"] = 1.25
-			player["attack_damage_buff"] = 10
+			player["attack_damage_buff"] = 1
 			player["invisible_time"] = player["buff_time"]
 			player["invisible_flicker"] = 0.0
 			state["players"][owner] = player
@@ -486,6 +489,10 @@ func _update_projectiles(delta: float) -> void:
 			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		projectile["position"] = Vector2(projectile["position"]) + Vector2(projectile["velocity"]) * delta
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
+		if _destroy_decoy_at_point(owner, Vector2(projectile["position"]), PROJECTILE_RADIUS):
+			if not bool(projectile["piercing"]):
+				state["skill_projectiles"].remove_at(index)
+				continue
 		if _point_hits_player(Vector2(projectile["position"]), target, PROJECTILE_RADIUS):
 			_apply_damage(target, int(projectile["damage"]), "スキル弾")
 			if not bool(projectile["piercing"]):
@@ -535,6 +542,64 @@ func _arithmetic_decoy_radius_range(score: int) -> Vector2:
 		return Vector2(20.0, 700.0)
 	return Vector2(20.0, 1000.0)
 
+func _arithmetic_movement_multiplier(player: Dictionary) -> float:
+	if str(player.get("character_id", "")) != "arithmetic":
+		return 1.0
+	var a := float(player.get("arithmetic_interference_multiplier", 1.0))
+	return 1.0 + (a - 1.0) * 0.1
+
+func _normal_attack_cooldown(player: Dictionary) -> float:
+	if str(player.get("character_id", "")) != "arithmetic":
+		return NORMAL_COOLDOWN
+	return NORMAL_COOLDOWN / maxf(float(player.get("arithmetic_interference_multiplier", 1.0)), 0.1)
+
+func _normal_attack_damage(player: Dictionary) -> int:
+	var attack_power := float(player.get("normal_damage", 0)) + float(player.get("attack_damage_buff", 0))
+	if str(player.get("character_id", "")) == "arithmetic":
+		attack_power *= float(player.get("arithmetic_interference_multiplier", 1.0))
+	return roundi(attack_power)
+
+func _destroy_decoys_in_normal_attack(attacker: int, attacker_position: Vector2, facing: Vector2) -> void:
+	for index in range(state["decoys"].size() - 1, -1, -1):
+		var decoy: Dictionary = state["decoys"][index]
+		if int(decoy.get("owner_id", 0)) == attacker:
+			continue
+		var offset := Vector2(decoy["position"]) - attacker_position
+		if offset.length() <= NORMAL_RANGE and offset.length_squared() > 0.0 and facing.dot(offset.normalized()) >= NORMAL_HALF_ANGLE_DOT:
+			_destroy_decoy_at_index(index)
+
+func _destroy_decoy_at_point(attacker: int, point: Vector2, padding: float = 0.0) -> bool:
+	for index in range(state["decoys"].size() - 1, -1, -1):
+		var decoy: Dictionary = state["decoys"][index]
+		if int(decoy.get("owner_id", 0)) != attacker and Vector2(decoy["position"]).distance_to(point) <= ARITHMETICIAN_DECOY_HIT_RADIUS + padding:
+			_destroy_decoy_at_index(index)
+			return true
+	return false
+
+func _destroy_decoys_in_radius(attacker: int, center: Vector2, radius: float) -> void:
+	for index in range(state["decoys"].size() - 1, -1, -1):
+		var decoy: Dictionary = state["decoys"][index]
+		if int(decoy.get("owner_id", 0)) != attacker and Vector2(decoy["position"]).distance_to(center) <= radius + ARITHMETICIAN_DECOY_HIT_RADIUS:
+			_destroy_decoy_at_index(index)
+
+func _destroy_decoys_near_segment(attacker: int, start: Vector2, end: Vector2, padding: float) -> void:
+	for index in range(state["decoys"].size() - 1, -1, -1):
+		var decoy: Dictionary = state["decoys"][index]
+		if int(decoy.get("owner_id", 0)) != attacker and _point_hits_segment(Vector2(decoy["position"]), start, end, padding + ARITHMETICIAN_DECOY_HIT_RADIUS):
+			_destroy_decoy_at_index(index)
+
+func _destroy_decoy_at_index(index: int) -> void:
+	var decoy: Dictionary = state["decoys"][index]
+	state["decoys"].remove_at(index)
+	var owner := int(decoy.get("owner_id", 0))
+	if not state["players"].has(owner):
+		return
+	var player: Dictionary = state["players"][owner]
+	if str(player.get("character_id", "")) != "arithmetic":
+		return
+	player["arithmetic_interference_multiplier"] = snappedf(float(player.get("arithmetic_interference_multiplier", 1.0)) + 0.1, 0.1)
+	state["players"][owner] = player
+
 func _update_decoys(delta: float) -> void:
 	for index in range(state["decoys"].size() - 1, -1, -1):
 		var decoy: Dictionary = state["decoys"][index]
@@ -582,6 +647,7 @@ func _update_zones(delta: float) -> void:
 		if bool(zone["spawned"]):
 			zone["elapsed"] = float(zone.get("elapsed", 0.0)) + delta
 			zone["lifetime"] = maxf(0.0, float(zone["lifetime"]) - delta)
+			_destroy_decoys_in_radius(int(zone["owner_id"]), Vector2(zone["position"]), CHANTER_ZONE_RADIUS)
 			var active_duration := float(zone["active_duration"])
 			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
 			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
@@ -613,6 +679,7 @@ func _release_trident(impact: Dictionary) -> void:
 	var facing := Vector2(impact["facing"]).normalized()
 	var landing := Vector2(impact["origin"]) + facing * (120.0 + float(score) * 0.25)
 	var target := _other(owner)
+	_destroy_decoy_at_point(owner, landing, 30.0)
 	if _point_hits_player(landing, target, 30.0):
 		_apply_damage(target, _trident_landing_damage(score), "三叉震槌の直撃")
 	for angle in [-PI / 2.0, -PI / 3.0, 0.0, PI / 3.0, PI / 2.0]:
@@ -634,6 +701,7 @@ func _update_shockwaves(delta: float) -> void:
 		if float(wave["delay"]) <= 0.0:
 			wave["elapsed"] = float(wave["elapsed"]) + delta
 			wave["radius"] = 150.0 * float(wave["elapsed"])
+			_destroy_decoys_in_radius(int(wave["owner_id"]), Vector2(wave["origin"]), float(wave["radius"]))
 			var target := _other(int(wave["owner_id"]))
 			if not bool(wave["hit"]) and Vector2(state["players"][target]["position"]).distance_to(Vector2(wave["origin"])) <= float(wave["radius"]) + PLAYER_RADIUS:
 				if int(wave["damage"]) > 0:
@@ -659,6 +727,7 @@ func _update_hammer_spins(delta: float) -> void:
 		player["facing"] = Vector2.from_angle(float(spin["angle"]))
 		state["players"][owner] = player
 		var tip := Vector2(player["position"]) + Vector2.from_angle(float(spin["angle"])) * (92.0 + float(spin["score"]) * 0.42)
+		_destroy_decoys_near_segment(owner, Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0)
 		var target := _other(owner)
 		if float(spin["hit_timer"]) <= 0.0 and _point_hits_segment(Vector2(state["players"][target]["position"]), Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0):
 			_apply_damage(target, 10 + floori(float(spin["score"]) * 0.2), "ぶんまわし")
