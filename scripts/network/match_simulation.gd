@@ -79,7 +79,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["small_skill_id"] = "%s_small_0" % ids[character]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
 	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ""
-	player["position"] = Vector2(200, 260) if slot == 1 else Vector2(1480, 260)
+	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
 	state["players"][slot] = player

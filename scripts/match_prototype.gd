@@ -3903,7 +3903,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
 	player["interrupt_gauge_display"] = 0.0
-	player["position"] = Vector2(200, 260) if player_id == 1 else Vector2(1480, 260)
+	player["position"] = Vector2(200, ARENA.get_center().y) if player_id == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
 	players[player_id] = player

@@ -23,10 +23,10 @@ func _init() -> void:
 
 func _test_state_and_normal_attack() -> void:
 	var simulation := MatchSimulation.new()
-	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(200, 260)))
-	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 260)))
+	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(200, 387)))
+	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 387)))
 	simulation.step(10.0, {1: {"move": Vector2.LEFT}, 2: {"move": Vector2.DOWN}})
-	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(30, 260)))
+	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(30, 387)))
 	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 744)))
 	for player in simulation.state["players"].values():
 		assert(player.has("attack_time"))
