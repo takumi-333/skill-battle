@@ -13,11 +13,13 @@ var simulation_tick := 0
 var pending_presentations: Array[Dictionary] = []
 var known_presentation_ids: Dictionary = {}
 const INPUT_STALE_TICKS := 15
+const READY_DURATION := 1.0
 var event_sequences := {1: -1, 2: -1}
 var ready := {1: false, 2: false}
 var rematch_ready := {1: false, 2: false}
 var phase := "lobby"
 var status := "対戦相手を待っています。"
+var countdown_remaining := 0.0
 
 func _init(id: String) -> void:
 	room_id = id
@@ -44,6 +46,9 @@ func leave(peer_id: int) -> bool:
 		simulation.finish_by_disconnect(slot)
 		status = "対戦相手との接続が切れました。"
 	else:
+		if phase == "countdown":
+			phase = "lobby"
+			countdown_remaining = 0.0
 		status = "対戦相手を待っています。"
 	return true
 
@@ -86,8 +91,7 @@ func start(requesting_peer_id: int) -> bool:
 		return false
 	if requesting_peer_id != 0 and int(peer_slots.get(requesting_peer_id, 0)) != 1:
 		return false
-	phase = "match"
-	status = "開始！"
+	_start_countdown()
 	return true
 
 
@@ -102,8 +106,7 @@ func request_result_action(peer_id: int, action: String) -> bool:
 		_reset_simulation_preserving_loadouts()
 		ready = {1: false, 2: false}
 		rematch_ready = {1: false, 2: false}
-		phase = "match"
-		status = "再戦開始！"
+		_start_countdown()
 	else:
 		_reset_simulation_preserving_loadouts()
 		ready = {1: false, 2: false}
@@ -135,6 +138,12 @@ func _character_index(character_id: String) -> int:
 		_: return 0
 
 func step(delta: float) -> void:
+	if phase == "countdown":
+		countdown_remaining = maxf(0.0, countdown_remaining - delta)
+		if countdown_remaining <= 0.0:
+			phase = "match"
+			status = "FIGHT"
+		return
 	if phase != "match":
 		return
 	simulation_tick += 1
@@ -153,7 +162,16 @@ func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 	value["ready"] = ready.duplicate()
 	value["rematch_ready"] = rematch_ready.duplicate()
 	value["connected_slots"] = peers.keys()
+	value["countdown_remaining"] = countdown_remaining
 	return value
+
+
+func _start_countdown() -> void:
+	phase = "countdown"
+	countdown_remaining = READY_DURATION
+	status = "READY"
+	inputs = {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}}
+	input_received_ticks = {1: -999999, 2: -999999}
 
 func take_presentations() -> Array[Dictionary]:
 	var value := pending_presentations.duplicate(true)

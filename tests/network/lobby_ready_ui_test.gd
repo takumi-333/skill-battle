@@ -98,6 +98,23 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)
 	assert(start_button.visible)
 	assert(not start_button.disabled)
+	var countdown_snapshot: Dictionary = lobby_snapshot.duplicate(true)
+	countdown_snapshot["phase"] = "countdown"
+	countdown_snapshot["status_text"] = "READY"
+	countdown_snapshot["countdown_remaining"] = 0.5
+	prototype.call("_on_dedicated_snapshot_received", countdown_snapshot)
+	var start_prompt := prototype.get_node("UIRoot/MatchStartPrompt") as Control
+	var start_prompt_label := prototype.get_node("UIRoot/MatchStartPrompt/Center/Label") as Label
+	assert(str(prototype.get("screen")) == "match")
+	assert(start_prompt.visible)
+	assert(start_prompt_label.text == "READY")
+	var fight_snapshot: Dictionary = countdown_snapshot.duplicate(true)
+	fight_snapshot["phase"] = "match"
+	fight_snapshot["status_text"] = "FIGHT"
+	fight_snapshot["countdown_remaining"] = 0.0
+	prototype.call("_on_dedicated_snapshot_received", fight_snapshot)
+	assert(start_prompt.visible)
+	assert(start_prompt_label.text == "FIGHT")
 	prototype.set("local_player_id", 2)
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
@@ -195,7 +212,7 @@ func _test_dedicated_trident_landing_shake(prototype: Node) -> void:
 		"skill_projectiles": [],
 		"magic_zones": [],
 		"shockwaves": [],
-		"trident_impacts": [{"impact_id": 99, "owner_id": 1, "origin": Vector2(300, 390), "facing": Vector2.RIGHT, "score": 80, "elapsed": 0.9, "strike_duration": 1.0, "duration": 1.9, "released": false}],
+		"trident_impacts": [{"impact_id": 99, "owner_id": 1, "origin": Vector2(200, 260), "facing": Vector2.RIGHT, "score": 80, "elapsed": 0.9, "strike_duration": 1.0, "duration": 1.9, "released": false}],
 		"decoys": [],
 		"hammer_spins": [],
 		"challenges": {},

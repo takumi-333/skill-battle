@@ -15,8 +15,8 @@ func _init() -> void:
 
 func reset() -> void:
 	players.clear()
-	players[1] = create_player("打鍵士", Vector2(300, 390), Vector2.RIGHT, Color("ef6b73"))
-	players[2] = create_player("算術士", Vector2(2260, 390), Vector2.LEFT, Color("7498ff"))
+	players[1] = create_player("打鍵士", Vector2(200, 260), Vector2.RIGHT, Color("ef6b73"))
+	players[2] = create_player("算術士", Vector2(1480, 260), Vector2.LEFT, Color("7498ff"))
 	time_remaining = MATCH_DURATION
 	match_over = false
 	winner_id = 0

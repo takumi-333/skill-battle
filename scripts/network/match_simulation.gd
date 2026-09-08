@@ -3,7 +3,7 @@
 class_name MatchSimulation
 extends RefCounted
 
-const ARENA := Rect2(0, 0, 2520, 1160)
+const ARENA := Rect2(0, 0, 1680, 774)
 const PLAYER_SPEED := 280.0
 const PLAYER_RADIUS := 30.0
 const NORMAL_RANGE := 122.0
@@ -79,7 +79,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["small_skill_id"] = "%s_small_0" % ids[character]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
 	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ""
-	player["position"] = Vector2(300, 390) if slot == 1 else Vector2(2260, 390)
+	player["position"] = Vector2(200, 260) if slot == 1 else Vector2(1480, 260)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
 	state["players"][slot] = player

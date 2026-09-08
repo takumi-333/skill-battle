@@ -234,7 +234,7 @@ class TraceCanvas extends Control:
 			draw_polyline(input_points, input_outer_color, glow_width, false)
 			draw_polyline(input_points, input_color, input_width, false)
 
-const ARENA := Rect2(0, 0, 2520, 1160)
+const ARENA := Rect2(0, 0, 1680, 774)
 ## プレイヤーの座標は足元付近のアンカー。見た目の胴体に合わせて、
 ## アンカーから少し上にずらした縦長の楕円を当たり判定として使う。
 const PLAYER_HITBOX_RADIUS_X := 20.0
@@ -252,6 +252,8 @@ const ATTACK_COOLDOWN := 0.5
 const ATTACK_DURATION := 0.28
 const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
+const MATCH_READY_DURATION := 1.0
+const MATCH_FIGHT_DISPLAY_DURATION := 0.75
 const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
@@ -435,6 +437,17 @@ var result_panel: Panel
 var result_label: Label
 var result_rematch_button: Button
 var result_lobby_button: Button
+var result_match_time_label: Label
+var result_winner_name_label: Label
+var result_winner_message_label: Label
+var result_loser_name_label: Label
+var result_loser_message_label: Label
+var result_player_one_stats_label: Label
+var result_player_two_stats_label: Label
+var result_hp_stats_label: Label
+var result_average_score_stats_label: Label
+var match_start_prompt: Control
+var match_start_prompt_label: Label
 var network_back_button: Button
 var lobby_home_button: Button
 var gameplay_home_button: Button
@@ -535,6 +548,7 @@ var lobby_debug_last_signature := ""
 var lobby_ready_mouse_down := false
 var result_rematch_ready := {1: false, 2: false}
 var result_summary_text := ""
+var match_start_fight_remaining := 0.0
 @onready var ui_click_player: AudioStreamPlayer = $UIAudioPlayer
 var menu_background: TextureRect
 var menu_background_root: Control
@@ -597,6 +611,7 @@ func _ready() -> void:
 	create_hud()
 	create_lobby_ui()
 	create_result_ui()
+	create_match_start_prompt_ui()
 	create_network_ui()
 	create_navigation_ui()
 	create_character_ui()
@@ -780,6 +795,7 @@ func _process(delta: float) -> void:
 	challenge_shake = maxf(0.0, challenge_shake - delta)
 	screen_shake_time = maxf(0.0, screen_shake_time - delta)
 	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - delta)
+	update_match_start_prompt(delta)
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
 		if screen == "title":
 			title_animation_elapsed += delta
@@ -808,7 +824,7 @@ func _process(delta: float) -> void:
 		return
 	if phase == "countdown":
 		countdown_remaining = maxf(0.0, countdown_remaining - delta)
-		status_text = "試合開始まで %.1f" % countdown_remaining
+		status_text = "READY"
 		if countdown_remaining <= 0.0:
 			begin_match()
 		if network_mode == "host":
@@ -1920,6 +1936,7 @@ func show_result(winner_id: int) -> void:
 	var winner_name := result_player_display_name(winner_id)
 	var display_title := "引き分け" if winner_id == 0 else "%sの勝利" % winner_name
 	result_summary_text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [display_title, result_player_display_name(1), first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], result_player_display_name(2), second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	refresh_result_details(winner_id)
 	refresh_result_action_ui()
 	apply_screen_state("result")
 	if network_mode == "host":
@@ -1927,9 +1944,7 @@ func show_result(winner_id: int) -> void:
 
 
 func rematch_from_result() -> void:
-	match_state.reset()
-	players = match_state.players
-	begin_match()
+	prepare_match_start()
 
 
 func request_rematch() -> void:
@@ -1968,7 +1983,7 @@ func refresh_result_action_ui() -> void:
 	if not is_online_result:
 		result_rematch_button.disabled = false
 		result_rematch_button.text = "もう一度対戦"
-		result_label.text = result_summary_text
+		result_label.text = ""
 		return
 	var local_slot := local_player_id if network_mode == "client" else 1
 	var remote_slot := 2 if local_slot == 1 else 1
@@ -1981,7 +1996,35 @@ func refresh_result_action_ui() -> void:
 		decision_text = "相手の再戦選択を待っています。"
 	elif remote_requested and not local_requested:
 		decision_text = "相手が再戦を希望しています。"
-	result_label.text = "%s\n\n%s" % [result_summary_text, decision_text]
+	result_label.text = decision_text
+
+
+func refresh_result_details(winner_id: int) -> void:
+	if result_match_time_label == null:
+		return
+	var first: Dictionary = players[1]
+	var second: Dictionary = players[2]
+	var elapsed_seconds := maxi(0, roundi(MATCH_DURATION - match_state.time_remaining))
+	result_match_time_label.text = "%02d:%02d" % [elapsed_seconds / 60, elapsed_seconds % 60]
+	var winner_slot := 1 if winner_id == 0 else winner_id
+	var loser_slot := 2 if winner_slot == 1 else 1
+	var winner_player: Dictionary = players[winner_slot]
+	var loser_player: Dictionary = players[loser_slot]
+	result_winner_name_label.text = result_player_display_name(winner_slot)
+	result_loser_name_label.text = result_player_display_name(loser_slot)
+	if winner_id == 0:
+		result_winner_message_label.text = "DRAW"
+		result_loser_message_label.text = "DRAW"
+	else:
+		result_winner_message_label.text = "MATCH COMPLETE"
+		result_loser_message_label.text = "LOSE"
+	result_player_one_stats_label.text = "P1  %s" % result_player_display_name(1)
+	result_player_two_stats_label.text = "P2  %s" % result_player_display_name(2)
+	result_hp_stats_label.text = "HP  %3d                              HP  %3d" % [int(first["hp"]), int(second["hp"])]
+	result_average_score_stats_label.text = "AVG SCORE  %5.1f                    AVG SCORE  %5.1f" % [average_score(first), average_score(second)]
+	# Keep the dictionaries referenced above typed and close to the result layout data.
+	result_winner_name_label.tooltip_text = "HP %d / AVG %.1f" % [int(winner_player["hp"]), average_score(winner_player)]
+	result_loser_name_label.tooltip_text = "HP %d / AVG %.1f" % [int(loser_player["hp"]), average_score(loser_player)]
 
 
 func average_score(player: Dictionary) -> float:
@@ -2319,24 +2362,21 @@ func start_lobby_match() -> void:
 		return
 	if network_mode != "host" or not p1_ready or not p2_ready:
 		return
-	phase = "countdown"
-	countdown_remaining = 3.0
-	status_text = "試合開始まで 3"
-	apply_screen_state("match")
+	prepare_match_start()
 
 
 func create_result_ui() -> void:
 	result_panel = $UIRoot/Result
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("111b34f5")
-	style.border_color = Color("ffc45e")
-	style.set_border_width_all(0)
-	style.corner_radius_top_left = 12
-	style.corner_radius_top_right = 12
-	style.corner_radius_bottom_left = 12
-	style.corner_radius_bottom_right = 12
-	result_panel.add_theme_stylebox_override("panel", style)
 	result_label = $UIRoot/Result/ResultText
+	result_match_time_label = $UIRoot/Result/MatchTimeValue
+	result_winner_name_label = $UIRoot/Result/WinnerArea/WinnerName
+	result_winner_message_label = $UIRoot/Result/WinnerArea/WinnerMessage
+	result_loser_name_label = $UIRoot/Result/LoserArea/LoserName
+	result_loser_message_label = $UIRoot/Result/LoserArea/LoserMessage
+	result_player_one_stats_label = $UIRoot/Result/PlayerOneStats
+	result_player_two_stats_label = $UIRoot/Result/PlayerTwoStats
+	result_hp_stats_label = $UIRoot/Result/HpStats
+	result_average_score_stats_label = $UIRoot/Result/AverageScoreStats
 	result_rematch_button = $UIRoot/Result/RematchButton
 	style_menu_button(result_rematch_button)
 	connect_button_once(result_rematch_button, request_rematch)
@@ -2344,6 +2384,27 @@ func create_result_ui() -> void:
 	style_menu_button(result_lobby_button)
 	connect_button_once(result_lobby_button, request_return_to_lobby)
 	result_panel.visible = false
+
+
+func create_match_start_prompt_ui() -> void:
+	match_start_prompt = $UIRoot/MatchStartPrompt
+	match_start_prompt_label = $UIRoot/MatchStartPrompt/Center/Label
+	match_start_prompt.visible = false
+
+
+func update_match_start_prompt(delta: float) -> void:
+	if match_start_prompt == null or match_start_prompt_label == null:
+		return
+	if phase == "countdown":
+		match_start_prompt_label.text = "READY"
+		match_start_prompt.visible = screen == "match"
+		return
+	if phase == "match" and match_start_fight_remaining > 0.0:
+		match_start_fight_remaining = maxf(0.0, match_start_fight_remaining - delta)
+		match_start_prompt_label.text = "FIGHT"
+		match_start_prompt.visible = true
+		return
+	match_start_prompt.visible = false
 
 
 func create_network_ui() -> void:
@@ -2495,7 +2556,11 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	match_state.time_remaining = float(snapshot.get("time_remaining", MATCH_DURATION))
 	match_state.match_over = bool(snapshot.get("match_over", false))
 	match_state.winner_id = int(snapshot.get("winner_id", 0))
+	var previous_phase := phase
 	phase = str(snapshot.get("phase", "lobby"))
+	countdown_remaining = float(snapshot.get("countdown_remaining", 0.0))
+	if previous_phase == "countdown" and phase == "match":
+		match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
 	status_text = str(snapshot.get("status_text", ""))
 	result_rematch_ready = snapshot.get("rematch_ready", {1: false, 2: false}).duplicate()
 	dedicated_input_acknowledgements = snapshot.get("input_acknowledgements", {}).duplicate()
@@ -2522,12 +2587,13 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 		if screen != "online_waiting":
 			apply_screen_state("online_waiting")
 		refresh_lobby_label()
-	elif phase == "match" and screen != "match":
+	elif phase in ["countdown", "match"] and screen != "match":
 		apply_screen_state("match")
 	elif phase == "result" and screen != "result":
 		show_result(match_state.winner_id)
 	if phase == "result":
 		refresh_result_action_ui()
+	update_match_start_prompt(0.0)
 
 
 func interpolate_dedicated_snapshot(delta: float) -> void:
@@ -3268,7 +3334,7 @@ func start_practice() -> void:
 	local_player_id = 1
 	p1_selection = practice_selection
 	p2_selection = practice_selection
-	begin_match()
+	prepare_match_start()
 
 
 func start_debug_match() -> void:
@@ -3276,7 +3342,7 @@ func start_debug_match() -> void:
 	local_player_id = debug_controlled_player_id
 	p1_selection = debug_p1_selection
 	p2_selection = debug_p2_selection
-	begin_match()
+	prepare_match_start()
 
 
 func show_connection() -> void:
@@ -3743,14 +3809,31 @@ func get_idle_texture(visual_id: String) -> Texture2D:
 
 
 func begin_match() -> void:
-	reset_match_runtime_state()
 	phase = "match"
 	apply_screen_state("match")
 	match_state.match_over = false
 	match_state.time_remaining = MATCH_DURATION
+	match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
+	if match_start_prompt != null and match_start_prompt_label != null:
+		match_start_prompt_label.text = "FIGHT"
+		match_start_prompt.visible = true
+	status_text = "FIGHT"
+
+
+func prepare_match_start() -> void:
+	reset_match_runtime_state()
+	match_state.reset()
+	players = match_state.players
 	configure_player(1, p1_selection)
 	configure_player(2, p2_selection)
-	status_text = "開始！ 通常攻撃と課題スキルを使い分けよう。"
+	phase = "countdown"
+	countdown_remaining = MATCH_READY_DURATION
+	match_start_fight_remaining = 0.0
+	status_text = "READY"
+	apply_screen_state("match")
+	if match_start_prompt != null and match_start_prompt_label != null:
+		match_start_prompt_label.text = "READY"
+		match_start_prompt.visible = true
 
 
 func reset_match_runtime_state() -> void:
@@ -3820,7 +3903,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
 	player["interrupt_gauge_display"] = 0.0
-	player["position"] = Vector2(300, 390) if player_id == 1 else Vector2(2260, 390)
+	player["position"] = Vector2(200, 260) if player_id == 1 else Vector2(1480, 260)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
 	players[player_id] = player

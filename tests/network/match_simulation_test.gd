@@ -23,6 +23,11 @@ func _init() -> void:
 
 func _test_state_and_normal_attack() -> void:
 	var simulation := MatchSimulation.new()
+	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(200, 260)))
+	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 260)))
+	simulation.step(10.0, {1: {"move": Vector2.LEFT}, 2: {"move": Vector2.DOWN}})
+	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(30, 260)))
+	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 744)))
 	for player in simulation.state["players"].values():
 		assert(player.has("attack_time"))
 		assert(player.has("hit_time"))
@@ -208,7 +213,12 @@ func _test_session_ready_start() -> void:
 	assert(bool(session.make_snapshot()["ready"][2]))
 	assert(not session.start(12))
 	assert(session.start(11))
+	assert(session.phase == "countdown")
+	assert(is_equal_approx(float(session.make_snapshot()["countdown_remaining"]), MatchSession.READY_DURATION))
+	assert(not session.submit_input(11, MatchProtocol.make_input(0, Vector2.RIGHT)))
+	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
+	assert(is_equal_approx(float(session.simulation.state["time_remaining"]), 90.0))
 
 
 func _test_session_result_actions() -> void:
@@ -224,6 +234,9 @@ func _test_session_result_actions() -> void:
 	assert(bool(session.make_snapshot()["rematch_ready"][1]))
 	assert(not bool(session.make_snapshot()["rematch_ready"][2]))
 	assert(session.request_result_action(12, "rematch"))
+	assert(session.phase == "countdown")
+	assert(not session.submit_event(11, MatchProtocol.make_event(1, "small_skill")))
+	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
 	assert(not bool(session.simulation.state["match_over"]))
 	assert(str(session.simulation.state["players"][1]["character_id"]) == "arithmetic")
@@ -247,6 +260,16 @@ func _test_session_disconnect_transitions() -> void:
 	assert(not bool(lobby_session.simulation.state["match_over"]))
 	assert(lobby_session.make_snapshot()["connected_slots"] == [1])
 	assert(not bool(lobby_session.make_snapshot()["ready"][2]))
+	var countdown_session := MatchSession.new("countdown-disconnect-room")
+	assert(countdown_session.join(11, 1) == 1)
+	assert(countdown_session.join(12, 2) == 2)
+	countdown_session.set_ready(11, true)
+	countdown_session.set_ready(12, true)
+	assert(countdown_session.start(11))
+	assert(countdown_session.phase == "countdown")
+	assert(countdown_session.leave(12))
+	assert(countdown_session.phase == "lobby")
+	assert(is_zero_approx(float(countdown_session.make_snapshot()["countdown_remaining"])))
 	var match_session := MatchSession.new("match-disconnect-room")
 	assert(match_session.join(11, 1) == 1)
 	assert(match_session.join(12, 2) == 2)
