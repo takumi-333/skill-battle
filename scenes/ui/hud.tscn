@@ -27,6 +27,13 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_opponent_hp"]
+bg_color = Color(0.9411765, 0.33333334, 0.34509805, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_pm3ni"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_y6deb"]
@@ -283,40 +290,45 @@ offset_bottom = 720.0
 
 [node name="PlayerOneLabel" type="Label" parent="." unique_id=1993157830]
 layout_mode = 0
-offset_left = 282.0
-offset_top = 47.0
-offset_right = 372.0
-offset_bottom = 77.0
-theme_override_font_sizes/font_size = 20
-text = "HP 100"
-
-[node name="PlayerTwoLabel" type="Label" parent="." unique_id=1286318997]
-visible = false
-layout_mode = 0
-offset_left = 820.0
-offset_top = 28.0
-offset_right = 1240.0
-offset_bottom = 58.0
-horizontal_alignment = 2
+offset_left = 370.0
+offset_top = 36.0
+offset_right = 610.0
+offset_bottom = 78.0
+theme_override_font_sizes/font_size = 24
+text = "HP 100 / 100"
+vertical_alignment = 1
 
 [node name="HPBar" type="ProgressBar" parent="." unique_id=1922176511]
 layout_mode = 0
 offset_left = 40.0
-offset_top = 52.0
-offset_right = 270.0
-offset_bottom = 66.0
+offset_top = 45.0
+offset_right = 350.0
+offset_bottom = 69.0
 theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
 theme_override_styles/fill = SubResource("StyleBoxFlat_jscy8")
 value = 100.0
 show_percentage = false
 
+[node name="OpponentHPBar" type="ProgressBar" parent="."]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 45.0
+offset_right = 1080.0
+offset_bottom = 69.0
+theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
+value = 100.0
+show_percentage = false
+
 [node name="Timer" type="Label" parent="." unique_id=1130374244]
 layout_mode = 0
-offset_left = 500.0
-offset_top = 28.0
-offset_right = 780.0
-offset_bottom = 72.0
-horizontal_alignment = 1
+offset_left = 1100.0
+offset_top = 35.0
+offset_right = 1240.0
+offset_bottom = 79.0
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 2
+vertical_alignment = 1
 
 [node name="Status" type="Label" parent="." unique_id=1965415097]
 layout_mode = 0
@@ -329,23 +341,23 @@ horizontal_alignment = 1
 
 [node name="Controls" type="Label" parent="." unique_id=1833811283]
 layout_mode = 0
-offset_left = 760.0
-offset_top = 68.0
-offset_right = 1230.0
-offset_bottom = 116.0
+offset_left = 32.0
+offset_top = 600.0
+offset_right = 500.0
+offset_bottom = 648.0
 theme_override_colors/font_color = Color(0.7176471, 0.75686276, 0.84705883, 1)
 theme_override_font_sizes/font_size = 15
 text = "移動: 矢印キー  通常攻撃: 1
 スキル1/2/3: 2・3・4  課題中止: Esc"
-horizontal_alignment = 2
+horizontal_alignment = 0
 
 [node name="HomeButton" type="Button" parent="." unique_id=1036284805]
 z_index = 10
 layout_mode = 0
 offset_left = 1040.0
-offset_top = 24.0
+offset_top = 666.0
 offset_right = 1230.0
-offset_bottom = 64.0
+offset_bottom = 706.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 18
 theme_override_styles/normal = SubResource("StyleBoxEmpty_pm3ni")

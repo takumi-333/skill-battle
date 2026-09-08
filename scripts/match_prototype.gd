@@ -419,7 +419,6 @@ var title_animation_elapsed: float = 0.0
 var user_display_name := "プレイヤー"
 
 var player_one_label: Label
-var player_two_label: Label
 var timer_label: Label
 var status_label: Label
 var controls_label: Label
@@ -2043,17 +2042,18 @@ func result_player_display_name(player_id: int) -> String:
 
 func create_hud() -> void:
 	player_one_label = $UIRoot/HUD/PlayerOneLabel
-	player_one_label.text = "HP 100"
-	player_one_label.add_theme_font_size_override("font_size", 20)
-	player_two_label = $UIRoot/HUD/PlayerTwoLabel
-	player_two_label.visible = false
+	player_one_label.text = "HP 100 / 100"
+	player_one_label.add_theme_font_size_override("font_size", 24)
 	hp_bar = $UIRoot/HUD/HPBar
-	hp_bar.position = Vector2(40, 52)
-	hp_bar.size = Vector2(230, 14)
 	hp_bar.min_value = 0.0
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
+	opponent_hp_bar = $UIRoot/HUD/OpponentHPBar
+	opponent_hp_bar.min_value = 0.0
+	opponent_hp_bar.max_value = 100.0
+	opponent_hp_bar.value = 100.0
+	opponent_hp_bar.show_percentage = false
 	var hp_background := StyleBoxFlat.new()
 	hp_background.bg_color = Color("070b14")
 	hp_background.border_color = Color("39435f")
@@ -2066,6 +2066,14 @@ func create_hud() -> void:
 	hp_fill.corner_radius_bottom_right = 3
 	hp_bar.add_theme_stylebox_override("background", hp_background)
 	hp_bar.add_theme_stylebox_override("fill", hp_fill)
+	var opponent_hp_fill := StyleBoxFlat.new()
+	opponent_hp_fill.bg_color = Color("f05558")
+	opponent_hp_fill.corner_radius_top_left = 3
+	opponent_hp_fill.corner_radius_top_right = 3
+	opponent_hp_fill.corner_radius_bottom_left = 3
+	opponent_hp_fill.corner_radius_bottom_right = 3
+	opponent_hp_bar.add_theme_stylebox_override("background", hp_background)
+	opponent_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
 	timer_label = $UIRoot/HUD/Timer
 	status_label = $UIRoot/HUD/Status
 	status_label.add_theme_font_size_override("font_size", 16)
@@ -2107,8 +2115,8 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	# controls HUD-specific child state.
 	hud_root.z_index = 100
 	player_one_label.visible = is_visible
-	player_two_label.visible = false
 	hp_bar.visible = is_visible
+	opponent_hp_bar.visible = is_visible
 	timer_label.visible = is_visible
 	status_label.visible = false
 	controls_label.visible = is_visible and network_mode == "practice"
@@ -4001,13 +4009,17 @@ func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> 
 
 
 func update_hud() -> void:
-	var hud_player_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	var hud_player_id := get_hud_player_id()
 	if not players.has(hud_player_id):
 		return
 	var own_player: Dictionary = players[hud_player_id]
+	var opponent_player_id := 2 if hud_player_id == 1 else 1
+	var opponent_player: Dictionary = players.get(opponent_player_id, {})
 	configure_skill_icons(own_player)
-	player_one_label.text = "HP %d" % int(own_player["hp"])
+	player_one_label.text = "HP %d / 100" % int(own_player["hp"])
 	hp_bar.value = int(own_player["hp"])
+	if not opponent_player.is_empty():
+		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
@@ -4015,7 +4027,20 @@ func update_hud() -> void:
 		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
 		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), TYPIST_SKILL3_COOLDOWN, is_focused)
-	timer_label.text = "残り %02d秒" % ceili(match_state.time_remaining)
+	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
+	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
+
+
+func get_hud_player_id() -> int:
+	return debug_controlled_player_id if network_mode == "local" else local_player_id
+
+
+func match_player_display_name(player_id: int) -> String:
+	if players.has(player_id):
+		var display_name := str(players[player_id].get("name", "")).strip_edges()
+		if not display_name.is_empty():
+			return display_name
+	return "プレイヤー%d" % player_id
 
 
 func configure_skill_icons(player: Dictionary) -> void:
@@ -4393,15 +4418,11 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id == local_player_id:
 		sprite_tint.a = 0.35
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
-	if network_mode in ["host", "client"] and player_id == local_player_id:
-		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-42.0, -91.0), "あなた", HORIZONTAL_ALIGNMENT_CENTER, 84.0, 18, Color("f1f5ff"))
+	var player_name := "あなた" if player_id == get_hud_player_id() else match_player_display_name(player_id)
+	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-58.0, -91.0), player_name, HORIZONTAL_ALIGNMENT_CENTER, 116.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
 		draw_normal_attack_effect(player, position_value, facing)
 		draw_debug_normal_attack_hit_area(position_value, facing)
-	var health_ratio: float = float(player["hp"]) / 100.0
-	var health_rect := Rect2(position_value + Vector2(-30, -54), Vector2(60, 7))
-	draw_rect(health_rect, Color("070b14"), true)
-	draw_rect(Rect2(health_rect.position, Vector2(health_rect.size.x * health_ratio, health_rect.size.y)), Color("52d6ad"), true)
 	if bool(player["focused"]) and float(player["interrupt_gauge_max"]) > 0.0:
 		var gauge_ratio: float = clampf(float(player["interrupt_gauge_display"]) / float(player["interrupt_gauge_max"]), 0.0, 1.0)
 		var gauge_rect := Rect2(position_value + Vector2(-30, -43), Vector2(60, 5))
