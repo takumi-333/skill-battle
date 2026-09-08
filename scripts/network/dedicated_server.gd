@@ -124,6 +124,8 @@ func submit_match_event(event: Dictionary) -> void:
 		_rejected_event("match_event_rejected", room_id, {"peer_id": peer_id, "event_type": str(event.get("type", "")), "reason": "room_missing"})
 	elif session.submit_event(peer_id, event):
 		accepted_events += 1
+		if str(event.get("type", "")) == "challenge_character":
+			_relay_typist_typing_key_sound(session, peer_id)
 		_queue_monitoring_event("match_event_accepted", room_id, {"peer_id": peer_id, "event_type": str(event.get("type", ""))})
 		_broadcast_session(session)
 	else:
@@ -198,7 +200,7 @@ func receive_remote_challenge_input(_character: String) -> void:
 func receive_remote_challenge_submission(_submitted_text: String) -> void:
 	pass
 
-@rpc("authority", "unreliable")
+@rpc("any_peer", "unreliable")
 func receive_typist_typing_key_sound() -> void:
 	pass
 
@@ -221,6 +223,12 @@ func _broadcast_session(session: MatchSession) -> void:
 			rpc_id(int(peer_id), "receive_skill_presentation", presentation)
 		var recipient_slot := int(session.peer_slots[peer_id])
 		rpc_id(int(peer_id), "receive_dedicated_snapshot", session.make_snapshot(recipient_slot, server_tick))
+
+
+func _relay_typist_typing_key_sound(session: MatchSession, source_peer_id: int) -> void:
+	for peer_id in session.peer_slots.keys():
+		if int(peer_id) != source_peer_id:
+			rpc_id(int(peer_id), "receive_typist_typing_key_sound")
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	var room_id: String = peer_rooms.get(peer_id, "")

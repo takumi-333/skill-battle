@@ -723,6 +723,8 @@ func emit_typist_typing_key_sound() -> void:
 	play_typist_typing_key_sound()
 	if network_mode == "host":
 		rpc("receive_typist_typing_key_sound")
+	elif network_mode == "client":
+		rpc_id(1, "receive_typist_typing_key_sound")
 
 
 func lobby_debug_log(message: String) -> void:
@@ -3636,9 +3638,11 @@ func receive_remote_challenge_submission(submitted_text: String) -> void:
 		_submit_arithmetic_answer(submitted_text)
 
 
-@rpc("authority", "unreliable")
+@rpc("any_peer", "unreliable")
 func receive_typist_typing_key_sound() -> void:
 	if network_mode == "client":
+		play_typist_typing_key_sound()
+	elif network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2:
 		play_typist_typing_key_sound()
 
 
