@@ -459,6 +459,7 @@ var network_back_button: Button
 var lobby_home_button: Button
 var gameplay_home_button: Button
 var hp_bar: ProgressBar
+var opponent_hp_bar: ProgressBar
 var skill_widgets: Array[Node] = []
 var skill_hud_signature := ""
 var network_panel: Panel
