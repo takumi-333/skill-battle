@@ -83,12 +83,54 @@ func _test_arithmetician_skills() -> void:
 	simulation.configure_loadout(1, 1, "typist_trident")
 	assert(simulation.handle_event(1, {"type": "small_skill"}))
 	_complete_arithmetic(simulation, 1)
-	assert(not simulation.state["decoys"].is_empty())
+	assert(simulation.state["decoys"].size() == 80)
+	assert(is_equal_approx(float(simulation.state["players"][1]["small_cooldown"]), 2.0))
+	assert(is_equal_approx(float(simulation.state["players"][1]["buff_time"]), 40.0))
+	assert(is_equal_approx(float(simulation.state["players"][1]["buff_speed_multiplier"]), 1.1))
+	assert(int(simulation.state["players"][1]["attack_damage_buff"]) == 5)
+	assert(simulation.state["arithmetic_flashes"].size() == 1)
+	var flash_snapshot := MatchProtocol.snapshot("arithmetician-test", simulation.state, "match", "", 1)
+	assert(flash_snapshot["arithmetic_flashes"].size() == 1)
+
+	for expected in [[0, 10, 20.0, Vector2(10.0, 500.0)], [59, 19, 20.0, Vector2(10.0, 500.0)], [60, 20, 30.0, Vector2(20.0, 700.0)], [69, 29, 30.0, Vector2(20.0, 700.0)], [70, 30, 30.0, Vector2(20.0, 700.0)], [79, 39, 30.0, Vector2(20.0, 700.0)], [80, 45, 40.0, Vector2(20.0, 1000.0)], [89, 54, 40.0, Vector2(20.0, 1000.0)], [90, 70, 40.0, Vector2(20.0, 1000.0)], [100, 80, 40.0, Vector2(20.0, 1000.0)]]:
+		simulation.state["players"][1]["position"] = Vector2(840, 387)
+		simulation._spawn_decoys(1, int(expected[0]))
+		assert(simulation.state["decoys"].size() == int(expected[1]))
+		for decoy in simulation.state["decoys"]:
+			var offset := Vector2(decoy["position"]) - Vector2(840, 387)
+			assert(offset.length() >= Vector2(expected[3]).x - 0.01)
+			assert(offset.length() <= Vector2(expected[3]).y + 0.01)
+			assert(is_equal_approx(float(decoy["lifetime"]), float(expected[2])))
+			assert(float(decoy["noise_timer"]) >= 5.0 and float(decoy["noise_timer"]) <= 10.0)
+
+	simulation._spawn_decoys(1, 60)
+	var first_decoy: Dictionary = simulation.state["decoys"][0]
+	var first_position := Vector2(first_decoy["position"])
+	var offset_angle := float(first_decoy["movement_offset_angle"])
+	first_decoy["noise_timer"] = 0.01
+	simulation.state["decoys"][0] = first_decoy
+	simulation.step(0.02, {1: {"move": Vector2.RIGHT}, 2: {"move": Vector2.ZERO}})
+	first_decoy = simulation.state["decoys"][0]
+	assert(bool(first_decoy["is_moving"]))
+	assert(Vector2(first_decoy["facing"]).is_equal_approx(Vector2.RIGHT.rotated(offset_angle)))
+	assert(Vector2(first_decoy["position"]).is_equal_approx(simulation._clamp_to_arena(first_position + Vector2.RIGHT.rotated(offset_angle) * 6.16)))
+	assert(float(first_decoy["noise_time"]) > 0.0)
 	var big_simulation := MatchSimulation.new()
 	big_simulation.configure_loadout(1, 1, "typist_trident")
 	assert(big_simulation.handle_event(1, {"type": "big_skill"}))
 	_complete_arithmetic(big_simulation, 1)
-	assert(float(big_simulation.state["players"][1]["invisible_time"]) > 0.0)
+	assert(is_equal_approx(float(big_simulation.state["players"][1]["big_cooldown"]), 15.0))
+	assert(is_equal_approx(float(big_simulation.state["players"][1]["invisible_time"]), 20.0))
+	assert(is_equal_approx(float(big_simulation.state["players"][1]["buff_speed_multiplier"]), 1.25))
+	assert(int(big_simulation.state["players"][1]["attack_damage_buff"]) == 10)
+	big_simulation.step(0.01, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.3)
+	big_simulation.step(2.3, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) < 2.3)
+	big_simulation.step(0.21, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(float(big_simulation.state["players"][1]["invisible_flicker"]) > 2.3)
+	big_simulation._spawn_skill(1, 0, {"tier": "big"})
+	assert(is_equal_approx(float(big_simulation.state["players"][1]["invisible_time"]), 10.0))
 
 func _test_chanter_skills() -> void:
 	var simulation := MatchSimulation.new()

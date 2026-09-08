@@ -96,6 +96,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"shockwaves": state.get("shockwaves", []).duplicate(true),
 		"trident_impacts": state.get("trident_impacts", []).duplicate(true),
 		"decoys": state.get("decoys", []).duplicate(true),
+		"arithmetic_flashes": state.get("arithmetic_flashes", []).duplicate(true),
 		"hammer_spins": state.get("hammer_spins", []).duplicate(true),
 	}
 
@@ -114,7 +115,7 @@ static func interpolate_visual_state(previous: Dictionary, current: Dictionary, 
 	var value := current.duplicate(true)
 	var clamped_ratio := clampf(ratio, 0.0, 1.0)
 	value["players"] = _interpolate_players(previous.get("players", {}), current.get("players", {}), clamped_ratio)
-	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "hammer_spins"]:
+	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "hammer_spins"]:
 		value[entity_key] = _interpolate_entities(previous.get(entity_key, []), current.get(entity_key, []), clamped_ratio)
 	return value
 

@@ -2741,7 +2741,16 @@ func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
 	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
+	_apply_dedicated_arithmetic_flashes(MatchProtocol.dictionary_array(snapshot.get("arithmetic_flashes", [])))
 	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
+
+func _apply_dedicated_arithmetic_flashes(flashes: Array[Dictionary]) -> void:
+	if flashes.is_empty():
+		return
+	var flash: Dictionary = flashes[0]
+	arithmetic_flash_time = maxf(arithmetic_flash_time, float(flash.get("lifetime", 0.0)))
+	arithmetic_flash_center = flash.get("center", Vector2.ZERO)
+	arithmetic_flash_owner_id = int(flash.get("owner_id", 0))
 
 func _advance_hammer_presentations(delta: float) -> void:
 	var active_ids := {}
@@ -2848,7 +2857,12 @@ func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
 
 @rpc("authority", "reliable")
 func receive_skill_presentation(presentation: Dictionary) -> void:
-	if str(presentation.get("kind", "")) != "hammer_spins":
+	var kind := str(presentation.get("kind", ""))
+	if kind == "arithmetic_flashes":
+		var flash: Dictionary = presentation.get("state", {})
+		_apply_dedicated_arithmetic_flashes([flash])
+		return
+	if kind != "hammer_spins":
 		return
 	var state: Dictionary = presentation.get("state", {})
 	var presentation_id := int(presentation.get("presentation_id", 0))

@@ -13,6 +13,7 @@ const FOCUS_SPEED_MULTIPLIER := 0.5
 const NORMAL_COOLDOWN := 0.5
 const NORMAL_DURATION := 0.28
 const TYPING_COOLDOWN := 2.0
+const ARITHMETIC_BIG_COOLDOWN := 15.0
 const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
@@ -31,6 +32,11 @@ const CHANTER_ZONE_RADIUS := 80.0
 const CHANTER_TARGET_HITBOX_RADIUS_X := 20.0
 const CHANTER_TARGET_HITBOX_RADIUS_Y := 30.0
 const CHANTER_TARGET_HITBOX_OFFSET := Vector2(0.0, -12.0)
+const ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL := 5.0
+const ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL := 10.0
+const ARITHMETICIAN_DECOY_NOISE_DURATION := 0.12
+const ARITHMETICIAN_FLASH_DURATION := 0.2
+const ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL := 2.5
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -63,6 +69,7 @@ func reset() -> void:
 		"shockwaves": [],
 		"trident_impacts": [],
 		"decoys": [],
+		"arithmetic_flashes": [],
 		"hammer_spins": [],
 	}
 	configure_loadout(1, 0, "typist_trident")
@@ -132,6 +139,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	_update_trident_impacts(delta)
 	_update_hammer_spins(delta)
 	_update_decoys(delta)
+	_update_arithmetic_flashes(delta)
 	if float(state["time_remaining"]) <= 0.0 and not bool(state["match_over"]):
 		_finish_by_hp()
 
@@ -147,6 +155,8 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 	if float(player["buff_time"]) <= 0.0:
 		player["buff_speed_multiplier"] = 1.0
 		player["attack_damage_buff"] = 0
+	if float(player["invisible_time"]) > 0.0 and float(player["invisible_flicker"]) <= 0.0:
+		player["invisible_flicker"] = ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	player["is_moving"] = false
 	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and move.length_squared() > 0.0:
@@ -347,7 +357,10 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	if tier == "skill3":
 		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN
 	elif tier == "big":
-		player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
+		if str(player.get("character_id", "")) == "arithmetic":
+			player["big_cooldown"] = ARITHMETIC_BIG_COOLDOWN
+		else:
+			player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
 	else:
 		player["small_cooldown"] = CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN
 	if success:
@@ -395,6 +408,7 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			player["buff_speed_multiplier"] = 1.25
 			player["attack_damage_buff"] = 10
 			player["invisible_time"] = player["buff_time"]
+			player["invisible_flicker"] = 0.0
 			state["players"][owner] = player
 	else:
 		if tier == "skill3":
@@ -485,16 +499,41 @@ func _update_projectiles(delta: float) -> void:
 func _spawn_decoys(owner: int, score: int) -> void:
 	var decoys: Array = state["decoys"]
 	decoys.clear()
-	var count := clampi(5 + score / 20, 5, 10)
 	var player: Dictionary = state["players"][owner]
-	var lifetime := 20.0 if score < 60 else (30.0 if score < 80 else 40.0)
+	var count := _arithmetic_decoy_count(score)
+	var lifetime := _arithmetic_decoy_lifetime(score)
+	var radius_range := _arithmetic_decoy_radius_range(score)
 	for index in count:
-		var angle := TAU * float(index) / float(count)
-		decoys.append({"presentation_id": _take_presentation_id(), "owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(angle) * (90.0 + 25.0 * index)), "owner_position": Vector2(player["position"]), "movement_offset_angle": angle, "is_moving": false, "animation_phase": float(index) / count, "lifetime": lifetime, "noise_timer": 5.0, "noise_time": 0.0, "noise_phase": angle, "flash_time": 0.25})
+		var position_angle := randf_range(0.0, TAU)
+		var radius := randf_range(radius_range.x, radius_range.y)
+		var movement_offset_angle := TAU * float(randi_range(0, 7)) / 8.0
+		decoys.append({"presentation_id": _take_presentation_id(), "owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(movement_offset_angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(position_angle) * radius), "owner_position": Vector2(player["position"]), "movement_offset_angle": movement_offset_angle, "is_moving": false, "animation_phase": randf_range(0.0, 1.0), "lifetime": lifetime, "noise_timer": randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL), "noise_time": 0.0, "noise_phase": randf_range(0.0, TAU), "flash_time": ARITHMETICIAN_FLASH_DURATION})
 	player["buff_time"] = lifetime
 	player["buff_speed_multiplier"] = 1.1
 	player["attack_damage_buff"] = 5
 	state["players"][owner] = player
+	state["arithmetic_flashes"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "center": Vector2(player["position"]), "lifetime": ARITHMETICIAN_FLASH_DURATION, "duration": ARITHMETICIAN_FLASH_DURATION})
+
+func _arithmetic_decoy_count(score: int) -> int:
+	if score <= 59:
+		return 10 + maxi(score - 50, 0)
+	if score <= 69:
+		return 20 + score - 60
+	if score <= 79:
+		return 30 + score - 70
+	if score <= 89:
+		return 45 + score - 80
+	return 70 + score - 90
+
+func _arithmetic_decoy_lifetime(score: int) -> float:
+	return 20.0 if score <= 59 else (30.0 if score <= 79 else 40.0)
+
+func _arithmetic_decoy_radius_range(score: int) -> Vector2:
+	if score <= 59:
+		return Vector2(10.0, 500.0)
+	if score <= 79:
+		return Vector2(20.0, 700.0)
+	return Vector2(20.0, 1000.0)
 
 func _update_decoys(delta: float) -> void:
 	for index in range(state["decoys"].size() - 1, -1, -1):
@@ -507,11 +546,25 @@ func _update_decoys(delta: float) -> void:
 		decoy["facing"] = Vector2(player["facing"]).rotated(float(decoy["movement_offset_angle"]))
 		decoy["is_moving"] = delta_position.length_squared() > 0.0
 		decoy["flash_time"] = maxf(0.0, float(decoy.get("flash_time", 0.0)) - delta)
+		decoy["noise_timer"] = float(decoy.get("noise_timer", ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL)) - delta
+		decoy["noise_time"] = maxf(0.0, float(decoy.get("noise_time", 0.0)) - delta)
+		if float(decoy["noise_timer"]) <= 0.0:
+			decoy["noise_timer"] = randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL)
+			decoy["noise_time"] = ARITHMETICIAN_DECOY_NOISE_DURATION
 		decoy["lifetime"] = float(decoy["lifetime"]) - delta
 		if float(decoy["lifetime"]) <= 0.0:
 			state["decoys"].remove_at(index)
 		else:
 			state["decoys"][index] = decoy
+
+func _update_arithmetic_flashes(delta: float) -> void:
+	for index in range(state["arithmetic_flashes"].size() - 1, -1, -1):
+		var flash: Dictionary = state["arithmetic_flashes"][index]
+		flash["lifetime"] = maxf(0.0, float(flash["lifetime"]) - delta)
+		if float(flash["lifetime"]) <= 0.0:
+			state["arithmetic_flashes"].remove_at(index)
+		else:
+			state["arithmetic_flashes"][index] = flash
 
 func _spawn_zone(owner: int, score: int, delay: float, duration: float) -> void:
 	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": 1.0 / 60.0, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 1 + roundi(float(score) * 0.06), "spawned": false})
