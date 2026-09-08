@@ -14,12 +14,13 @@ const NORMAL_COOLDOWN := 0.5
 const NORMAL_DURATION := 0.28
 const TYPING_COOLDOWN := 2.0
 const BIG_COOLDOWN := 5.0
+const CHANTER_SKILL2_COOLDOWN := 6.0
 const SKILL3_COOLDOWN := 3.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const BIG_INTERRUPT_GAUGE := 50.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
-const MAX_PROJECTILES := 64
+const MAX_PROJECTILES := 192
 const TRACE_MIN_ELAPSED := 0.35
 const TRACE_MIN_POINTS := 8
 const TRACE_MIN_LENGTH := 80.0
@@ -351,7 +352,7 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	if tier == "skill3":
 		player["skill3_cooldown"] = SKILL3_COOLDOWN
 	elif tier == "big":
-		player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_COOLDOWN
+		player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
 	else:
 		player["small_cooldown"] = TYPING_COOLDOWN
 	if success:
@@ -405,10 +406,22 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			for index in 3:
 				_spawn_zone(owner, score, float(index) * 1.5, 2.0 if index < 2 else 2.5)
 		else:
-			for index in 16:
-				_spawn_projectile(owner, score, true, TAU * float(index) / 16.0, float(index) * 0.08)
+			for cycle in _chanter_skill2_cycle_count(score):
+				for shot in 16:
+					var shot_delay := float(cycle * 16 + shot) * 0.08
+					_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
+					_spawn_projectile(owner, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
 
-func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "") -> void:
+func _chanter_skill2_cycle_count(score: int) -> int:
+	if score <= 30:
+		return 1
+	if score <= 50:
+		return 2
+	if score <= 75:
+		return 3
+	return 4
+
+func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "", fixed_direction: bool = false) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
 		return
 	var player: Dictionary = state["players"][owner]
@@ -416,7 +429,7 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 	# Chanter's large-skill projectiles are radial shots. They must retain the
 	# direction assigned above instead of using the delayed, target-seeking
 	# launch path for typist projectiles.
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": (50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1)), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction})
 	_next_projectile_id += 1
 
 func _update_projectiles(delta: float) -> void:
@@ -428,7 +441,12 @@ func _update_projectiles(delta: float) -> void:
 			continue
 		var owner := int(projectile["owner_id"])
 		var target := _other(owner)
-		if not bool(projectile["launched"]):
+		if bool(projectile.get("fixed_direction", false)) and not bool(projectile["launched"]):
+			var fixed_source := Vector2(state["players"][owner]["position"])
+			var fixed_direction := Vector2(projectile["velocity"]).normalized()
+			projectile["position"] = fixed_source + fixed_direction * (PLAYER_RADIUS + PROJECTILE_RADIUS)
+			projectile["launched"] = true
+		elif not bool(projectile["launched"]):
 			var source := Vector2(state["players"][owner]["position"])
 			var direction := (Vector2(state["players"][target]["position"]) - source).normalized()
 			projectile["position"] = source + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS)
@@ -634,9 +652,13 @@ func _make_trace_target(big: bool) -> PackedVector2Array:
 		for index in 49:
 			points.append(center + Vector2.from_angle(float(index) * TAU / 48.0) * 92.0)
 		return points
-	for index in 11:
-		var radius := 96.0 if index % 2 == 0 else 39.0
-		points.append(center + Vector2.from_angle(-PI / 2.0 + float(index) * TAU / 10.0) * radius)
+	const TURN_COUNT := 2.5
+	const POINT_COUNT := 121
+	for index in POINT_COUNT:
+		var progress := float(index) / float(POINT_COUNT - 1)
+		var angle := -PI / 2.0 + TAU * TURN_COUNT * progress
+		var radius := lerpf(10.0, 108.0, progress)
+		points.append(center + Vector2.from_angle(angle) * radius)
 	return points
 
 func _hammer_duration(score: int) -> float:

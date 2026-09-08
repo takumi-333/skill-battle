@@ -258,6 +258,7 @@ const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
 const BIG_TYPING_SKILL_COOLDOWN := 5.0
+const CHANTER_SKILL2_COOLDOWN := 6.0
 const TYPIST_SKILL3_COOLDOWN := 3.0
 const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
 const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
@@ -332,7 +333,7 @@ const SKILL_TYPIST_KEYCAP_II: Texture2D = preload("res://assets/ui/skill_icons/t
 const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_infinite_series.png")
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
-const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_stellar_barrage.png")
+const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_2.png")
 const SKILL_TYPIST_LOCK: Texture2D = preload("res://assets/ui/skill_icons/typist_lock.png")
 const SKILL_ARITHMETICIAN_LOCK: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_lock.png")
 const SKILL_CHANTER_LOCK: Texture2D = preload("res://assets/ui/skill_icons/chanter_lock.png")
@@ -343,6 +344,7 @@ const SKILL_THEME_CHANTER := Color("3F255D")
 const TYPIST_KEY_CAP_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/typist_key_cap.png")
 const CHANTER_AREA_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_area.png")
 const CHANTER_BEAM_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_beam.png")
+const CHANTER_BALL_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_ball.png")
 const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
 const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
 const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/chanter_background.png")
@@ -1121,10 +1123,13 @@ func make_trace_target(is_big: bool) -> PackedVector2Array:
 		return circle_points
 	var center := Vector2(340, 118)
 	var points := PackedVector2Array()
-	for index in range(11):
-		var angle := -PI / 2.0 + float(index) * TAU / 10.0
-		var radius := 96.0 if index % 2 == 0 else 39.0
-		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	const TURN_COUNT := 2.5
+	const POINT_COUNT := 121
+	for index in POINT_COUNT:
+		var progress := float(index) / float(POINT_COUNT - 1)
+		var angle := -PI / 2.0 + TAU * TURN_COUNT * progress
+		var radius := lerpf(10.0, 108.0, progress)
+		points.append(center + Vector2.from_angle(angle) * radius)
 	return points
 
 
@@ -1328,7 +1333,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	if is_skill3:
 		player["skill3_cooldown"] = TYPIST_SKILL3_COOLDOWN
 	elif is_big:
-		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
+		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 	else:
 		player["small_cooldown"] = TYPING_SKILL_COOLDOWN
 	if success:
@@ -1441,9 +1446,21 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 				var active_duration := 2.5 if index == 2 else 2.0
 				spawn_zone(owner_id, score, Vector2.ZERO, 1.5 * float(index), active_duration)
 		else:
-			for cycle in range(3):
+			for cycle in range(chanter_skill2_cycle_count(score)):
 				for shot in range(16):
-					spawn_projectile(owner_id, score, true, TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08)
+					var shot_delay := float(cycle * 16 + shot) * 0.08
+					spawn_projectile(owner_id, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
+					spawn_projectile(owner_id, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
+
+
+func chanter_skill2_cycle_count(score: int) -> int:
+	if score <= 30:
+		return 1
+	if score <= 50:
+		return 2
+	if score <= 75:
+		return 3
+	return 4
 
 
 func arithmetic_decoy_count(score: int) -> int:
@@ -1474,7 +1491,7 @@ func arithmetic_decoy_radius_range(score: int) -> Vector2:
 	return Vector2(20.0, 1000.0)
 
 
-func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: float, delay: float = 0.0, chip: String = "") -> void:
+func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: float, delay: float = 0.0, chip: String = "", fixed_direction: bool = false) -> void:
 	var owner: Dictionary = players[owner_id]
 	var owner_facing: Vector2 = owner["facing"]
 	var facing: Vector2 = owner_facing.rotated(angle_offset)
@@ -1483,7 +1500,7 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 		"owner_id": owner_id,
 		"position": get_player_hitbox_center(owner["position"]) + facing * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS),
 		"velocity": facing * (300.0 if is_big else 550.0),
-		"damage": (50 if is_big else 5) + (roundi(float(score) * 0.2) if is_big else floori(float(score) * 0.1)),
+		"damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if is_big else 5) + (roundi(float(score) * 0.2) if is_big else floori(float(score) * 0.1))),
 		"lifetime": 5.0 if is_big else 2.0,
 		"piercing": is_big,
 		"delay": delay,
@@ -1493,6 +1510,7 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 		"homing_time": TYPING_HOMING_DURATION if not is_big and score >= TYPING_HOMING_SCORE_THRESHOLD else 0.0,
 		"initial_angle": facing.angle(),
 		"key_cap": not is_big,
+		"fixed_direction": fixed_direction,
 	})
 	next_projectile_id += 1
 
@@ -1692,7 +1710,12 @@ func update_skill_projectiles(delta: float) -> void:
 		if float(projectile["delay"]) > 0.0:
 			skill_projectiles[index] = projectile
 			continue
-		if str(projectile.get("chip", "")) != "" and not bool(projectile.get("launched", false)):
+		if bool(projectile.get("fixed_direction", false)) and not bool(projectile.get("launched", false)):
+			var fixed_owner_id := int(projectile["owner_id"])
+			var fixed_direction := Vector2(projectile["velocity"]).normalized()
+			projectile["position"] = get_player_hitbox_center(players[fixed_owner_id]["position"]) + fixed_direction * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS)
+			projectile["launched"] = true
+		elif str(projectile.get("chip", "")) != "" and not bool(projectile.get("launched", false)):
 			var launch_owner_id := int(projectile["owner_id"])
 			var launch_target_id := 2 if launch_owner_id == 1 else 1
 			var launch_origin: Vector2 = players[launch_owner_id]["position"]
@@ -3212,7 +3235,7 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if visual_id == "arithmetician":
 		return ["無限級数", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "chanter":
-		return ["円環の降臨", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["星辰弾幕", "未実装", "未実装", "未実装", "未実装"]
+		return ["円環の降臨", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
 	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 
 
@@ -3994,6 +4017,8 @@ func update_challenge_ui(elapsed: float) -> void:
 		skill_name = "ぶんまわし（スキル3）"
 	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and not challenge_skill.begins_with("big"):
 		skill_name = "月柱（げっちゅう）・昇華"
+	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and challenge_skill.begins_with("big"):
+		skill_name = "望月（もちづき）"
 	challenge_title_label.text = skill_name
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = get_challenge_time_limit()
@@ -4053,7 +4078,7 @@ func update_hud() -> void:
 		var is_focused := bool(own_player["focused"])
 		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
 		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
-		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else BIG_TYPING_SKILL_COOLDOWN
+		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
 		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), TYPIST_SKILL3_COOLDOWN, is_focused)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
@@ -4555,9 +4580,16 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 	var direction := velocity.normalized()
 	if bool(projectile.get("key_cap", false)):
 		return
-	draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 5.0, Color("ffca7055"))
-	draw_line(position_value - direction * 14.0, position_value + direction * 8.0, Color("fff0b5"), 5.0)
-	draw_circle(position_value + direction * 9.0, 5.0, Color("ffbd5f"))
+	if bool(projectile.get("fixed_direction", false)):
+		var source_size := Vector2(CHANTER_BALL_TEXTURE.get_size())
+		var draw_size := source_size * (38.0 / maxf(source_size.x, source_size.y))
+		draw_set_transform(position_value + get_world_draw_offset(), direction.angle(), Vector2.ONE)
+		draw_texture_rect(CHANTER_BALL_TEXTURE, Rect2(-draw_size * 0.5, draw_size), false)
+		draw_set_transform(get_world_draw_offset())
+	else:
+		draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 5.0, Color("ffca7055"))
+		draw_line(position_value - direction * 14.0, position_value + direction * 8.0, Color("fff0b5"), 5.0)
+		draw_circle(position_value + direction * 9.0, 5.0, Color("ffbd5f"))
 	if str(projectile.get("chip", "")) != "":
 		draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-5.0, 5.0), str(projectile["chip"]), HORIZONTAL_ALIGNMENT_CENTER, 10.0, 10, Color("17213d"))
 

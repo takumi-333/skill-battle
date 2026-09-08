@@ -5,6 +5,7 @@ func _init() -> void:
 	_test_typist_skills()
 	_test_arithmetician_skills()
 	_test_chanter_skills()
+	_test_chanter_skill2_specification()
 	_test_chanter_skill1_timeline()
 	_test_focus_interruption()
 	_test_simultaneous_challenges_and_individual_interruption()
@@ -99,12 +100,47 @@ func _test_chanter_skills() -> void:
 	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var big_target: PackedVector2Array = big_simulation.state["challenges"][1]["target"]
 	assert(big_simulation.handle_event(1, {"type": "challenge_trace", "payload": big_target}))
-	assert(big_simulation.state["skill_projectiles"].size() == 16)
-	# Shot 5 is perpendicular to the owner's default right-facing direction.
-	# Its direction must remain radial after its delayed launch time elapses.
+	assert(big_simulation.state["skill_projectiles"].size() == 128)
+	assert(is_equal_approx(float(big_simulation.state["players"][1]["big_cooldown"]), 6.0))
+	# The clockwise and counter-clockwise sequences start together at the top
+	# and bottom respectively.
 	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
-	var radial_projectile: Dictionary = big_simulation.state["skill_projectiles"][4]
-	assert(Vector2(radial_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+	var clockwise_projectile: Dictionary = big_simulation.state["skill_projectiles"][0]
+	var counterclockwise_projectile: Dictionary = big_simulation.state["skill_projectiles"][1]
+	assert(Vector2(clockwise_projectile["velocity"]).normalized().is_equal_approx(Vector2.UP))
+	assert(Vector2(counterclockwise_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+
+
+func _test_chanter_skill2_specification() -> void:
+	for score_and_cycles in [[30, 1], [50, 2], [75, 3], [76, 4]]:
+		var simulation := MatchSimulation.new()
+		simulation.configure_loadout(1, 2, "typist_trident")
+		simulation._spawn_skill(1, int(score_and_cycles[0]), {"tier": "big"})
+		assert(simulation.state["skill_projectiles"].size() == int(score_and_cycles[1]) * 32)
+		var first_projectile: Dictionary = simulation.state["skill_projectiles"][0]
+		var reverse_projectile: Dictionary = simulation.state["skill_projectiles"][1]
+		assert(Vector2(first_projectile["velocity"]).normalized().is_equal_approx(Vector2.UP))
+		assert(Vector2(reverse_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+		assert(is_equal_approx(float(first_projectile["delay"]), float(reverse_projectile["delay"])))
+		assert(int(first_projectile["damage"]) == 3 + floori(float(score_and_cycles[0]) * 0.05))
+
+	var moving_simulation := MatchSimulation.new()
+	moving_simulation.configure_loadout(1, 2, "typist_trident")
+	moving_simulation._spawn_skill(1, 30, {"tier": "big"})
+	var second_projectile: Dictionary = moving_simulation.state["skill_projectiles"][2]
+	var initial_velocity := Vector2(second_projectile["velocity"])
+	moving_simulation.step(0.08, {1: {"move": Vector2.DOWN}, 2: {"move": Vector2.ZERO}})
+	second_projectile = moving_simulation.state["skill_projectiles"][2]
+	var owner_position := Vector2(moving_simulation.state["players"][1]["position"])
+	var expected_launch_position := owner_position + initial_velocity.normalized() * (30.0 + 10.0)
+	assert(Vector2(second_projectile["velocity"]).is_equal_approx(initial_velocity))
+	assert(Vector2(second_projectile["position"]).is_equal_approx(expected_launch_position + initial_velocity * 0.08))
+	assert(bool(second_projectile["launched"]))
+
+	var trace_target := moving_simulation._make_trace_target(true)
+	assert(trace_target.size() == 121)
+	assert(is_equal_approx(trace_target[0].distance_to(Vector2(340, 118)), 10.0))
+	assert(is_equal_approx(trace_target[-1].distance_to(Vector2(340, 118)), 108.0))
 
 
 func _test_chanter_skill1_timeline() -> void:
