@@ -17,6 +17,7 @@ const READY_DURATION := 1.0
 var event_sequences := {1: -1, 2: -1}
 var ready := {1: false, 2: false}
 var rematch_ready := {1: false, 2: false}
+var result_lobby_slots := {1: false, 2: false}
 var phase := "lobby"
 var status := "対戦相手を待っています。"
 var countdown_remaining := 0.0
@@ -99,6 +100,8 @@ func request_result_action(peer_id: int, action: String) -> bool:
 	if phase != "result" or not peer_slots.has(peer_id) or action not in ["rematch", "lobby"]:
 		return false
 	if action == "rematch":
+		if bool(result_lobby_slots[1]) or bool(result_lobby_slots[2]):
+			return false
 		rematch_ready[peer_slots[peer_id]] = true
 		if not bool(rematch_ready[1]) or not bool(rematch_ready[2]):
 			status = "両者の再戦選択を待っています。"
@@ -108,11 +111,16 @@ func request_result_action(peer_id: int, action: String) -> bool:
 		rematch_ready = {1: false, 2: false}
 		_start_countdown()
 	else:
-		_reset_simulation_preserving_loadouts()
-		ready = {1: false, 2: false}
+		result_lobby_slots[peer_slots[peer_id]] = true
 		rematch_ready = {1: false, 2: false}
-		phase = "lobby"
-		status = "キャラクターを選択して準備完了してください。"
+		if bool(result_lobby_slots[1]) and bool(result_lobby_slots[2]):
+			_reset_simulation_preserving_loadouts()
+			ready = {1: false, 2: false}
+			result_lobby_slots = {1: false, 2: false}
+			phase = "lobby"
+			status = "キャラクターを選択して準備完了してください。"
+		else:
+			status = "相手がロビーに戻りました。"
 	return true
 
 
@@ -160,9 +168,13 @@ func step(delta: float) -> void:
 		status = "試合終了"
 
 func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
-	var value := MatchProtocol.snapshot(room_id, simulation.state, phase, status, recipient_slot, server_tick, input_sequences)
+	var recipient_phase := phase
+	if phase == "result" and recipient_slot in [1, 2] and bool(result_lobby_slots[recipient_slot]):
+		recipient_phase = "lobby"
+	var value := MatchProtocol.snapshot(room_id, simulation.state, recipient_phase, status, recipient_slot, server_tick, input_sequences)
 	value["ready"] = ready.duplicate()
 	value["rematch_ready"] = rematch_ready.duplicate()
+	value["result_lobby_slots"] = result_lobby_slots.duplicate()
 	value["connected_slots"] = peers.keys()
 	value["countdown_remaining"] = countdown_remaining
 	return value

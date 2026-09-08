@@ -254,6 +254,9 @@ const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
 const MATCH_READY_DURATION := 1.0
 const MATCH_FIGHT_DISPLAY_DURATION := 0.75
+const BATTLE_BGM_NORMAL_VOLUME_DB := -8.0
+const BATTLE_BGM_FOCUS_VOLUME_DB := -19.0
+const BATTLE_BGM_FADE_OUT_SECONDS := 0.8
 const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
@@ -308,6 +311,7 @@ const STATE_SYNC_INTERVAL := 0.05
 const TITLE_LOGO_ANIMATION_DURATION := 1.2
 const TITLE_PROMPT_BLINK_SPEED := 4.0
 const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
+const BATTLE_BGM_SOUND: AudioStream = preload("res://assets/audio/battle_bgm_rising_tension.mp3")
 const SKILL_PANEL_CLICK_SOUND: AudioStream = preload("res://assets/audio/skill_panel_click.wav")
 const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
 const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
@@ -559,9 +563,13 @@ var lobby_start_button: Button
 var lobby_debug_last_signature := ""
 var lobby_ready_mouse_down := false
 var result_rematch_ready := {1: false, 2: false}
+var result_lobby_slots := {1: false, 2: false}
 var result_summary_text := ""
 var match_start_fight_remaining := 0.0
 @onready var ui_click_player: AudioStreamPlayer = $UIAudioPlayer
+@onready var battle_bgm_player: AudioStreamPlayer = $BattleBGMPlayer
+var battle_bgm_focus_active := false
+var battle_bgm_volume_tween: Tween
 var menu_background: TextureRect
 var menu_background_root: Control
 @export var menu_layout: MenuLayoutData
@@ -722,6 +730,64 @@ func play_ui_click() -> void:
 	ui_click_player.play()
 
 
+func play_battle_bgm() -> void:
+	if battle_bgm_volume_tween and battle_bgm_volume_tween.is_valid():
+		battle_bgm_volume_tween.kill()
+	if battle_bgm_player.stream == null:
+		battle_bgm_player.stream = BATTLE_BGM_SOUND
+	var battle_stream := battle_bgm_player.stream as AudioStreamMP3
+	if battle_stream:
+		battle_stream.loop = true
+	battle_bgm_player.volume_db = BATTLE_BGM_NORMAL_VOLUME_DB
+	if not battle_bgm_player.playing:
+		battle_bgm_player.play()
+	set_battle_bgm_focus(is_battle_focus_active())
+
+
+func stop_battle_bgm(fade_out := false) -> void:
+	if battle_bgm_volume_tween and battle_bgm_volume_tween.is_valid():
+		battle_bgm_volume_tween.kill()
+	set_battle_bgm_focus(false)
+	if not battle_bgm_player.playing:
+		battle_bgm_player.volume_db = BATTLE_BGM_NORMAL_VOLUME_DB
+		return
+	if not fade_out:
+		battle_bgm_player.stop()
+		battle_bgm_player.volume_db = BATTLE_BGM_NORMAL_VOLUME_DB
+		return
+	battle_bgm_volume_tween = create_tween()
+	battle_bgm_volume_tween.tween_property(battle_bgm_player, "volume_db", -80.0, BATTLE_BGM_FADE_OUT_SECONDS)
+	battle_bgm_volume_tween.tween_callback(battle_bgm_player.stop)
+	battle_bgm_volume_tween.tween_callback(func(): battle_bgm_player.volume_db = BATTLE_BGM_NORMAL_VOLUME_DB)
+
+
+func update_battle_bgm_focus() -> void:
+	set_battle_bgm_focus(phase == "match" and is_battle_focus_active())
+
+
+func is_battle_focus_active() -> bool:
+	for player_value in players.values():
+		var player: Dictionary = player_value
+		if bool(player.get("focused", false)):
+			return true
+	return false
+
+
+func set_battle_bgm_focus(is_focused: bool) -> void:
+	if battle_bgm_focus_active == is_focused:
+		return
+	battle_bgm_focus_active = is_focused
+	var bus_index := AudioServer.get_bus_index(&"BattleBGM")
+	if bus_index >= 0:
+		AudioServer.set_bus_effect_enabled(bus_index, 0, is_focused)
+	if not battle_bgm_player.playing:
+		return
+	if battle_bgm_volume_tween and battle_bgm_volume_tween.is_valid():
+		battle_bgm_volume_tween.kill()
+	battle_bgm_volume_tween = create_tween()
+	battle_bgm_volume_tween.tween_property(battle_bgm_player, "volume_db", BATTLE_BGM_FOCUS_VOLUME_DB if is_focused else BATTLE_BGM_NORMAL_VOLUME_DB, 0.18)
+
+
 func play_typist_typing_key_sound() -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = TYPIST_TYPING_KEY_SOUND
@@ -810,6 +876,7 @@ func _process(delta: float) -> void:
 	screen_shake_time = maxf(0.0, screen_shake_time - delta)
 	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - delta)
 	update_match_start_prompt(delta)
+	update_battle_bgm_focus()
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
 		if screen == "title":
 			title_animation_elapsed += delta
@@ -1942,9 +2009,10 @@ func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 		finish_match(2 if target_id == 1 else 1)
 
 
-func finish_match(winner_id: int) -> void:
+func finish_match(winner_id: int, fade_out_bgm := false) -> void:
 	match_state.match_over = true
 	match_state.winner_id = winner_id
+	stop_battle_bgm(fade_out_bgm)
 	set_challenge_overlay_visible(false)
 	status_text = "%sの勝利！ Rキーで再戦できます。" % players[winner_id]["name"]
 	show_result(winner_id)
@@ -1957,9 +2025,10 @@ func finish_match_by_time() -> void:
 		match_state.match_over = true
 		match_state.winner_id = 0
 		status_text = "時間切れ、引き分け！ Rキーで再戦できます。"
+		stop_battle_bgm(true)
 		show_result(0)
 	else:
-		finish_match(1 if first_hp > second_hp else 2)
+		finish_match(1 if first_hp > second_hp else 2, true)
 
 
 func reset_match() -> void:
@@ -2026,10 +2095,13 @@ func refresh_result_action_ui() -> void:
 	var remote_slot := 2 if local_slot == 1 else 1
 	var local_requested := bool(result_rematch_ready.get(local_slot, false))
 	var remote_requested := bool(result_rematch_ready.get(remote_slot, false))
-	result_rematch_button.disabled = local_requested
-	result_rematch_button.text = "再戦を待機中" if local_requested else "再戦"
+	var remote_returned := bool(result_lobby_slots.get(remote_slot, false))
+	result_rematch_button.disabled = local_requested or remote_returned
+	result_rematch_button.text = "再戦不可" if remote_returned else ("再戦を待機中" if local_requested else "再戦")
 	var decision_text := "両者が再戦を選ぶと再戦を開始します。"
-	if local_requested and not remote_requested:
+	if remote_returned:
+		decision_text = "相手がロビーに戻りました。ロビーへ戻るを選択してください。"
+	elif local_requested and not remote_requested:
 		decision_text = "相手の再戦選択を待っています。"
 	elif remote_requested and not local_requested:
 		decision_text = "相手が再戦を希望しています。"
@@ -2609,8 +2681,14 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	countdown_remaining = float(snapshot.get("countdown_remaining", 0.0))
 	if previous_phase == "countdown" and phase == "match":
 		match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
+		play_battle_bgm()
+	elif previous_phase == "match" and phase == "result":
+		stop_battle_bgm(match_state.time_remaining <= 0.0)
+	elif phase == "match" and not battle_bgm_player.playing:
+		play_battle_bgm()
 	status_text = str(snapshot.get("status_text", ""))
 	result_rematch_ready = snapshot.get("rematch_ready", {1: false, 2: false}).duplicate()
+	result_lobby_slots = snapshot.get("result_lobby_slots", {1: false, 2: false}).duplicate()
 	dedicated_input_acknowledgements = snapshot.get("input_acknowledgements", {}).duplicate()
 	var ready: Dictionary = snapshot.get("ready", {})
 	p1_ready = bool(ready.get(1, false))
@@ -3030,6 +3108,7 @@ func update_title_prompt_blink() -> void:
 
 
 func show_home() -> void:
+	stop_battle_bgm()
 	apply_screen_state("home")
 
 
@@ -3510,9 +3589,12 @@ func sync_network_state(delta: float) -> void:
 	rpc("receive_network_state", make_network_state())
 
 
-func make_network_state() -> Dictionary:
+func make_network_state(recipient_slot := 0) -> Dictionary:
+	var recipient_phase := phase
+	if phase == "result" and recipient_slot in [1, 2] and bool(result_lobby_slots.get(recipient_slot, false)):
+		recipient_phase = "lobby"
 	return {
-		"phase": phase,
+		"phase": recipient_phase,
 		"players": players,
 		"time_remaining": match_state.time_remaining,
 		"match_over": match_state.match_over,
@@ -3524,6 +3606,7 @@ func make_network_state() -> Dictionary:
 		"countdown_remaining": countdown_remaining,
 		"status_text": status_text,
 		"rematch_ready": result_rematch_ready,
+		"result_lobby_slots": result_lobby_slots,
 		"skill_projectiles": skill_projectiles,
 		"magic_zones": magic_zones,
 		"shockwaves": shockwaves,
@@ -3559,7 +3642,15 @@ func receive_network_state(state: Dictionary) -> void:
 	match_state.time_remaining = float(state["time_remaining"])
 	match_state.match_over = bool(state["match_over"])
 	match_state.winner_id = int(state["winner_id"])
+	var previous_phase := phase
 	phase = str(state["phase"])
+	if previous_phase == "countdown" and phase == "match":
+		match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
+		play_battle_bgm()
+	elif previous_phase == "match" and phase == "result":
+		stop_battle_bgm(match_state.time_remaining <= 0.0)
+	elif phase == "match" and not battle_bgm_player.playing:
+		play_battle_bgm()
 	lobby_debug_log("network_state received; phase=%s p1_ready=%s p2_ready=%s screen=%s mode=%s" % [phase, str(state["p1_ready"]), str(state["p2_ready"]), screen, network_mode])
 	p1_selection = int(state["p1_selection"])
 	p2_selection = int(state["p2_selection"])
@@ -3568,6 +3659,7 @@ func receive_network_state(state: Dictionary) -> void:
 	countdown_remaining = float(state["countdown_remaining"])
 	status_text = str(state["status_text"])
 	result_rematch_ready = state.get("rematch_ready", {1: false, 2: false}).duplicate()
+	result_lobby_slots = state.get("result_lobby_slots", {1: false, 2: false}).duplicate()
 	skill_projectiles = MatchProtocol.dictionary_array(state.get("skill_projectiles", []))
 	magic_zones = MatchProtocol.dictionary_array(state.get("magic_zones", []))
 	shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
@@ -3640,7 +3732,7 @@ func request_lobby_state() -> void:
 		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	if sender_id > 0:
-		rpc_id(sender_id, "receive_network_state", make_network_state())
+		rpc_id(sender_id, "receive_network_state", make_network_state(2))
 
 
 @rpc("any_peer", "reliable")
@@ -3710,8 +3802,19 @@ func _handle_legacy_result_action(player_id: int, action: String) -> void:
 		return
 	if action == "lobby":
 		result_rematch_ready = {1: false, 2: false}
-		show_lobby()
+		result_lobby_slots[player_id] = true
+		if bool(result_lobby_slots[1]) and bool(result_lobby_slots[2]):
+			show_lobby()
+		else:
+			status_text = "相手がロビーに戻りました。"
+			if player_id == 1:
+				apply_screen_state("online_waiting")
+				refresh_lobby_label()
+			else:
+				refresh_result_action_ui()
 	else:
+		if bool(result_lobby_slots[1]) or bool(result_lobby_slots[2]):
+			return
 		result_rematch_ready[player_id] = true
 		if bool(result_rematch_ready[1]) and bool(result_rematch_ready[2]):
 			rematch_from_result()
@@ -3719,12 +3822,21 @@ func _handle_legacy_result_action(player_id: int, action: String) -> void:
 			status_text = "両者の再戦選択を待っています。"
 			refresh_result_action_ui()
 	if network_mode == "host":
-		rpc("receive_network_state", make_network_state())
+		broadcast_legacy_network_state()
+
+
+func broadcast_legacy_network_state() -> void:
+	if network_mode != "host":
+		return
+	for peer_id in multiplayer.get_peers():
+		rpc_id(peer_id, "receive_network_state", make_network_state(2))
 
 
 func show_lobby() -> void:
 	phase = "lobby"
 	result_rematch_ready = {1: false, 2: false}
+	result_lobby_slots = {1: false, 2: false}
+	stop_battle_bgm()
 	match_state.reset()
 	players = match_state.players
 	p1_ready = false
@@ -3869,6 +3981,7 @@ func begin_match() -> void:
 	match_state.match_over = false
 	match_state.time_remaining = MATCH_DURATION
 	match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
+	play_battle_bgm()
 	if match_start_prompt != null and match_start_prompt_label != null:
 		match_start_prompt_label.text = "FIGHT"
 		match_start_prompt.visible = true

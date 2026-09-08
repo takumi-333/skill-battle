@@ -377,6 +377,16 @@ func _test_session_result_actions() -> void:
 	session.phase = "result"
 	session.simulation.state["match_over"] = true
 	assert(session.request_result_action(12, "lobby"))
+	assert(session.phase == "result")
+	var returned_snapshot := session.make_snapshot(2)
+	var remaining_snapshot := session.make_snapshot(1)
+	assert(str(returned_snapshot["phase"]) == "lobby")
+	assert(str(remaining_snapshot["phase"]) == "result")
+	assert(bool(remaining_snapshot["result_lobby_slots"][2]))
+	assert(not bool(remaining_snapshot["rematch_ready"][1]))
+	assert(not bool(remaining_snapshot["rematch_ready"][2]))
+	assert(not session.request_result_action(11, "rematch"))
+	assert(session.request_result_action(11, "lobby"))
 	assert(session.phase == "lobby")
 	assert(not bool(session.make_snapshot()["ready"][1]))
 	assert(not bool(session.make_snapshot()["ready"][2]))

@@ -8,6 +8,7 @@
 [ext_resource type="Script" uid="uid://daqjnsqvf4ct1" path="res://scripts/ui_trace_canvas.gd" id="7_trace"]
 [ext_resource type="PackedScene" uid="uid://bqr00m77mt8tx" path="res://scenes/ui/lobby_screen.tscn" id="14_tel4y"]
 [ext_resource type="AudioStream" uid="uid://mrar0ioa71qq" path="res://assets/audio/ui_click.wav" id="17_2wyq8"]
+[ext_resource type="AudioStream" path="res://assets/audio/battle_bgm_rising_tension.mp3" id="18_battle_bgm"]
 [ext_resource type="Script" uid="uid://bjv8x8x33o3qk" path="res://scripts/ui_screen_manager.gd" id="18_screen_manager"]
 [ext_resource type="PackedScene" path="res://scenes/ui/result_screen.tscn" id="19_qkpxi"]
 [ext_resource type="PackedScene" uid="uid://8204ub3hvh2f" path="res://scenes/ui/connection_screen.tscn" id="20_5q0nq"]
@@ -184,3 +185,7 @@ script = ExtResource("18_screen_manager")
 [node name="UIAudioPlayer" type="AudioStreamPlayer" parent="." unique_id=304207171]
 stream = ExtResource("17_2wyq8")
 volume_db = -7.0
+
+[node name="BattleBGMPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("18_battle_bgm")
+bus = &"BattleBGM"
