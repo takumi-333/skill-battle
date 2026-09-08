@@ -299,6 +299,8 @@ const CHANTER_ZONE_WARNING_DURATION := 0.5
 const CHANTER_ZONE_GROWTH_FRAME_DURATION := 1.0 / 60.0
 const CHANTER_ZONE_DAMAGE_INTERVAL := 0.5
 const CHANTER_ZONE_RADIUS := 80.0
+const CHANTER_BEAM_VISIBLE_WIDTH_RATIO := 200.0 / 724.0
+const CHANTER_BEAM_FADE_DURATION := 0.28
 const CHANTER_TRACE_FAILURE_FEEDBACK_DURATION := 0.22
 const NETWORK_PORT := 7000
 const STATE_SYNC_INTERVAL := 0.05
@@ -4192,6 +4194,10 @@ func _draw() -> void:
 	draw_arena()
 	# 条件式の配列リテラルは未型付きArrayになるため、ここでは推論型で受ける。
 	var draw_player_ids := [1] if network_mode == "practice" else [1, 2]
+	# 魔方陣は足元の地面効果なのでキャラクターの背面へ描画する。
+	for zone in magic_zones:
+		if bool(zone.get("spawned", false)):
+			draw_chanter_zone_area(zone)
 	for spin in hammer_spins:
 		draw_hammer_spin(spin)
 	for player_id in draw_player_ids:
@@ -4209,48 +4215,84 @@ func _draw() -> void:
 		var decoy_owner_id := int(decoy["owner_id"])
 		var decoy_alpha := ARITHMETICIAN_DECOY_THIN_ALPHA if decoy_owner_id == local_player_id else ARITHMETICIAN_DECOY_NORMAL_ALPHA
 		draw_decoy(decoy, decoy_alpha)
+	# 光柱はキャラクター前面に描画し、柱内の人物だけを黒いシルエットで
+	# 描き直して、光の中に立っていることが分かるようにする。
 	for zone in magic_zones:
-		if not bool(zone.get("spawned", false)):
-			continue
-		draw_chanter_zone(zone)
+		if bool(zone.get("spawned", false)):
+			draw_chanter_zone_beam(zone)
+	for player_id in draw_player_ids:
+		if is_player_in_chanter_beam(players[player_id]):
+			draw_player_silhouette(players[player_id])
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_arithmetic_flash()
 
 
-func draw_chanter_zone(zone: Dictionary) -> void:
+func draw_chanter_zone_area(zone: Dictionary) -> void:
+	var elapsed := float(zone.get("elapsed", 0.0))
+	var warning_duration := float(zone.get("warning_duration", CHANTER_ZONE_WARNING_DURATION))
+	var area_brightness := clampf(elapsed / warning_duration, 0.0, 1.0)
+	var area_color := Color(0.35, 0.28, 0.55, 0.48).lerp(Color.WHITE, area_brightness)
+	var beam_shape := get_chanter_beam_shape(zone)
+	if not beam_shape.is_empty():
+		area_color.a *= float(beam_shape["fade"])
+	var position_value := Vector2(zone["position"])
+	var area_size := Vector2.ONE * CHANTER_ZONE_RADIUS * 2.0
+	draw_texture_rect(CHANTER_AREA_TEXTURE, Rect2(position_value - area_size * 0.5, area_size), false, area_color)
+
+
+func get_chanter_beam_shape(zone: Dictionary) -> Dictionary:
 	var elapsed := float(zone.get("elapsed", 0.0))
 	var active_duration := float(zone.get("active_duration", 1.0))
 	var warning_duration := float(zone.get("warning_duration", CHANTER_ZONE_WARNING_DURATION))
 	var growth_frame_duration := float(zone.get("growth_frame_duration", CHANTER_ZONE_GROWTH_FRAME_DURATION))
 	var beam_elapsed := elapsed - warning_duration
-	var beam_fade := 1.0
-	if beam_elapsed >= growth_frame_duration * 4.0:
-		var fade_duration := maxf(0.001, active_duration - warning_duration - growth_frame_duration * 4.0)
-		beam_fade = 1.0 - clampf((beam_elapsed - growth_frame_duration * 4.0) / fade_duration, 0.0, 1.0)
-	var area_brightness := clampf(elapsed / warning_duration, 0.0, 1.0)
-	var area_color := Color(0.35, 0.28, 0.55, 0.48).lerp(Color.WHITE, area_brightness)
-	if beam_elapsed >= 0.0:
-		area_color.a *= beam_fade
-	var position_value := Vector2(zone["position"])
-	var area_size := Vector2.ONE * CHANTER_ZONE_RADIUS * 2.0
-	draw_texture_rect(CHANTER_AREA_TEXTURE, Rect2(position_value - area_size * 0.5, area_size), false, area_color)
 	if beam_elapsed < 0.0:
-		return
-	var beam_width_scale := 1.0
-	var beam_height_scale := 1.0
+		return {}
+	var width_scale := 1.0
+	var height_scale := 1.0
 	if beam_elapsed < growth_frame_duration * 2.0:
-		beam_width_scale = 1.0 / 3.0
-		beam_height_scale = 1.0 / 3.0
+		width_scale = 1.0 / 3.0
+		height_scale = 1.0 / 3.0
 	elif beam_elapsed < growth_frame_duration * 4.0:
-		beam_width_scale = 2.0 / 3.0
-		beam_height_scale = 2.0 / 3.0
-	else:
-		# 画面上端へ届いた後は高さを維持し、太さだけを細くして消す。
-		beam_width_scale = beam_fade
-	var beam_height := maxf(1.0, (position_value.y - ARENA.position.y) * beam_height_scale)
-	var beam_width := CHANTER_ZONE_RADIUS * 2.0 * beam_width_scale
-	var beam_rect := Rect2(position_value.x - beam_width * 0.5, position_value.y - beam_height, beam_width, beam_height)
-	draw_texture_rect(CHANTER_BEAM_TEXTURE, beam_rect, false, Color(1.0, 1.0, 1.0, beam_fade))
+		width_scale = 2.0 / 3.0
+		height_scale = 2.0 / 3.0
+	var fade_start := maxf(warning_duration + growth_frame_duration * 4.0, active_duration - CHANTER_BEAM_FADE_DURATION)
+	var fade := 1.0
+	if elapsed >= fade_start:
+		fade = 1.0 - clampf((elapsed - fade_start) / CHANTER_BEAM_FADE_DURATION, 0.0, 1.0)
+		width_scale *= fade
+	var position_value := Vector2(zone["position"])
+	return {"fade": fade, "width": CHANTER_ZONE_RADIUS * 2.0 * width_scale, "height": maxf(1.0, (position_value.y - ARENA.position.y) * height_scale)}
+
+
+func draw_chanter_zone_beam(zone: Dictionary) -> void:
+	var beam_shape := get_chanter_beam_shape(zone)
+	if beam_shape.is_empty():
+		return
+	var position_value := Vector2(zone["position"])
+	var visible_width := float(beam_shape["width"])
+	var beam_height := float(beam_shape["height"])
+	# 素材の両側には透明余白がある。描画矩形を補正して、見える光柱の
+	# 最大太さが魔方陣の直径と等しくなるようにする。
+	var texture_width := visible_width / CHANTER_BEAM_VISIBLE_WIDTH_RATIO
+	var beam_rect := Rect2(position_value.x - texture_width * 0.5, position_value.y - beam_height, texture_width, beam_height)
+	draw_texture_rect(CHANTER_BEAM_TEXTURE, beam_rect, false, Color(1.0, 1.0, 1.0, float(beam_shape["fade"])))
+
+
+func is_player_in_chanter_beam(player: Dictionary) -> bool:
+	var position_value := Vector2(player["position"])
+	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
+	for zone in magic_zones:
+		if not bool(zone.get("spawned", false)):
+			continue
+		var beam_shape := get_chanter_beam_shape(zone)
+		if beam_shape.is_empty() or float(beam_shape["fade"]) <= 0.0:
+			continue
+		var zone_position := Vector2(zone["position"])
+		var beam_rect := Rect2(zone_position.x - float(beam_shape["width"]) * 0.5, zone_position.y - float(beam_shape["height"]), float(beam_shape["width"]), float(beam_shape["height"]))
+		if beam_rect.intersects(sprite_rect):
+			return true
+	return false
 
 
 func get_world_draw_offset() -> Vector2:
@@ -4486,6 +4528,18 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		var gauge_rect := Rect2(position_value + Vector2(-30, -43), Vector2(60, 5))
 		draw_rect(gauge_rect, Color("070b14"), true)
 		draw_rect(Rect2(gauge_rect.position, Vector2(gauge_rect.size.x * gauge_ratio, gauge_rect.size.y)), Color("ffc45e"), true)
+
+
+func draw_player_silhouette(player: Dictionary) -> void:
+	var position_value: Vector2 = player["position"]
+	var facing: Vector2 = player["attack_facing"] if float(player["attack_time"]) > 0.0 else player["facing"]
+	var is_moving: bool = bool(player.get("is_moving", false))
+	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
+	var sprite_column: int = get_sprite_direction_column(facing)
+	var sprite_row: int = 0 if not is_moving else 1 + (int(floor(character_animation_elapsed * 8.0)) % 4)
+	var source_rect := Rect2(sprite_column * 64.0, sprite_row * 64.0, 64.0, 64.0)
+	var sprite_rect := Rect2(position_value + Vector2(-32.0, -44.0), Vector2(64.0, 64.0))
+	draw_texture_rect_region(character_texture, sprite_rect, source_rect, Color("06040a"))
 
 
 func draw_skill_projectile(projectile: Dictionary) -> void:
