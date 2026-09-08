@@ -13,14 +13,16 @@ const FOCUS_SPEED_MULTIPLIER := 0.5
 const NORMAL_COOLDOWN := 0.5
 const NORMAL_DURATION := 0.28
 const TYPING_COOLDOWN := 2.0
+const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
+const CHANTER_SKILL3_COOLDOWN := 8.0
 const SKILL3_COOLDOWN := 3.0
 const TYPING_INTERRUPT_GAUGE := 30.0
 const BIG_INTERRUPT_GAUGE := 50.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
-const MAX_PROJECTILES := 192
+const MAX_PROJECTILES := 320
 const TRACE_MIN_ELAPSED := 0.35
 const TRACE_MIN_POINTS := 8
 const TRACE_MIN_LENGTH := 80.0
@@ -68,7 +70,7 @@ func reset() -> void:
 	configure_loadout(1, 0, "typist_trident")
 	configure_loadout(2, 1, "typist_trident")
 
-func configure_loadout(slot: int, character: int, big_skill: String, display_name: String = "") -> void:
+func configure_loadout(slot: int, character: int, big_skill: String, display_name: String = "", small_skill_index: int = 0, skill3_index: int = 0) -> void:
 	if not state["players"].has(slot):
 		return
 	var player: Dictionary = state["players"][slot]
@@ -83,9 +85,9 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["has_display_name"] = not sanitized_display_name.is_empty()
 	player["color"] = colors[character]
 	player["normal_damage"] = [12, 10, 11][character]
-	player["small_skill_id"] = "%s_small_0" % ids[character]
+	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
-	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ""
+	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else "")
 	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -99,7 +101,7 @@ func handle_event(slot: int, event: Dictionary) -> bool:
 	match event_type:
 		"loadout":
 			var setup: Dictionary = payload
-			configure_loadout(slot, int(setup["character"]), str(setup["big_skill"]), str(setup.get("display_name", "")))
+			configure_loadout(slot, int(setup["character"]), str(setup["big_skill"]), str(setup.get("display_name", "")), int(setup.get("small_skill", 0)), int(setup.get("skill3", 0)))
 			return true
 		"attack":
 			return _try_normal_attack(slot)
@@ -190,7 +192,7 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	if bool(player["focused"]):
 		return false
 	var character_id := str(player["character_id"])
-	if tier == "skill3" and character_id != "blade":
+	if tier == "skill3" and character_id != "blade" and not (character_id == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0"):
 		return false
 	var cooldown_key := "skill3_cooldown" if tier == "skill3" else ("big_cooldown" if tier == "big" else "small_cooldown")
 	if float(player.get(cooldown_key, 0.0)) > 0.0:
@@ -199,7 +201,7 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	var challenge := _make_challenge(slot, tier)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge_max"] = BIG_INTERRUPT_GAUGE if tier == "big" else TYPING_INTERRUPT_GAUGE
+	player["interrupt_gauge_max"] = BIG_INTERRUPT_GAUGE if tier == "big" or tier == "skill3" else TYPING_INTERRUPT_GAUGE
 	player["interrupt_gauge"] = player["interrupt_gauge_max"]
 	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	state["players"][slot] = player
@@ -239,7 +241,7 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 	else:
 		challenge_type = "tracing"
 		limit = 0.0
-		skill = "big_trace" if tier == "big" else "small_trace"
+		skill = "skill3_trace" if tier == "skill3" else ("big_trace" if tier == "big" else "small_trace")
 	var prompt := ""
 	var answer := ""
 	var target := PackedVector2Array()
@@ -251,8 +253,8 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 		answer = str(_evaluate_arithmetic(prompt))
 		prompt += " = ?"
 	else:
-		prompt = "星形をなぞってください" if tier == "big" else "円をなぞってください"
-		target = _make_trace_target(tier == "big")
+		prompt = "星形をなぞってください" if tier == "big" else ("渦巻きをなぞってください" if tier == "skill3" or str(player.get("small_skill_id", "")) == "chanter_small_1" else "円をなぞってください")
+		target = _make_trace_target(tier, str(player.get("small_skill_id", "")))
 	return {"id": _challenge_nonce, "owner": slot, "tier": tier, "skill": skill, "type": challenge_type, "prompt": prompt, "answer": answer, "elapsed": 0.0, "limit": limit, "typed": "", "target": target, "trace": PackedVector2Array(), "miss_sequence": 0}
 
 func _receive_challenge_character(slot: int, character: String) -> bool:
@@ -350,11 +352,11 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
 	if tier == "skill3":
-		player["skill3_cooldown"] = SKILL3_COOLDOWN
+		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN
 	elif tier == "big":
 		player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
 	else:
-		player["small_cooldown"] = TYPING_COOLDOWN
+		player["small_cooldown"] = CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN
 	if success:
 		player["skill_successes"] = int(player.get("skill_successes", 0)) + 1
 		player["score_total"] = int(player.get("score_total", 0)) + score
@@ -402,7 +404,11 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			player["invisible_time"] = player["buff_time"]
 			state["players"][owner] = player
 	else:
-		if tier == "small":
+		if tier == "skill3":
+			_spawn_chanter_skill3_volley(owner, score)
+		elif tier == "small" and str(player.get("small_skill_id", "")) == "chanter_small_1":
+			_spawn_chanter_clockwise_volley(owner, score)
+		elif tier == "small":
 			for index in 3:
 				_spawn_zone(owner, score, float(index) * 1.5, 2.0 if index < 2 else 2.5)
 		else:
@@ -420,6 +426,21 @@ func _chanter_skill2_cycle_count(score: int) -> int:
 	if score <= 75:
 		return 3
 	return 4
+
+func _spawn_chanter_clockwise_volley(owner: int, score: int) -> void:
+	for cycle in _chanter_skill2_cycle_count(score):
+		for shot in 16:
+			_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08, "", true)
+
+func _spawn_chanter_skill3_volley(owner: int, score: int) -> void:
+	for cycle in _chanter_skill2_cycle_count(score):
+		for shot in 16:
+			var shot_delay := float(cycle * 16 + shot) * 0.08
+			var angle := TAU * float(shot) / 16.0
+			_spawn_projectile(owner, score, true, -PI / 2.0 + angle, shot_delay, "", true)
+			_spawn_projectile(owner, score, true, PI / 2.0 + angle, shot_delay, "", true)
+			_spawn_projectile(owner, score, true, -angle, shot_delay, "", true)
+			_spawn_projectile(owner, score, true, PI - angle, shot_delay, "", true)
 
 func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "", fixed_direction: bool = false) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
@@ -645,18 +666,18 @@ func _evaluate_arithmetic(expression: String) -> int:
 		total += product
 	return total
 
-func _make_trace_target(big: bool) -> PackedVector2Array:
+func _make_trace_target(tier: String, small_skill_id: String = "") -> PackedVector2Array:
 	var center := Vector2(340, 118)
 	var points := PackedVector2Array()
-	if not big:
+	if tier == "small" and small_skill_id != "chanter_small_1":
 		for index in 49:
 			points.append(center + Vector2.from_angle(float(index) * TAU / 48.0) * 92.0)
 		return points
-	const TURN_COUNT := 2.5
+	var turn_count := 3.5 if tier == "skill3" else (1.5 if tier == "small" else 2.5)
 	const POINT_COUNT := 121
 	for index in POINT_COUNT:
 		var progress := float(index) / float(POINT_COUNT - 1)
-		var angle := -PI / 2.0 + TAU * TURN_COUNT * progress
+		var angle := -PI / 2.0 + TAU * turn_count * progress
 		var radius := lerpf(10.0, 108.0, progress)
 		points.append(center + Vector2.from_angle(angle) * radius)
 	return points

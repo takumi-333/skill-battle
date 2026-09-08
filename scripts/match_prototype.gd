@@ -257,8 +257,10 @@ const MATCH_FIGHT_DISPLAY_DURATION := 0.75
 const FOCUS_SPEED_MULTIPLIER := 0.5
 const TYPING_CHALLENGE_LIMIT := 6.0
 const TYPING_SKILL_COOLDOWN := 2.0
+const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_TYPING_SKILL_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
+const CHANTER_SKILL3_COOLDOWN := 8.0
 const TYPIST_SKILL3_COOLDOWN := 3.0
 const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
 const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
@@ -334,6 +336,8 @@ const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
 const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_2.png")
+const SKILL_CHANTER_EVENING_MOON: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_1.png")
+const SKILL_CHANTER_IZAYOI: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_3.png")
 const SKILL_TYPIST_LOCK: Texture2D = preload("res://assets/ui/skill_icons/typist_lock.png")
 const SKILL_ARITHMETICIAN_LOCK: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_lock.png")
 const SKILL_CHANTER_LOCK: Texture2D = preload("res://assets/ui/skill_icons/chanter_lock.png")
@@ -998,6 +1002,29 @@ func start_skill3(owner_id: int) -> void:
 	var player: Dictionary = players[owner_id]
 	if bool(player["focused"]) or float(player.get("skill3_cooldown", 0.0)) > 0.0:
 		return
+	if str(player.get("character_id", "")) == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0":
+		challenge_owner = owner_id
+		challenge_skill = "skill3_trace"
+		challenge_definition = ChallengeDefinition.new()
+		challenge_definition.challenge_type = "tracing"
+		challenge_definition.no_time_limit = true
+		challenge_prompt = "渦巻きをなぞってください"
+		challenge_answer = ""
+		challenge_trace_points.clear()
+		challenge_target_points = make_trace_target(false, 3.5)
+		player["focused"] = true
+		player["challenge_elapsed"] = 0.0
+		player["interrupt_gauge_max"] = 50.0
+		player["interrupt_gauge"] = 50.0
+		player["interrupt_gauge_display"] = 50.0
+		players[owner_id] = player
+		set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
+		typing_input.visible = false
+		challenge_trace_canvas.visible = true
+		apply_challenge_layout("chanter")
+		update_challenge_ui(0.0)
+		update_trace_canvas()
+		return
 	if str(player.get("character_id", "")) != "blade":
 		return
 	var definition: ChallengeDefinition = challenge_definitions["blade_skill3"]
@@ -1064,10 +1091,10 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 		challenge_definition = ChallengeDefinition.new()
 		challenge_definition.challenge_type = "tracing"
 		challenge_definition.no_time_limit = true
-		challenge_prompt = "星形をなぞってください" if is_big else "右向きの線をなぞってください"
+		challenge_prompt = "星形をなぞってください" if is_big else ("渦巻きをなぞってください" if str(player.get("small_skill_id", "")) == "chanter_small_1" else "右向きの線をなぞってください")
 		challenge_answer = ""
 		challenge_skill = "big_trace" if is_big else "small_trace"
-		challenge_target_points = make_trace_target(is_big)
+		challenge_target_points = make_trace_target(is_big, 1.5 if not is_big and str(player.get("small_skill_id", "")) == "chanter_small_1" else 0.0)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
 	player["interrupt_gauge_max"] = 50.0 if is_big else TYPING_INTERRUPT_GAUGE
@@ -1113,8 +1140,8 @@ func apply_challenge_layout(character_id: String) -> void:
 	challenge_panel.position = challenge_base_position
 
 
-func make_trace_target(is_big: bool) -> PackedVector2Array:
-	if not is_big:
+func make_trace_target(is_big: bool, spiral_turns: float = 0.0) -> PackedVector2Array:
+	if not is_big and spiral_turns <= 0.0:
 		var circle_center := Vector2(340, 118)
 		var circle_points := PackedVector2Array()
 		for index in range(49):
@@ -1123,11 +1150,11 @@ func make_trace_target(is_big: bool) -> PackedVector2Array:
 		return circle_points
 	var center := Vector2(340, 118)
 	var points := PackedVector2Array()
-	const TURN_COUNT := 2.5
+	var turn_count := spiral_turns if spiral_turns > 0.0 else 2.5
 	const POINT_COUNT := 121
 	for index in POINT_COUNT:
 		var progress := float(index) / float(POINT_COUNT - 1)
-		var angle := -PI / 2.0 + TAU * TURN_COUNT * progress
+		var angle := -PI / 2.0 + TAU * turn_count * progress
 		var radius := lerpf(10.0, 108.0, progress)
 		points.append(center + Vector2.from_angle(angle) * radius)
 	return points
@@ -1323,7 +1350,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	var owner_id: int = challenge_owner
 	var player: Dictionary = players[owner_id]
 	var is_big: bool = challenge_skill.begins_with("big")
-	var is_skill3: bool = challenge_skill == "skill3_typing"
+	var is_skill3: bool = challenge_skill == "skill3_typing" or challenge_skill == "skill3_trace"
 	var challenge_time: float = float(player["challenge_elapsed"])
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
@@ -1331,11 +1358,11 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	player["interrupt_gauge"] = 0.0
 	player["interrupt_gauge_max"] = 0.0
 	if is_skill3:
-		player["skill3_cooldown"] = TYPIST_SKILL3_COOLDOWN
+		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN
 	elif is_big:
 		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 	else:
-		player["small_cooldown"] = TYPING_SKILL_COOLDOWN
+		player["small_cooldown"] = CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN
 	if success:
 		player["skill_successes"] = int(player["skill_successes"]) + 1
 		player["score_total"] = int(player["score_total"]) + score
@@ -1441,7 +1468,11 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			players[owner_id] = owner
 			status_text = "%sが最適解へ収束した！" % owner["name"]
 	else:
-		if not is_big:
+		if challenge_skill == "skill3_trace":
+			spawn_chanter_skill3_volley(owner_id, score)
+		elif not is_big and str(owner.get("small_skill_id", "")) == "chanter_small_1":
+			spawn_chanter_clockwise_volley(owner_id, score)
+		elif not is_big:
 			for index in range(3):
 				var active_duration := 2.5 if index == 2 else 2.0
 				spawn_zone(owner_id, score, Vector2.ZERO, 1.5 * float(index), active_duration)
@@ -1461,6 +1492,23 @@ func chanter_skill2_cycle_count(score: int) -> int:
 	if score <= 75:
 		return 3
 	return 4
+
+
+func spawn_chanter_clockwise_volley(owner_id: int, score: int) -> void:
+	for cycle in range(chanter_skill2_cycle_count(score)):
+		for shot in range(16):
+			spawn_projectile(owner_id, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08, "", true)
+
+
+func spawn_chanter_skill3_volley(owner_id: int, score: int) -> void:
+	for cycle in range(chanter_skill2_cycle_count(score)):
+		for shot in range(16):
+			var shot_delay := float(cycle * 16 + shot) * 0.08
+			var angle := TAU * float(shot) / 16.0
+			spawn_projectile(owner_id, score, true, -PI / 2.0 + angle, shot_delay, "", true)
+			spawn_projectile(owner_id, score, true, PI / 2.0 + angle, shot_delay, "", true)
+			spawn_projectile(owner_id, score, true, -angle, shot_delay, "", true)
+			spawn_projectile(owner_id, score, true, PI - angle, shot_delay, "", true)
 
 
 func arithmetic_decoy_count(score: int) -> int:
@@ -2364,7 +2412,9 @@ func _send_dedicated_loadout(selection: int) -> void:
 	var big_skill := "typist_trident"
 	if selection == 0 and int(character_skill_selection.get("typist", [0, 0, 0])[1]) == 1:
 		big_skill = "typist_keycap_ii"
-	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill, "display_name": user_display_name})
+	var visual_id: String = ["typist", "arithmetician", "chanter"][selection]
+	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
+	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill, "small_skill": int(selected_skills[0]), "skill3": int(selected_skills[2]), "display_name": user_display_name})
 
 
 func toggle_lobby_ready(player_id: int) -> void:
@@ -3235,7 +3285,11 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if visual_id == "arithmetician":
 		return ["無限級数", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "chanter":
-		return ["円環の降臨", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
+		if skill_index == 0:
+			return ["円環の降臨", "宵月（よいづき）", "未実装", "未実装", "未実装"]
+		if skill_index == 1:
+			return ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
+		return ["十六夜（いざよい）", "未実装", "未実装", "未実装", "未実装"]
 	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 
 
@@ -3347,6 +3401,8 @@ func style_character_detail_button(button: Button) -> void:
 func save_character_skills() -> void:
 	var visual_id := character_visual_id()
 	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
+	if dedicated_connection and dedicated_connection.has_pending_join():
+		_send_dedicated_loadout(p1_selection if local_player_id == 1 else p2_selection)
 	var press_tween := create_tween()
 	press_tween.tween_property(character_save_button, "scale", Vector2(0.92, 0.92), 0.07)
 	press_tween.tween_property(character_save_button, "scale", Vector2.ONE, 0.12)
@@ -3575,7 +3631,7 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
 	if challenge_skill == "skill3_typing":
 		challenge_answer = challenge_prompt
-	challenge_target_points = make_trace_target(challenge_skill.begins_with("big")) if _is_trace_challenge() else PackedVector2Array()
+	challenge_target_points = make_trace_target(challenge_skill.begins_with("big"), 3.5 if challenge_skill == "skill3_trace" else 0.0) if _is_trace_challenge() else PackedVector2Array()
 	update_client_ui_from_state()
 
 
@@ -3922,7 +3978,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
 	player["big_skill_id"] = "typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else "typist_trident"
-	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ""
+	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else "")
 	player["visual_id"] = visual_ids[selection]
 	var is_local_player := player_id == (local_player_id if network_mode == "client" else 1)
 	player["name"] = user_display_name if is_local_player else names[selection]
@@ -4015,6 +4071,8 @@ func update_challenge_ui(elapsed: float) -> void:
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	if challenge_skill == "skill3_typing":
 		skill_name = "ぶんまわし（スキル3）"
+	elif challenge_skill == "skill3_trace":
+		skill_name = "十六夜（いざよい）"
 	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and not challenge_skill.begins_with("big"):
 		skill_name = "月柱（げっちゅう）・昇華"
 	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and challenge_skill.begins_with("big"):
@@ -4077,10 +4135,12 @@ func update_hud() -> void:
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), ATTACK_COOLDOWN, is_focused)
-		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), TYPING_SKILL_COOLDOWN, is_focused)
+		var small_cooldown_duration := CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN
+		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
 		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
-		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), TYPIST_SKILL3_COOLDOWN, is_focused)
+		var skill3_cooldown_duration := CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN
+		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
 	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
 
@@ -4129,6 +4189,8 @@ func is_skill_candidate_implemented(visual_id: String, skill_index: int, candida
 		return false
 	if visual_id == "typist":
 		return (skill_index == 0 and candidate_index == 0) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index == 0)
+	if visual_id == "chanter":
+		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index == 0) or (skill_index == 2 and candidate_index == 0)
 	return skill_index < 2 and candidate_index == 0
 
 
@@ -4161,7 +4223,11 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 	if visual_id == "arithmetician":
 		return SKILL_ARITHMETICIAN_INFINITE_SERIES if skill_index == 0 else SKILL_ARITHMETICIAN_CONVERGENCE
 	if visual_id == "chanter":
-		return SKILL_CHANTER_CIRCLE_DESCENT if skill_index == 0 else SKILL_CHANTER_STELLAR_BARRAGE
+		if skill_index == 0:
+			return SKILL_CHANTER_EVENING_MOON if selected_index == 1 else SKILL_CHANTER_CIRCLE_DESCENT
+		if skill_index == 1:
+			return SKILL_CHANTER_STELLAR_BARRAGE
+		return SKILL_CHANTER_IZAYOI if selected_index == 0 else SKILL_CHANTER_LOCK
 	return SKILL_EMPTY_ICON
 
 

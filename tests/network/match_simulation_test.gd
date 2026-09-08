@@ -6,6 +6,7 @@ func _init() -> void:
 	_test_arithmetician_skills()
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
+	_test_chanter_skill1_candidate_and_skill3()
 	_test_chanter_skill1_timeline()
 	_test_focus_interruption()
 	_test_simultaneous_challenges_and_individual_interruption()
@@ -53,6 +54,10 @@ func _test_display_name_loadout_validation() -> void:
 	assert(str(simulation.state["players"][1]["name"]) == "同期名")
 	assert(bool(simulation.state["players"][1]["has_display_name"]))
 	assert(not bool(simulation.state["players"][2]["has_display_name"]))
+	assert(MatchProtocol.valid_event(MatchProtocol.make_event(2, "loadout", {"character": 2, "big_skill": "typist_trident", "small_skill": 1, "skill3": 0, "display_name": "詠唱士"}), -1))
+	assert(simulation.handle_event(1, {"type": "loadout", "payload": {"character": 2, "big_skill": "typist_trident", "small_skill": 1, "skill3": 0, "display_name": "詠唱士"}}))
+	assert(str(simulation.state["players"][1]["small_skill_id"]) == "chanter_small_1")
+	assert(str(simulation.state["players"][1]["skill3_id"]) == "chanter_skill3_0")
 
 func _test_typist_skills() -> void:
 	var simulation := MatchSimulation.new()
@@ -137,10 +142,51 @@ func _test_chanter_skill2_specification() -> void:
 	assert(Vector2(second_projectile["position"]).is_equal_approx(expected_launch_position + initial_velocity * 0.08))
 	assert(bool(second_projectile["launched"]))
 
-	var trace_target := moving_simulation._make_trace_target(true)
+	var trace_target := moving_simulation._make_trace_target("big")
 	assert(trace_target.size() == 121)
 	assert(is_equal_approx(trace_target[0].distance_to(Vector2(340, 118)), 10.0))
 	assert(is_equal_approx(trace_target[-1].distance_to(Vector2(340, 118)), 108.0))
+
+
+func _test_chanter_skill1_candidate_and_skill3() -> void:
+	var skill1_simulation := MatchSimulation.new()
+	skill1_simulation.configure_loadout(1, 2, "typist_trident", "", 1, 0)
+	assert(str(skill1_simulation.state["players"][1]["small_skill_id"]) == "chanter_small_1")
+	assert(skill1_simulation.handle_event(1, {"type": "small_skill"}))
+	skill1_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var skill1_target: PackedVector2Array = skill1_simulation.state["challenges"][1]["target"]
+	assert(skill1_target.size() == 121)
+	assert(skill1_simulation.handle_event(1, {"type": "challenge_trace", "payload": skill1_target}))
+	assert(skill1_simulation.state["skill_projectiles"].size() == 64)
+	assert(is_equal_approx(float(skill1_simulation.state["players"][1]["small_cooldown"]), 3.0))
+	assert(Vector2(skill1_simulation.state["skill_projectiles"][0]["velocity"]).normalized().is_equal_approx(Vector2.UP))
+
+	var skill3_simulation := MatchSimulation.new()
+	skill3_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 0)
+	assert(str(skill3_simulation.state["players"][1]["skill3_id"]) == "chanter_skill3_0")
+	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
+	skill3_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var skill3_target: PackedVector2Array = skill3_simulation.state["challenges"][1]["target"]
+	assert(skill3_target.size() == 121)
+	assert(skill3_simulation.handle_event(1, {"type": "challenge_trace", "payload": skill3_target}))
+	assert(skill3_simulation.state["skill_projectiles"].size() == 256)
+	assert(is_equal_approx(float(skill3_simulation.state["players"][1]["skill3_cooldown"]), 8.0))
+	var top: Dictionary = skill3_simulation.state["skill_projectiles"][0]
+	var bottom: Dictionary = skill3_simulation.state["skill_projectiles"][1]
+	var right: Dictionary = skill3_simulation.state["skill_projectiles"][2]
+	var left: Dictionary = skill3_simulation.state["skill_projectiles"][3]
+	assert(Vector2(top["velocity"]).normalized().is_equal_approx(Vector2.UP))
+	assert(Vector2(bottom["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+	assert(Vector2(right["velocity"]).normalized().is_equal_approx(Vector2.RIGHT))
+	assert(Vector2(left["velocity"]).normalized().is_equal_approx(Vector2.LEFT))
+	assert(is_equal_approx(float(top["delay"]), float(bottom["delay"])))
+	assert(is_equal_approx(float(top["delay"]), float(right["delay"])))
+	assert(is_equal_approx(float(top["delay"]), float(left["delay"])))
+
+	var unavailable_candidate_simulation := MatchSimulation.new()
+	unavailable_candidate_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
+	assert(str(unavailable_candidate_simulation.state["players"][1]["skill3_id"]).is_empty())
+	assert(not unavailable_candidate_simulation.handle_event(1, {"type": "skill3"}))
 
 
 func _test_chanter_skill1_timeline() -> void:
