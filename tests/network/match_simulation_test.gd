@@ -5,6 +5,7 @@ func _init() -> void:
 	_test_typist_skills()
 	_test_arithmetician_skills()
 	_test_chanter_skills()
+	_test_chanter_skill1_timeline()
 	_test_focus_interruption()
 	_test_simultaneous_challenges_and_individual_interruption()
 	_test_challenge_miss_sequence_and_snapshot()
@@ -104,6 +105,44 @@ func _test_chanter_skills() -> void:
 	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var radial_projectile: Dictionary = big_simulation.state["skill_projectiles"][4]
 	assert(Vector2(radial_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+
+
+func _test_chanter_skill1_timeline() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 2, "typist_trident")
+	assert(simulation.handle_event(1, {"type": "small_skill"}))
+	simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
+	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
+	assert(simulation.state["magic_zones"].size() == 3)
+	var first_zone: Dictionary = simulation.state["magic_zones"][0]
+	assert(is_equal_approx(float(first_zone["delay"]), 0.0))
+	assert(is_equal_approx(float(first_zone["warning_duration"]), 0.5))
+	assert(is_equal_approx(float(first_zone["active_duration"]), 2.0))
+	assert(is_equal_approx(float(simulation.state["magic_zones"][1]["delay"]), 1.5))
+	assert(is_equal_approx(float(simulation.state["magic_zones"][2]["delay"]), 3.0))
+
+	var initial_target_position := Vector2(simulation.state["players"][2]["position"])
+	var damage := int(first_zone["damage"])
+	simulation.step(0.49, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(bool(simulation.state["magic_zones"][0]["spawned"]))
+	assert(Vector2(simulation.state["magic_zones"][0]["position"]).is_equal_approx(initial_target_position))
+	assert(int(simulation.state["players"][2]["hp"]) == 100)
+	simulation.step(0.01, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage)
+	simulation.step(0.5, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage * 2)
+
+	var failure_simulation := MatchSimulation.new()
+	failure_simulation.configure_loadout(1, 2, "typist_trident")
+	assert(failure_simulation.handle_event(1, {"type": "small_skill"}))
+	failure_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var failed_trace := PackedVector2Array()
+	for index in range(10):
+		failed_trace.append(Vector2(10.0 + float(index) * 10.0, 10.0))
+	assert(failure_simulation.handle_event(1, {"type": "challenge_trace", "payload": failed_trace}))
+	assert(failure_simulation.state["challenges"].is_empty())
+	assert(failure_simulation.state["magic_zones"].is_empty())
 
 func _test_focus_interruption() -> void:
 	var simulation := MatchSimulation.new()

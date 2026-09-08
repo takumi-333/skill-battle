@@ -72,7 +72,7 @@ const PLAYER_SNAPSHOT_KEYS := [
 	"interrupt_gauge_max", "interrupt_gauge_display",
 ]
 const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin"]
-const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time"]
+const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time"]
 
 static func snapshot(room_id: String, state: Dictionary, phase: String, status: String, recipient_slot := 0, server_tick := 0, input_acknowledgements: Dictionary = {}) -> Dictionary:
 	var challenges: Dictionary = {}

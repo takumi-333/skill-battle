@@ -295,8 +295,11 @@ const TYPING_HOMING_MAX_ANGLE := deg_to_rad(35.0)
 const TYPING_II_PROJECTILE_INTERVAL := 0.3
 const SHOCKWAVE_INTERVAL := 0.5
 const SHOCKWAVE_SPEED := 150.0
-const CHANTER_ZONE_DELAY := 0.2
-const ZONE_DURATION := 5.0
+const CHANTER_ZONE_WARNING_DURATION := 0.5
+const CHANTER_ZONE_GROWTH_FRAME_DURATION := 1.0 / 60.0
+const CHANTER_ZONE_DAMAGE_INTERVAL := 0.5
+const CHANTER_ZONE_RADIUS := 80.0
+const CHANTER_TRACE_FAILURE_FEEDBACK_DURATION := 0.22
 const NETWORK_PORT := 7000
 const STATE_SYNC_INTERVAL := 0.05
 const TITLE_LOGO_ANIMATION_DURATION := 1.2
@@ -336,6 +339,8 @@ const SKILL_THEME_TYPIST := Color("121F18")
 const SKILL_THEME_ARITHMETICIAN := Color("1C213F")
 const SKILL_THEME_CHANTER := Color("3F255D")
 const TYPIST_KEY_CAP_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/typist_key_cap.png")
+const CHANTER_AREA_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_area.png")
+const CHANTER_BEAM_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_beam.png")
 const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
 const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
 const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/chanter_background.png")
@@ -1431,7 +1436,7 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 		if not is_big:
 			for index in range(3):
 				var active_duration := 2.5 if index == 2 else 2.0
-				spawn_zone(owner_id, score, Vector2.ZERO, 1.5 * float(index), 0.3, active_duration)
+				spawn_zone(owner_id, score, Vector2.ZERO, 1.5 * float(index), active_duration)
 		else:
 			for cycle in range(3):
 				for shot in range(16):
@@ -1489,8 +1494,8 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 	next_projectile_id += 1
 
 
-func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, damage_delay: float = 0.0, active_duration: float = 1.0) -> void:
-	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "damage_timer": damage_delay, "damage": 8 + roundi(float(score) * 0.06), "spawned": false, "damage_started": false, "damage_flash": 0.0, "pulse_time": 0.0, "damage_applied": false})
+func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, active_duration: float = 1.0) -> void:
+	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": CHANTER_ZONE_GROWTH_FRAME_DURATION, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 8 + roundi(float(score) * 0.06), "spawned": false})
 
 
 func update_magic_zones(delta: float) -> void:
@@ -1503,21 +1508,20 @@ func update_magic_zones(delta: float) -> void:
 			zone["position"] = clamp_to_arena(target["position"])
 			zone["spawned"] = true
 			zone["lifetime"] = float(zone.get("active_duration", 1.0))
-			zone["damage_timer"] = 0.3
+			zone["elapsed"] = 0.0
 		if bool(zone.get("spawned", false)):
-			zone["lifetime"] = float(zone["lifetime"]) - delta
-			zone["damage_timer"] = float(zone["damage_timer"]) - delta
-			zone["damage_flash"] = maxf(0.0, float(zone.get("damage_flash", 0.0)) - delta)
-			zone["pulse_time"] = float(zone.get("pulse_time", 0.0)) + delta
-			if float(zone["damage_timer"]) <= 0.0 and not bool(zone.get("damage_started", false)):
-				zone["damage_started"] = true
-				zone["damage_flash"] = 0.18
-			if bool(zone.get("damage_started", false)) and not bool(zone.get("damage_applied", false)):
+			zone["elapsed"] = float(zone.get("elapsed", 0.0)) + delta
+			zone["lifetime"] = maxf(0.0, float(zone["lifetime"]) - delta)
+			var active_duration := float(zone.get("active_duration", 1.0))
+			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
+			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
+			while next_damage_time < active_duration and float(zone["elapsed"]) >= next_damage_time:
 				var target_id: int = 2 if int(zone["owner_id"]) == 1 else 1
 				var target: Dictionary = players[target_id]
-				if is_point_in_player_hitbox(zone["position"], target["position"], 80.0):
-					apply_damage(target_id, int(zone["damage"]), "魔法陣")
-				zone["damage_applied"] = true
+				if is_point_in_player_hitbox(zone["position"], target["position"], CHANTER_ZONE_RADIUS):
+					apply_damage(target_id, int(zone["damage"]), "月柱・昇華")
+				next_damage_time += damage_interval
+			zone["next_damage_time"] = next_damage_time
 		if bool(zone.get("spawned", false)) and float(zone["lifetime"]) <= 0.0:
 			magic_zones.remove_at(index)
 		else:
@@ -3652,8 +3656,7 @@ func receive_remote_trace(trace_points: PackedVector2Array) -> void:
 		return
 	challenge_trace_points = trace_points
 	var trace_result := evaluate_trace_result()
-	var trace_score: int = int(trace_result["score"])
-	end_active_challenge(_trace_result_passes(trace_result), trace_score, "なぞりに失敗した。")
+	end_trace_challenge_from_result(trace_result)
 
 
 @rpc("any_peer", "reliable")
@@ -3986,6 +3989,8 @@ func update_challenge_ui(elapsed: float) -> void:
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	if challenge_skill == "skill3_typing":
 		skill_name = "ぶんまわし（スキル3）"
+	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and not challenge_skill.begins_with("big"):
+		skill_name = "月柱（げっちゅう）・昇華"
 	challenge_title_label.text = skill_name
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = get_challenge_time_limit()
@@ -3999,6 +4004,23 @@ func update_challenge_ui(elapsed: float) -> void:
 		challenge_panel.modulate = Color(1.0, 0.38, 0.38) if challenge_miss_flash > 0.0 else Color.WHITE
 		challenge_panel.position = challenge_base_position + (Vector2(sin(challenge_shake * 180.0) * 6.0, 0.0) if challenge_shake > 0.0 else Vector2.ZERO)
 	update_trace_canvas()
+
+
+func end_trace_challenge_from_result(trace_result: Dictionary) -> void:
+	var trace_score := int(trace_result.get("score", 0))
+	if _trace_result_passes(trace_result):
+		end_active_challenge(true, trace_score, "")
+		return
+	# なぞりはマウスを離した時点でしか失敗を検出できないため、既存の
+	# 文字・算術入力ミスと同じフィードバックを閉じる前に短時間表示する。
+	challenge_miss_flash = CHANTER_TRACE_FAILURE_FEEDBACK_DURATION
+	challenge_shake = CHANTER_TRACE_FAILURE_FEEDBACK_DURATION
+	update_challenge_ui(float(players[challenge_owner].get("challenge_elapsed", 0.0)))
+	var failed_owner := challenge_owner
+	var failed_skill := challenge_skill
+	await get_tree().create_timer(CHANTER_TRACE_FAILURE_FEEDBACK_DURATION).timeout
+	if challenge_owner == failed_owner and challenge_skill == failed_skill:
+		end_active_challenge(false, trace_score, "なぞりに失敗した。")
 
 
 func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> Label:
@@ -4190,13 +4212,41 @@ func _draw() -> void:
 	for zone in magic_zones:
 		if not bool(zone.get("spawned", false)):
 			continue
-		var zone_alpha: float = 0.18
-		if bool(zone.get("damage_started", false)):
-			zone_alpha = 0.95 if float(zone.get("damage_flash", 0.0)) > 0.0 else 0.44 + sin(float(zone.get("pulse_time", 0.0)) * 9.0) * 0.16
-		draw_circle(zone["position"], 80.0, Color(0.55, 0.35, 0.95, zone_alpha))
-		draw_arc(zone["position"], 80.0, 0.0, TAU, 32, Color("c7a6ff"), 3.0, true)
+		draw_chanter_zone(zone)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_arithmetic_flash()
+
+
+func draw_chanter_zone(zone: Dictionary) -> void:
+	var elapsed := float(zone.get("elapsed", 0.0))
+	var active_duration := float(zone.get("active_duration", 1.0))
+	var warning_duration := float(zone.get("warning_duration", CHANTER_ZONE_WARNING_DURATION))
+	var growth_frame_duration := float(zone.get("growth_frame_duration", CHANTER_ZONE_GROWTH_FRAME_DURATION))
+	var beam_elapsed := elapsed - warning_duration
+	var beam_fade := 1.0
+	if beam_elapsed >= growth_frame_duration * 4.0:
+		var fade_duration := maxf(0.001, active_duration - warning_duration - growth_frame_duration * 4.0)
+		beam_fade = 1.0 - clampf((beam_elapsed - growth_frame_duration * 4.0) / fade_duration, 0.0, 1.0)
+	var area_brightness := clampf(elapsed / warning_duration, 0.0, 1.0)
+	var area_color := Color(0.35, 0.28, 0.55, 0.48).lerp(Color.WHITE, area_brightness)
+	if beam_elapsed >= 0.0:
+		area_color.a *= beam_fade
+	var position_value := Vector2(zone["position"])
+	var area_size := Vector2.ONE * CHANTER_ZONE_RADIUS * 2.0
+	draw_texture_rect(CHANTER_AREA_TEXTURE, Rect2(position_value - area_size * 0.5, area_size), false, area_color)
+	if beam_elapsed < 0.0:
+		return
+	var beam_scale := 1.0
+	if beam_elapsed < growth_frame_duration * 2.0:
+		beam_scale = 1.0 / 3.0
+	elif beam_elapsed < growth_frame_duration * 4.0:
+		beam_scale = 2.0 / 3.0
+	else:
+		beam_scale = beam_fade
+	var beam_height := maxf(1.0, (position_value.y - ARENA.position.y) * beam_scale)
+	var beam_width := CHANTER_ZONE_RADIUS * 2.0 * beam_scale
+	var beam_rect := Rect2(position_value.x - beam_width * 0.5, position_value.y - beam_height, beam_width, beam_height)
+	draw_texture_rect(CHANTER_BEAM_TEXTURE, beam_rect, false, Color(1.0, 1.0, 1.0, beam_fade))
 
 
 func get_world_draw_offset() -> Vector2:
@@ -4702,8 +4752,7 @@ func _input(event: InputEvent) -> void:
 				rpc_id(1, "receive_remote_trace", challenge_trace_points)
 				return
 			var trace_result := evaluate_trace_result()
-			var trace_score: int = int(trace_result["score"])
-			end_active_challenge(_trace_result_passes(trace_result), trace_score, "なぞりに失敗した。")
+			end_trace_challenge_from_result(trace_result)
 		return
 	if event is InputEventMouseMotion and challenge_owner != 0 and _is_trace_challenge() and event.button_mask != 0:
 		if network_mode == "host" and challenge_owner != 1:

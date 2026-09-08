@@ -24,6 +24,9 @@ const TRACE_MIN_ELAPSED := 0.35
 const TRACE_MIN_POINTS := 8
 const TRACE_MIN_LENGTH := 80.0
 const TRACE_MAX_SEGMENT_LENGTH := 180.0
+const CHANTER_ZONE_WARNING_DURATION := 0.5
+const CHANTER_ZONE_DAMAGE_INTERVAL := 0.5
+const CHANTER_ZONE_RADIUS := 80.0
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -476,7 +479,7 @@ func _update_decoys(delta: float) -> void:
 			state["decoys"][index] = decoy
 
 func _spawn_zone(owner: int, score: int, delay: float, duration: float) -> void:
-	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "damage_timer": 0.3, "damage": 8 + roundi(float(score) * 0.06), "spawned": false, "damage_started": false, "damage_flash": 0.0, "pulse_time": 0.0, "damage_applied": false})
+	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": 1.0 / 60.0, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 8 + roundi(float(score) * 0.06), "spawned": false})
 
 func _update_zones(delta: float) -> void:
 	for index in range(state["magic_zones"].size() - 1, -1, -1):
@@ -487,13 +490,18 @@ func _update_zones(delta: float) -> void:
 			zone["position"] = state["players"][target]["position"]
 			zone["spawned"] = true
 			zone["lifetime"] = zone["active_duration"]
+			zone["elapsed"] = 0.0
 		if bool(zone["spawned"]):
-			zone["lifetime"] = float(zone["lifetime"]) - delta
-			zone["damage_timer"] = float(zone["damage_timer"]) - delta
-			if float(zone["damage_timer"]) <= 0.0 and not bool(zone["damage_applied"]):
-				if _point_hits_player(Vector2(zone["position"]), target, 80.0):
-					_apply_damage(target, int(zone["damage"]), "魔法陣")
-				zone["damage_applied"] = true
+			zone["elapsed"] = float(zone.get("elapsed", 0.0)) + delta
+			zone["lifetime"] = maxf(0.0, float(zone["lifetime"]) - delta)
+			var active_duration := float(zone["active_duration"])
+			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
+			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
+			while next_damage_time < active_duration and float(zone["elapsed"]) >= next_damage_time:
+				if _point_hits_player(Vector2(zone["position"]), target, CHANTER_ZONE_RADIUS):
+					_apply_damage(target, int(zone["damage"]), "月柱・昇華")
+				next_damage_time += damage_interval
+			zone["next_damage_time"] = next_damage_time
 		if bool(zone["spawned"]) and float(zone["lifetime"]) <= 0.0:
 			state["magic_zones"].remove_at(index)
 		else:
