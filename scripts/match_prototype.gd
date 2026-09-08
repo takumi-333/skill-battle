@@ -438,14 +438,15 @@ var result_label: Label
 var result_rematch_button: Button
 var result_lobby_button: Button
 var result_match_time_label: Label
+var result_winner_portrait: TextureRect
+var result_opponent_portrait: TextureRect
+var result_victory_badge: TextureRect
 var result_winner_name_label: Label
-var result_winner_message_label: Label
-var result_loser_name_label: Label
-var result_loser_message_label: Label
-var result_player_one_stats_label: Label
-var result_player_two_stats_label: Label
-var result_hp_stats_label: Label
-var result_average_score_stats_label: Label
+var result_opponent_name_label: Label
+var result_winner_hp_value_label: Label
+var result_opponent_hp_value_label: Label
+var result_winner_score_value_label: Label
+var result_opponent_score_value_label: Label
 var match_start_prompt: Control
 var match_start_prompt_label: Label
 var network_back_button: Button
@@ -1982,7 +1983,7 @@ func refresh_result_action_ui() -> void:
 	var is_online_result := phase == "result" and network_mode in ["host", "client"]
 	if not is_online_result:
 		result_rematch_button.disabled = false
-		result_rematch_button.text = "もう一度対戦"
+		result_rematch_button.text = "再戦"
 		result_label.text = ""
 		return
 	var local_slot := local_player_id if network_mode == "client" else 1
@@ -1990,7 +1991,7 @@ func refresh_result_action_ui() -> void:
 	var local_requested := bool(result_rematch_ready.get(local_slot, false))
 	var remote_requested := bool(result_rematch_ready.get(remote_slot, false))
 	result_rematch_button.disabled = local_requested
-	result_rematch_button.text = "再戦を待機中" if local_requested else "もう一度対戦"
+	result_rematch_button.text = "再戦を待機中" if local_requested else "再戦"
 	var decision_text := "両者が再戦を選ぶと再戦を開始します。"
 	if local_requested and not remote_requested:
 		decision_text = "相手の再戦選択を待っています。"
@@ -2005,26 +2006,25 @@ func refresh_result_details(winner_id: int) -> void:
 	var first: Dictionary = players[1]
 	var second: Dictionary = players[2]
 	var elapsed_seconds := maxi(0, roundi(MATCH_DURATION - match_state.time_remaining))
-	result_match_time_label.text = "%02d:%02d" % [elapsed_seconds / 60, elapsed_seconds % 60]
+	result_match_time_label.text = "試合時間 %02d:%02d" % [elapsed_seconds / 60, elapsed_seconds % 60]
 	var winner_slot := 1 if winner_id == 0 else winner_id
-	var loser_slot := 2 if winner_slot == 1 else 1
+	var opponent_slot := 2 if winner_slot == 1 else 1
 	var winner_player: Dictionary = players[winner_slot]
-	var loser_player: Dictionary = players[loser_slot]
+	var opponent_player: Dictionary = players[opponent_slot]
+	result_winner_portrait.texture = get_idle_texture(str(winner_player.get("visual_id", "typist")))
+	result_opponent_portrait.texture = get_idle_texture(str(opponent_player.get("visual_id", "typist")))
+	result_victory_badge.visible = winner_id != 0
 	result_winner_name_label.text = result_player_display_name(winner_slot)
-	result_loser_name_label.text = result_player_display_name(loser_slot)
+	result_opponent_name_label.text = result_player_display_name(opponent_slot)
 	if winner_id == 0:
-		result_winner_message_label.text = "DRAW"
-		result_loser_message_label.text = "DRAW"
-	else:
-		result_winner_message_label.text = "MATCH COMPLETE"
-		result_loser_message_label.text = "LOSE"
-	result_player_one_stats_label.text = "P1  %s" % result_player_display_name(1)
-	result_player_two_stats_label.text = "P2  %s" % result_player_display_name(2)
-	result_hp_stats_label.text = "HP  %3d                              HP  %3d" % [int(first["hp"]), int(second["hp"])]
-	result_average_score_stats_label.text = "AVG SCORE  %5.1f                    AVG SCORE  %5.1f" % [average_score(first), average_score(second)]
-	# Keep the dictionaries referenced above typed and close to the result layout data.
+		result_winner_name_label.text = "DRAW  %s" % result_winner_name_label.text
+		result_opponent_name_label.text = "DRAW  %s" % result_opponent_name_label.text
+	result_winner_hp_value_label.text = "%d / 100" % int(winner_player["hp"])
+	result_opponent_hp_value_label.text = "%d / 100" % int(opponent_player["hp"])
+	result_winner_score_value_label.text = "%.1f" % average_score(winner_player)
+	result_opponent_score_value_label.text = "%.1f" % average_score(opponent_player)
 	result_winner_name_label.tooltip_text = "HP %d / AVG %.1f" % [int(winner_player["hp"]), average_score(winner_player)]
-	result_loser_name_label.tooltip_text = "HP %d / AVG %.1f" % [int(loser_player["hp"]), average_score(loser_player)]
+	result_opponent_name_label.tooltip_text = "HP %d / AVG %.1f" % [int(opponent_player["hp"]), average_score(opponent_player)]
 
 
 func average_score(player: Dictionary) -> float:
@@ -2369,14 +2369,15 @@ func create_result_ui() -> void:
 	result_panel = $UIRoot/Result
 	result_label = $UIRoot/Result/ResultText
 	result_match_time_label = $UIRoot/Result/MatchTimeValue
-	result_winner_name_label = $UIRoot/Result/WinnerArea/WinnerName
-	result_winner_message_label = $UIRoot/Result/WinnerArea/WinnerMessage
-	result_loser_name_label = $UIRoot/Result/LoserArea/LoserName
-	result_loser_message_label = $UIRoot/Result/LoserArea/LoserMessage
-	result_player_one_stats_label = $UIRoot/Result/PlayerOneStats
-	result_player_two_stats_label = $UIRoot/Result/PlayerTwoStats
-	result_hp_stats_label = $UIRoot/Result/HpStats
-	result_average_score_stats_label = $UIRoot/Result/AverageScoreStats
+	result_winner_portrait = $UIRoot/Result/WinnerPortrait
+	result_opponent_portrait = $UIRoot/Result/OpponentPortrait
+	result_victory_badge = $UIRoot/Result/VictoryBadge
+	result_winner_name_label = $UIRoot/Result/WinnerName
+	result_opponent_name_label = $UIRoot/Result/OpponentName
+	result_winner_hp_value_label = $UIRoot/Result/WinnerHpValue
+	result_opponent_hp_value_label = $UIRoot/Result/OpponentHpValue
+	result_winner_score_value_label = $UIRoot/Result/WinnerScoreValue
+	result_opponent_score_value_label = $UIRoot/Result/OpponentScoreValue
 	result_rematch_button = $UIRoot/Result/RematchButton
 	style_menu_button(result_rematch_button)
 	connect_button_once(result_rematch_button, request_rematch)

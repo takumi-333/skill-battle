@@ -1,45 +1,17 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=13 format=3]
 
-[ext_resource type="Texture2D" path="res://assets/ui/result/result_logo.png" id="1_logo"]
-[ext_resource type="Texture2D" path="res://assets/ui/result/match_time_frame.png" id="2_time"]
-[ext_resource type="Texture2D" path="res://assets/ui/result/result_stats_panel.png" id="3_stats"]
-[ext_resource type="Texture2D" path="res://assets/ui/result/icon_hp.png" id="4_hp"]
-[ext_resource type="Texture2D" path="res://assets/ui/result/icon_average_skill_score.png" id="5_score"]
-[ext_resource type="Texture2D" path="res://assets/ui/badge_victory.png" id="6_victory"]
-[ext_resource type="Texture2D" path="res://assets/ui/button_primary.png" id="7_primary"]
-[ext_resource type="Texture2D" path="res://assets/ui/button_secondary.png" id="8_secondary"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBackground"]
-bg_color = Color(0.035, 0.055, 0.11, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.72, 0.42, 0.58, 0.5)
-
-[sub_resource type="StyleBoxFlat" id="StyleWinner"]
-bg_color = Color(0.14, 0.075, 0.14, 0.86)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.95, 0.28, 0.53, 0.84)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-
-[sub_resource type="StyleBoxFlat" id="StyleLoser"]
-bg_color = Color(0.025, 0.035, 0.07, 0.88)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.38, 0.42, 0.55, 0.55)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
+[ext_resource type="Texture2D" path="res://assets/ui/menu_background.png" id="1_background"]
+[ext_resource type="Texture2D" path="res://assets/ui/result/result_logo.png" id="2_logo"]
+[ext_resource type="Texture2D" path="res://assets/ui/result/match_time_frame.png" id="3_time"]
+[ext_resource type="Texture2D" path="res://assets/ui/result/result_stats_panel.png" id="4_stats"]
+[ext_resource type="Texture2D" path="res://assets/ui/result/icon_hp.png" id="5_hp"]
+[ext_resource type="Texture2D" path="res://assets/ui/result/icon_average_skill_score.png" id="6_score"]
+[ext_resource type="Texture2D" path="res://assets/ui/badge_victory.png" id="7_victory"]
+[ext_resource type="Texture2D" path="res://assets/ui/button_primary.png" id="8_primary"]
+[ext_resource type="Texture2D" path="res://assets/ui/button_secondary.png" id="9_secondary"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/typist_idle.png" id="10_typist"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/arithmetician_idle.png" id="11_arithmetician"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/chanter_idle.png" id="12_chanter"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleEmpty"]
 
@@ -47,269 +19,340 @@ corner_radius_bottom_left = 8
 offset_right = 1280.0
 offset_bottom = 720.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBackground")
+
+[node name="Background" type="TextureRect" parent="."]
+z_index = -20
+offset_right = 1280.0
+offset_bottom = 720.0
+texture = ExtResource("1_background")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="BackgroundShade" type="ColorRect" parent="."]
+z_index = -19
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.012, 0.018, 0.045, 0.48)
+mouse_filter = 2
 
 [node name="TopRule" type="ColorRect" parent="."]
-offset_left = 34.0
-offset_top = 115.0
-offset_right = 1246.0
-offset_bottom = 117.0
-color = Color(0.89, 0.62, 0.28, 0.52)
+z_index = 2
+offset_left = 320.0
+offset_top = 90.0
+offset_right = 960.0
+offset_bottom = 92.0
+color = Color(0.89, 0.62, 0.28, 0.6)
 mouse_filter = 2
 
 [node name="ResultLogo" type="TextureRect" parent="."]
-offset_left = 448.0
-offset_top = 12.0
-offset_right = 832.0
-offset_bottom = 140.0
-texture = ExtResource("1_logo")
+z_index = 3
+offset_left = 432.0
+offset_top = 4.0
+offset_right = 848.0
+offset_bottom = 142.0
+texture = ExtResource("2_logo")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
 [node name="MatchTimeFrame" type="TextureRect" parent="."]
-offset_left = 34.0
-offset_top = 30.0
-offset_right = 254.0
-offset_bottom = 104.0
-texture = ExtResource("2_time")
+z_index = 3
+offset_left = 28.0
+offset_top = 16.0
+offset_right = 260.0
+offset_bottom = 72.0
+texture = ExtResource("3_time")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
-
-[node name="MatchTimeCaption" type="Label" parent="."]
-offset_left = 59.0
-offset_top = 43.0
-offset_right = 228.0
-offset_bottom = 61.0
-theme_override_colors/font_color = Color(0.93, 0.76, 0.44, 1)
-theme_override_font_sizes/font_size = 13
-text = "MATCH TIME"
-horizontal_alignment = 1
 mouse_filter = 2
 
 [node name="MatchTimeValue" type="Label" parent="."]
-offset_left = 59.0
-offset_top = 59.0
-offset_right = 228.0
-offset_bottom = 91.0
-theme_override_colors/font_color = Color(1, 0.91, 0.67, 1)
+z_index = 4
+offset_left = 43.0
+offset_top = 26.0
+offset_right = 245.0
+offset_bottom = 63.0
+theme_override_colors/font_color = Color(1, 0.82, 0.42, 1)
 theme_override_font_sizes/font_size = 25
-text = "01:30"
+text = "試合時間 01:30"
 horizontal_alignment = 1
+vertical_alignment = 1
 mouse_filter = 2
 
-[node name="WinnerArea" type="Panel" parent="."]
-offset_left = 74.0
-offset_top = 149.0
-offset_right = 788.0
-offset_bottom = 450.0
-theme_override_styles/panel = SubResource("StyleWinner")
-mouse_filter = 2
-
-[node name="AreaCaption" type="Label" parent="WinnerArea"]
-offset_left = 28.0
-offset_top = 20.0
-offset_right = 250.0
-offset_bottom = 46.0
-theme_override_colors/font_color = Color(1, 0.5, 0.68, 1)
-theme_override_font_sizes/font_size = 15
-text = "WINNER"
-mouse_filter = 2
-
-[node name="WinnerName" type="Label" parent="WinnerArea"]
-offset_left = 28.0
-offset_top = 49.0
-offset_right = 675.0
-offset_bottom = 91.0
-theme_override_colors/font_color = Color(1, 0.9, 0.74, 1)
-theme_override_font_sizes/font_size = 30
-text = "PLAYER 1"
-mouse_filter = 2
-
-[node name="VictoryBadge" type="TextureRect" parent="WinnerArea"]
-offset_left = 29.0
-offset_top = 108.0
-offset_right = 315.0
-offset_bottom = 226.0
-texture = ExtResource("6_victory")
+[node name="WinnerPortrait" type="TextureRect" parent="."]
+z_index = 0
+offset_left = -56.0
+offset_top = 60.0
+offset_right = 664.0
+offset_bottom = 780.0
+texture = ExtResource("10_typist")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="WinnerMessage" type="Label" parent="WinnerArea"]
-offset_left = 31.0
-offset_top = 241.0
-offset_right = 670.0
-offset_bottom = 274.0
-theme_override_colors/font_color = Color(0.95, 0.66, 0.76, 1)
-theme_override_font_sizes/font_size = 17
-text = "MATCH COMPLETE"
+[node name="OpponentPortrait" type="TextureRect" parent="."]
+z_index = 0
+offset_left = 620.0
+offset_top = 110.0
+offset_right = 1280.0
+offset_bottom = 770.0
+texture = ExtResource("12_chanter")
+expand_mode = 1
+stretch_mode = 5
+self_modulate = Color(0.72, 0.72, 0.8, 1)
 mouse_filter = 2
 
-[node name="LoserArea" type="Panel" parent="."]
-offset_left = 808.0
-offset_top = 149.0
-offset_right = 1206.0
-offset_bottom = 450.0
-theme_override_styles/panel = SubResource("StyleLoser")
+[node name="VictoryBadge" type="TextureRect" parent="."]
+z_index = 2
+offset_left = 197.0
+offset_top = 72.0
+offset_right = 493.0
+offset_bottom = 194.0
+texture = ExtResource("7_victory")
+expand_mode = 1
+stretch_mode = 5
 mouse_filter = 2
 
-[node name="AreaCaption" type="Label" parent="LoserArea"]
-offset_left = 27.0
-offset_top = 20.0
-offset_right = 360.0
-offset_bottom = 46.0
-theme_override_colors/font_color = Color(0.57, 0.62, 0.74, 1)
-theme_override_font_sizes/font_size = 15
-text = "OPPONENT"
+[node name="WinnerName" type="Label" parent="."]
+z_index = 3
+offset_left = 255.0
+offset_top = 182.0
+offset_right = 635.0
+offset_bottom = 238.0
+theme_override_colors/font_color = Color(1, 0.79, 0.38, 1)
+theme_override_font_sizes/font_size = 38
+text = "PLAYER 1"
+horizontal_alignment = 1
+vertical_alignment = 1
 mouse_filter = 2
 
-[node name="LoserName" type="Label" parent="LoserArea"]
-offset_left = 27.0
-offset_top = 49.0
-offset_right = 370.0
-offset_bottom = 91.0
-theme_override_colors/font_color = Color(0.69, 0.72, 0.81, 1)
-theme_override_font_sizes/font_size = 26
+[node name="OpponentName" type="Label" parent="."]
+z_index = 3
+offset_left = 800.0
+offset_top = 138.0
+offset_right = 1160.0
+offset_bottom = 194.0
+theme_override_colors/font_color = Color(0.76, 0.73, 0.78, 1)
+theme_override_font_sizes/font_size = 34
 text = "PLAYER 2"
-autowrap_mode = 2
-mouse_filter = 2
-
-[node name="LoserMessage" type="Label" parent="LoserArea"]
-offset_left = 29.0
-offset_top = 128.0
-offset_right = 365.0
-offset_bottom = 183.0
-theme_override_colors/font_color = Color(0.46, 0.5, 0.61, 1)
-theme_override_font_sizes/font_size = 17
-text = "LOSE"
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
 [node name="ResultStatsPanel" type="TextureRect" parent="."]
-offset_left = 74.0
-offset_top = 472.0
-offset_right = 990.0
-offset_bottom = 632.0
-texture = ExtResource("3_stats")
+z_index = 4
+offset_left = 90.0
+offset_top = 420.0
+offset_right = 1190.0
+offset_bottom = 730.0
+texture = ExtResource("4_stats")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="PlayerOneStats" type="Label" parent="."]
-offset_left = 118.0
-offset_top = 497.0
-offset_right = 499.0
-offset_bottom = 527.0
-theme_override_colors/font_color = Color(1, 0.78, 0.52, 1)
-theme_override_font_sizes/font_size = 18
-text = "PLAYER 1"
-mouse_filter = 2
-
-[node name="PlayerTwoStats" type="Label" parent="."]
-offset_left = 566.0
-offset_top = 497.0
-offset_right = 947.0
-offset_bottom = 527.0
-theme_override_colors/font_color = Color(0.58, 0.79, 0.9, 1)
-theme_override_font_sizes/font_size = 18
-text = "PLAYER 2"
-mouse_filter = 2
-
-[node name="HpIcon" type="TextureRect" parent="."]
-offset_left = 119.0
-offset_top = 539.0
-offset_right = 146.0
-offset_bottom = 566.0
-texture = ExtResource("4_hp")
+[node name="WinnerHpIcon" type="TextureRect" parent="."]
+z_index = 5
+offset_left = 166.0
+offset_top = 527.0
+offset_right = 202.0
+offset_bottom = 563.0
+texture = ExtResource("5_hp")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="HpStats" type="Label" parent="."]
-offset_left = 154.0
-offset_top = 536.0
-offset_right = 937.0
-offset_bottom = 569.0
-theme_override_colors/font_color = Color(0.95, 0.91, 0.79, 1)
-theme_override_font_sizes/font_size = 19
-text = "HP 100                         HP 100"
+[node name="WinnerHpCaption" type="Label" parent="."]
+z_index = 5
+offset_left = 225.0
+offset_top = 520.0
+offset_right = 345.0
+offset_bottom = 568.0
+theme_override_colors/font_color = Color(1, 0.39, 0.59, 1)
+theme_override_font_sizes/font_size = 26
+text = "HP"
+vertical_alignment = 1
 mouse_filter = 2
 
-[node name="AverageScoreIcon" type="TextureRect" parent="."]
-offset_left = 119.0
-offset_top = 580.0
-offset_right = 146.0
-offset_bottom = 607.0
-texture = ExtResource("5_score")
+[node name="WinnerHpValue" type="Label" parent="."]
+z_index = 5
+offset_left = 395.0
+offset_top = 516.0
+offset_right = 610.0
+offset_bottom = 572.0
+theme_override_colors/font_color = Color(1, 0.48, 0.64, 1)
+theme_override_font_sizes/font_size = 33
+text = "100 / 100"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="WinnerScoreIcon" type="TextureRect" parent="."]
+z_index = 5
+offset_left = 166.0
+offset_top = 579.0
+offset_right = 202.0
+offset_bottom = 615.0
+texture = ExtResource("6_score")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="AverageScoreStats" type="Label" parent="."]
-offset_left = 154.0
-offset_top = 577.0
-offset_right = 937.0
-offset_bottom = 610.0
-theme_override_colors/font_color = Color(0.95, 0.91, 0.79, 1)
-theme_override_font_sizes/font_size = 19
-text = "AVG SCORE 0.0                 AVG SCORE 0.0"
+[node name="WinnerScoreCaption" type="Label" parent="."]
+z_index = 5
+offset_left = 225.0
+offset_top = 572.0
+offset_right = 405.0
+offset_bottom = 620.0
+theme_override_colors/font_color = Color(0.35, 0.91, 0.79, 1)
+theme_override_font_sizes/font_size = 23
+text = "平均スキル点"
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="WinnerScoreValue" type="Label" parent="."]
+z_index = 5
+offset_left = 445.0
+offset_top = 570.0
+offset_right = 610.0
+offset_bottom = 622.0
+theme_override_colors/font_color = Color(0.35, 0.91, 0.79, 1)
+theme_override_font_sizes/font_size = 30
+text = "0.0"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="OpponentHpIcon" type="TextureRect" parent="."]
+z_index = 5
+offset_left = 710.0
+offset_top = 527.0
+offset_right = 746.0
+offset_bottom = 563.0
+texture = ExtResource("5_hp")
+expand_mode = 1
+stretch_mode = 5
+self_modulate = Color(0.58, 0.58, 0.63, 1)
+mouse_filter = 2
+
+[node name="OpponentHpCaption" type="Label" parent="."]
+z_index = 5
+offset_left = 769.0
+offset_top = 520.0
+offset_right = 889.0
+offset_bottom = 568.0
+theme_override_colors/font_color = Color(0.65, 0.63, 0.65, 1)
+theme_override_font_sizes/font_size = 26
+text = "HP"
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="OpponentHpValue" type="Label" parent="."]
+z_index = 5
+offset_left = 930.0
+offset_top = 516.0
+offset_right = 1145.0
+offset_bottom = 572.0
+theme_override_colors/font_color = Color(0.76, 0.73, 0.72, 1)
+theme_override_font_sizes/font_size = 33
+text = "100 / 100"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="OpponentScoreIcon" type="TextureRect" parent="."]
+z_index = 5
+offset_left = 710.0
+offset_top = 579.0
+offset_right = 746.0
+offset_bottom = 615.0
+texture = ExtResource("6_score")
+expand_mode = 1
+stretch_mode = 5
+self_modulate = Color(0.58, 0.58, 0.63, 1)
+mouse_filter = 2
+
+[node name="OpponentScoreCaption" type="Label" parent="."]
+z_index = 5
+offset_left = 769.0
+offset_top = 572.0
+offset_right = 949.0
+offset_bottom = 620.0
+theme_override_colors/font_color = Color(0.35, 0.75, 0.7, 1)
+theme_override_font_sizes/font_size = 23
+text = "平均スキル点"
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="OpponentScoreValue" type="Label" parent="."]
+z_index = 5
+offset_left = 980.0
+offset_top = 570.0
+offset_right = 1145.0
+offset_bottom = 622.0
+theme_override_colors/font_color = Color(0.35, 0.75, 0.7, 1)
+theme_override_font_sizes/font_size = 30
+text = "0.0"
+horizontal_alignment = 1
+vertical_alignment = 1
 mouse_filter = 2
 
 [node name="ResultText" type="Label" parent="."]
-offset_left = 1010.0
-offset_top = 485.0
-offset_right = 1220.0
-offset_bottom = 620.0
-theme_override_colors/font_color = Color(0.77, 0.72, 0.63, 1)
-theme_override_font_sizes/font_size = 13
-autowrap_mode = 2
+z_index = 6
+offset_left = 930.0
+offset_top = 617.0
+offset_right = 1170.0
+offset_bottom = 638.0
+theme_override_colors/font_color = Color(0.78, 0.75, 0.68, 0.9)
+theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
 [node name="RematchButtonFrame" type="TextureRect" parent="."]
-offset_left = 367.0
-offset_top = 651.0
-offset_right = 617.0
+z_index = 5
+offset_left = 355.0
+offset_top = 642.0
+offset_right = 625.0
 offset_bottom = 706.0
-texture = ExtResource("7_primary")
+texture = ExtResource("8_primary")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
 [node name="RematchButton" type="Button" parent="."]
-offset_left = 367.0
-offset_top = 651.0
-offset_right = 617.0
+z_index = 6
+offset_left = 355.0
+offset_top = 642.0
+offset_right = 625.0
 offset_bottom = 706.0
 theme_override_styles/normal = SubResource("StyleEmpty")
 theme_override_styles/hover = SubResource("StyleEmpty")
 theme_override_styles/pressed = SubResource("StyleEmpty")
 theme_override_styles/focus = SubResource("StyleEmpty")
-theme_override_font_sizes/font_size = 18
-text = "もう一度対戦"
+theme_override_font_sizes/font_size = 26
+text = "再戦"
 
 [node name="ReturnButtonFrame" type="TextureRect" parent="."]
-offset_left = 663.0
-offset_top = 651.0
-offset_right = 913.0
+z_index = 5
+offset_left = 655.0
+offset_top = 642.0
+offset_right = 925.0
 offset_bottom = 706.0
-texture = ExtResource("8_secondary")
+texture = ExtResource("9_secondary")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
 [node name="ReturnButton" type="Button" parent="."]
-offset_left = 663.0
-offset_top = 651.0
-offset_right = 913.0
+z_index = 6
+offset_left = 655.0
+offset_top = 642.0
+offset_right = 925.0
 offset_bottom = 706.0
 theme_override_styles/normal = SubResource("StyleEmpty")
 theme_override_styles/hover = SubResource("StyleEmpty")
 theme_override_styles/pressed = SubResource("StyleEmpty")
 theme_override_styles/focus = SubResource("StyleEmpty")
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 text = "ロビーへ戻る"
