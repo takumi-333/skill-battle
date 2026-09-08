@@ -132,6 +132,15 @@ func _test_chanter_skill1_timeline() -> void:
 	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage)
 	simulation.step(0.5, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage * 2)
+	# サーバー権威判定はローカル側と同じ、横100px・縦110pxへ拡張した
+	# 楕円で魔方陣とキャラクターの重なりを判定する。
+	var zone_center := Vector2(600.0, 400.0)
+	simulation.state["players"][2]["position"] = zone_center + Vector2(100.0, 12.0)
+	assert(simulation._point_hits_chanter_zone(zone_center, 2))
+	simulation.state["players"][2]["position"] = zone_center + Vector2(100.1, 12.0)
+	assert(not simulation._point_hits_chanter_zone(zone_center, 2))
+	simulation.state["players"][2]["position"] = zone_center + Vector2(0.0, 122.1)
+	assert(not simulation._point_hits_chanter_zone(zone_center, 2))
 
 	var failure_simulation := MatchSimulation.new()
 	failure_simulation.configure_loadout(1, 2, "typist_trident")

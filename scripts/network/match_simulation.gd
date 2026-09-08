@@ -27,6 +27,9 @@ const TRACE_MAX_SEGMENT_LENGTH := 180.0
 const CHANTER_ZONE_WARNING_DURATION := 0.5
 const CHANTER_ZONE_DAMAGE_INTERVAL := 0.5
 const CHANTER_ZONE_RADIUS := 80.0
+const CHANTER_TARGET_HITBOX_RADIUS_X := 20.0
+const CHANTER_TARGET_HITBOX_RADIUS_Y := 30.0
+const CHANTER_TARGET_HITBOX_OFFSET := Vector2(0.0, -12.0)
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -498,7 +501,7 @@ func _update_zones(delta: float) -> void:
 			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
 			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
 			while next_damage_time < active_duration and float(zone["elapsed"]) >= next_damage_time:
-				if _point_hits_player(Vector2(zone["position"]), target, CHANTER_ZONE_RADIUS):
+				if _point_hits_chanter_zone(Vector2(zone["position"]), target):
 					_apply_damage(target, int(zone["damage"]), "月柱・昇華")
 				next_damage_time += damage_interval
 			zone["next_damage_time"] = next_damage_time
@@ -671,6 +674,16 @@ func _is_trident_active(slot: int) -> bool:
 
 func _point_hits_player(point: Vector2, slot: int, padding: float = 0.0) -> bool:
 	return point.distance_to(Vector2(state["players"][slot]["position"])) <= PLAYER_RADIUS + padding
+
+
+func _point_hits_chanter_zone(point: Vector2, slot: int) -> bool:
+	# ローカル対戦の is_point_in_player_hitbox() と同じ、足元アンカーから
+	# 少し上へずらした縦長楕円を魔方陣半径ぶん拡張する判定に統一する。
+	var player_center := Vector2(state["players"][slot]["position"]) + CHANTER_TARGET_HITBOX_OFFSET
+	var normalized := point - player_center
+	var radius_x := CHANTER_TARGET_HITBOX_RADIUS_X + CHANTER_ZONE_RADIUS
+	var radius_y := CHANTER_TARGET_HITBOX_RADIUS_Y + CHANTER_ZONE_RADIUS
+	return (normalized.x * normalized.x) / (radius_x * radius_x) + (normalized.y * normalized.y) / (radius_y * radius_y) <= 1.0
 
 func _players_overlap(first: Vector2, second: Vector2) -> bool:
 	var offset := first - second
