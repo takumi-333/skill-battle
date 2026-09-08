@@ -418,6 +418,7 @@ var challenge_score: int = 0
 var screen_shake_time: float = 0.0
 var screen_shake_strength: float = 0.0
 var challenge_trace_points: PackedVector2Array = PackedVector2Array()
+var challenge_trace_drawing: bool = false
 var challenge_target_points: PackedVector2Array = PackedVector2Array()
 var trace_evaluator = TraceEvaluatorData.new()
 var last_trace_result: Dictionary = {}
@@ -1073,6 +1074,7 @@ func start_skill3(owner_id: int) -> void:
 		challenge_prompt = "渦巻きをなぞってください"
 		challenge_answer = ""
 		challenge_trace_points.clear()
+		challenge_trace_drawing = false
 		challenge_target_points = make_trace_target(false, 3.5)
 		player["focused"] = true
 		player["challenge_elapsed"] = 0.0
@@ -1123,6 +1125,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_owner = owner_id
 	challenge_skill = "big" if is_big else "small"
 	challenge_trace_points.clear()
+	challenge_trace_drawing = false
 	challenge_typing_index = 0
 	challenge_typed_characters = ""
 	challenge_definition = null
@@ -1434,6 +1437,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	challenge_owner = 0
 	challenge_skill = ""
 	challenge_trace_points.clear()
+	challenge_trace_drawing = false
 	challenge_target_points.clear()
 	update_trace_canvas()
 
@@ -3687,6 +3691,7 @@ func receive_network_state(state: Dictionary) -> void:
 	var incoming_challenge_skill := str(state["challenge_skill"])
 	if challenge_owner != incoming_challenge_owner or challenge_skill != incoming_challenge_skill:
 		challenge_trace_points.clear()
+		challenge_trace_drawing = false
 		challenge_definition = null
 	challenge_owner = incoming_challenge_owner
 	challenge_skill = incoming_challenge_skill
@@ -4041,6 +4046,7 @@ func reset_match_runtime_state() -> void:
 	challenge_answer = ""
 	challenge_typed_characters = ""
 	challenge_trace_points.clear()
+	challenge_trace_drawing = false
 	challenge_target_points.clear()
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
@@ -4974,13 +4980,19 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and challenge_owner != 0 and _is_trace_challenge():
 		if network_mode == "host" and challenge_owner != 1:
 			return
-		if challenge_trace_canvas == null or not challenge_trace_canvas.get_global_rect().has_point(event.position):
+		if event.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if event.pressed:
+			if challenge_trace_canvas == null or not challenge_trace_canvas.get_global_rect().has_point(event.position):
+				return
 			challenge_trace_points.clear()
+			challenge_trace_drawing = true
 			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
 			update_trace_canvas()
 		else:
+			if not challenge_trace_drawing:
+				return
+			challenge_trace_drawing = false
 			if dedicated_connection and dedicated_connection.has_pending_join():
 				dedicated_connection.send_event("challenge_trace", challenge_trace_points)
 				return
@@ -4990,7 +5002,7 @@ func _input(event: InputEvent) -> void:
 			var trace_result := evaluate_trace_result()
 			end_trace_challenge_from_result(trace_result)
 		return
-	if event is InputEventMouseMotion and challenge_owner != 0 and _is_trace_challenge() and event.button_mask != 0:
+	if event is InputEventMouseMotion and challenge_owner != 0 and _is_trace_challenge() and challenge_trace_drawing and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 		if network_mode == "host" and challenge_owner != 1:
 			return
 		if challenge_trace_canvas != null and challenge_trace_canvas.get_global_rect().has_point(event.position):
