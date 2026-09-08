@@ -1,0 +1,6 @@
+interface:
+  display_name: "スキルアイコン用プロンプト"
+  short_description: "既存規格に沿った外部画像生成AI用プロンプトを作成"
+  default_prompt: "Use $create-skill-icon-prompt to create a prompt for 打鍵士の新スキル『金鍵落とし』のアイコン。"
+policy:
+  allow_implicit_invocation: true
