@@ -68,8 +68,7 @@ const PLAYER_SNAPSHOT_KEYS := [
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
-	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "interrupt_gauge",
-	"interrupt_gauge_max", "interrupt_gauge_display",
+	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown",
 ]
 const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin"]
 const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time"]

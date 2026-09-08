@@ -18,8 +18,6 @@ const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const SKILL3_COOLDOWN := 3.0
-const TYPING_INTERRUPT_GAUGE := 30.0
-const BIG_INTERRUPT_GAUGE := 50.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
 const MAX_PROJECTILES := 320
@@ -201,9 +199,6 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	var challenge := _make_challenge(slot, tier)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge_max"] = BIG_INTERRUPT_GAUGE if tier == "big" or tier == "skill3" else TYPING_INTERRUPT_GAUGE
-	player["interrupt_gauge"] = player["interrupt_gauge_max"]
-	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	state["players"][slot] = player
 	challenges[slot] = challenge
 	state["challenges"] = challenges
@@ -349,8 +344,6 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	player["focused"] = false
 	player["challenge_total_time"] = float(player.get("challenge_total_time", 0.0)) + float(challenge["elapsed"])
 	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge"] = 0.0
-	player["interrupt_gauge_max"] = 0.0
 	if tier == "skill3":
 		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN
 	elif tier == "big":
@@ -628,19 +621,13 @@ func _update_hammer_spins(delta: float) -> void:
 		else:
 			state["hammer_spins"][index] = spin
 
-func _apply_damage(target_slot: int, damage: int, attack_name: String) -> void:
+func _apply_damage(target_slot: int, damage: int, _attack_name: String) -> void:
 	if bool(state["match_over"]):
 		return
 	var target: Dictionary = state["players"][target_slot]
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
 	state["players"][target_slot] = target
-	if not _challenge_for(target_slot).is_empty():
-		target["interrupt_gauge"] = maxf(0.0, float(target["interrupt_gauge"]) - damage)
-		target["interrupt_gauge_display"] = target["interrupt_gauge"]
-		state["players"][target_slot] = target
-		if float(target["interrupt_gauge"]) <= 0.0:
-			_end_challenge(target_slot, false, 0, "%sで中断ゲージが尽きた。課題は失敗した。" % attack_name)
 	if int(target["hp"]) <= 0:
 		state["match_over"] = true
 		state["winner_id"] = _other(target_slot)

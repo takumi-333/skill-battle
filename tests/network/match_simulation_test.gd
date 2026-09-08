@@ -8,8 +8,8 @@ func _init() -> void:
 	_test_chanter_skill2_specification()
 	_test_chanter_skill1_candidate_and_skill3()
 	_test_chanter_skill1_timeline()
-	_test_focus_interruption()
-	_test_simultaneous_challenges_and_individual_interruption()
+	_test_damage_does_not_interrupt_focus()
+	_test_damage_does_not_interrupt_simultaneous_challenges()
 	_test_challenge_miss_sequence_and_snapshot()
 	_test_session_event_deduplication()
 	_test_session_ready_start()
@@ -236,7 +236,7 @@ func _test_chanter_skill1_timeline() -> void:
 	assert(failure_simulation.state["challenges"].is_empty())
 	assert(failure_simulation.state["magic_zones"].is_empty())
 
-func _test_focus_interruption() -> void:
+func _test_damage_does_not_interrupt_focus() -> void:
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(2, 0, "typist_trident")
 	simulation.state["players"][1]["position"] = Vector2(100, 100)
@@ -246,9 +246,10 @@ func _test_focus_interruption() -> void:
 	for index in 3:
 		simulation.handle_event(1, {"type": "attack"})
 		simulation.state["players"][1]["attack_cooldown"] = 0.0
-	assert(simulation.state["challenges"].is_empty())
+	assert(simulation.state["challenges"].has(2))
+	assert(bool(simulation.state["players"][2]["focused"]))
 
-func _test_simultaneous_challenges_and_individual_interruption() -> void:
+func _test_damage_does_not_interrupt_simultaneous_challenges() -> void:
 	var simulation := MatchSimulation.new()
 	assert(simulation.handle_event(1, {"type": "small_skill"}))
 	assert(simulation.handle_event(2, {"type": "small_skill"}))
@@ -256,10 +257,11 @@ func _test_simultaneous_challenges_and_individual_interruption() -> void:
 	assert(bool(simulation.state["players"][1]["focused"]))
 	assert(bool(simulation.state["players"][2]["focused"]))
 	simulation.call("_apply_damage", 1, 30, "test")
-	assert(not simulation.state["challenges"].has(1))
+	assert(simulation.state["challenges"].has(1))
 	assert(simulation.state["challenges"].has(2))
 	_complete_arithmetic(simulation, 2)
-	assert(simulation.state["challenges"].is_empty())
+	assert(simulation.state["challenges"].has(1))
+	assert(not simulation.state["challenges"].has(2))
 
 func _test_challenge_miss_sequence_and_snapshot() -> void:
 	var simulation := MatchSimulation.new()
@@ -286,6 +288,7 @@ func _test_snapshot_metadata_and_recipient_filtering() -> void:
 	assert(not (snapshot["challenges"][1] as Dictionary).has("answer"))
 	assert(not (snapshot["players"][1] as Dictionary).has("normal_damage"))
 	assert(not (snapshot["players"][1] as Dictionary).has("attack_damage_buff"))
+	assert(not (snapshot["players"][1] as Dictionary).has("interrupt_gauge"))
 	assert(is_equal_approx(MatchProtocol.TICK_SECONDS, 1.0 / 60.0))
 
 

@@ -267,8 +267,6 @@ const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
 const TYPIST_SKILL3_HAMMER_HIT_INTERVAL := 0.28
 const TYPIST_SKILL3_KEYCAP_INTERVAL := 0.5
 const SKILL_PROJECTILE_RADIUS := 10.0
-const TYPING_INTERRUPT_GAUGE := 30.0
-const INTERRUPT_DISPLAY_SPEED := 180.0
 const BIG_CHALLENGE_LIMIT := 10.0
 const TRIDENT_CHALLENGE_LIMIT := 8.0
 const KEYCAP_II_CHALLENGE_LIMIT := 7.0
@@ -951,9 +949,6 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	player["invisible_flicker"] = maxf(0.0, float(player.get("invisible_flicker", 0.0)) - delta)
 	if float(player["invisible_time"]) > 0.0 and float(player["invisible_flicker"]) <= 0.0:
 		player["invisible_flicker"] = 2.5
-	var shown_gauge: float = float(player["interrupt_gauge_display"])
-	var target_gauge: float = float(player["interrupt_gauge"])
-	player["interrupt_gauge_display"] = move_toward(shown_gauge, target_gauge, INTERRUPT_DISPLAY_SPEED * delta)
 	players[player_id] = player
 
 
@@ -1014,9 +1009,6 @@ func start_skill3(owner_id: int) -> void:
 		challenge_target_points = make_trace_target(false, 3.5)
 		player["focused"] = true
 		player["challenge_elapsed"] = 0.0
-		player["interrupt_gauge_max"] = 50.0
-		player["interrupt_gauge"] = 50.0
-		player["interrupt_gauge_display"] = 50.0
 		players[owner_id] = player
 		set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
 		typing_input.visible = false
@@ -1038,9 +1030,6 @@ func start_skill3(owner_id: int) -> void:
 	challenge_trace_points.clear()
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge_max"] = TYPING_INTERRUPT_GAUGE
-	player["interrupt_gauge"] = TYPING_INTERRUPT_GAUGE
-	player["interrupt_gauge_display"] = TYPING_INTERRUPT_GAUGE
 	players[owner_id] = player
 	set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
 	typing_input.visible = true
@@ -1097,9 +1086,6 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 		challenge_target_points = make_trace_target(is_big, 1.5 if not is_big and str(player.get("small_skill_id", "")) == "chanter_small_1" else 0.0)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge_max"] = 50.0 if is_big else TYPING_INTERRUPT_GAUGE
-	player["interrupt_gauge"] = player["interrupt_gauge_max"]
-	player["interrupt_gauge_display"] = player["interrupt_gauge_max"]
 	players[owner_id] = player
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
@@ -1355,8 +1341,6 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
-	player["interrupt_gauge"] = 0.0
-	player["interrupt_gauge_max"] = 0.0
 	if is_skill3:
 		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN
 	elif is_big:
@@ -1949,40 +1933,13 @@ func clamp_to_arena(position_value: Vector2) -> Vector2:
 	)
 
 
-func apply_damage(target_id: int, damage: int, attack_name: String) -> void:
+func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 	var target: Dictionary = players[target_id]
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
-	if bool(target["focused"]):
-		var new_gauge: float = maxf(0.0, float(target["interrupt_gauge"]) - float(damage))
-		target["interrupt_gauge"] = new_gauge
-		if new_gauge <= 0.0:
-			players[target_id] = target
-			interrupt_active_challenge(target_id, attack_name)
-			if int(target["hp"]) <= 0:
-				finish_match(2 if target_id == 1 else 1)
-			return
 	players[target_id] = target
 	if int(target["hp"]) <= 0:
 		finish_match(2 if target_id == 1 else 1)
-
-
-func interrupt_active_challenge(player_id: int, attack_name: String) -> void:
-	if challenge_owner == player_id:
-		end_active_challenge(false, 0, "%sで中断ゲージが尽きた。課題は失敗した。" % attack_name)
-		return
-	var player: Dictionary = players[player_id]
-	player["focused"] = false
-	player["challenge_elapsed"] = 0.0
-	player["interrupt_gauge"] = 0.0
-	player["interrupt_gauge_max"] = 0.0
-	player["small_cooldown"] = TYPING_SKILL_COOLDOWN
-	players[player_id] = player
-	set_challenge_overlay_visible(false)
-	challenge_owner = 0
-	challenge_target_points.clear()
-	update_trace_canvas()
-	status_text = "%sの集中は%sで中断された。" % [player["name"], attack_name]
 
 
 func finish_match(winner_id: int) -> void:
@@ -3998,9 +3955,6 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["invisible_flicker"] = 0.0
 	player["small_cooldown"] = 0.0
 	player["big_cooldown"] = 0.0
-	player["interrupt_gauge"] = 0.0
-	player["interrupt_gauge_max"] = 0.0
-	player["interrupt_gauge_display"] = 0.0
 	player["position"] = Vector2(200, ARENA.get_center().y) if player_id == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -4615,11 +4569,6 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	if player["attack_time"] > 0.0:
 		draw_normal_attack_effect(player, position_value, facing)
 		draw_debug_normal_attack_hit_area(position_value, facing)
-	if bool(player["focused"]) and float(player["interrupt_gauge_max"]) > 0.0:
-		var gauge_ratio: float = clampf(float(player["interrupt_gauge_display"]) / float(player["interrupt_gauge_max"]), 0.0, 1.0)
-		var gauge_rect := Rect2(position_value + Vector2(-30, -43), Vector2(60, 5))
-		draw_rect(gauge_rect, Color("070b14"), true)
-		draw_rect(Rect2(gauge_rect.position, Vector2(gauge_rect.size.x * gauge_ratio, gauge_rect.size.y)), Color("ffc45e"), true)
 
 
 func draw_player_silhouette(player: Dictionary) -> void:

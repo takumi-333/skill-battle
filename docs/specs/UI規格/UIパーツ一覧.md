@@ -17,7 +17,7 @@
 | `ui_status_connection` / `ui_button_ready` | `res://assets/ui/status_connection.png` / `button_ready.png` | `1891x831px` / `2172x724px` | 制作済み |
 | `ui_hud_player` / `ui_bar_hp` | `res://assets/ui/hud_player.png` / `bar_hp.png` | 各`2172x724px` | 制作済み |
 | `ui_slot_skill` / `ui_display_timer` | `res://assets/ui/slot_skill.png` / `display_timer.png` | `1254x1254px` / `1774x887px` | 制作済み |
-| `ui_gauge_focus_interrupt` / `ui_container_challenge` | `res://assets/ui/gauge_focus_interrupt.png` / `container_challenge.png` | `2172x724px` / `1672x941px` | 制作済み |
+| `ui_container_challenge` | `res://assets/ui/container_challenge.png` | `1672x941px` | 制作済み |
 | `ui_guide_controls` / `ui_toast_notification` | `res://assets/ui/guide_controls.png` / `toast_notification.png` | 各`2172x724px` | 制作済み |
 | `ui_modal_dialog` / `ui_card_result` | `res://assets/ui/modal_dialog.png` / `card_result.png` | `1672x941px` / `1024x1536px` | 制作済み |
 | `ui_icon_common_<name>` | `res://assets/ui/icon_common_set.png` | `1536x1024px` | 設定・招待・コピー・更新・チェック・ランダムの3列×2行シート |
@@ -116,7 +116,6 @@ Godotで `scenes/main.tscn` を開き、ルートの `MatchPrototype` ノード�
 | `ui_bar_hp` | HPバー | 可変幅。残量バーと被弾量を短時間残す遅延バーを持つ。 | 対戦 | 未作成 | 要制作 |
 | `ui_slot_skill` | スキルスロット | 基準サイズ：`64～88px`角。通常攻撃・小技・大技に共用し、使用可能、クールダウン、使用不可を表示する。 | 対戦 | 未作成 | 要制作 |
 | `ui_display_timer` | タイマー表示 | 上部中央用の数値表示部品。残り時間を表示する。 | 対戦 | 未作成 | 要制作 |
-| `ui_gauge_focus_interrupt` | 集中・中断ゲージ | 可変幅の帯型。使用中スキル名、課題進捗、中断耐性を表示する。 | 対戦 | 未作成 | 要制作 |
 | `ui_container_challenge` | 課題UIコンテナ | 課題別の内容を差し替える共通枠。画面中央下寄りに配置する。 | 対戦 | 未作成 | 要制作 |
 | `ui_guide_controls` | 操作ガイド | キーキャップ型アイコンと短い操作説明を表示する。可変幅。 | 練習、デバッグ、対戦 | 未作成 | 要制作 |
 | `ui_toast_notification` | 通知トースト | 上部中央に1件ずつ表示する可変幅パネル。成功、情報、警告、エラー。 | 全画面 | 未作成 | 要制作 |
