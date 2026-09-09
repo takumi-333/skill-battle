@@ -14,6 +14,7 @@ var pending_presentations: Array[Dictionary] = []
 var known_presentation_ids: Dictionary = {}
 const INPUT_STALE_TICKS := 15
 const READY_DURATION := 1.0
+const FINISH_DURATION := 2.0
 var event_sequences := {1: -1, 2: -1}
 var ready := {1: false, 2: false}
 var rematch_ready := {1: false, 2: false}
@@ -21,6 +22,7 @@ var result_lobby_slots := {1: false, 2: false}
 var phase := "lobby"
 var status := "対戦相手を待っています。"
 var countdown_remaining := 0.0
+var finish_remaining := 0.0
 
 func _init(id: String) -> void:
 	room_id = id
@@ -37,14 +39,15 @@ func leave(peer_id: int) -> bool:
 	if not peer_slots.has(peer_id):
 		return false
 	var slot: int = peer_slots[peer_id]
-	var was_match := phase == "match"
+	var was_active_match := phase in ["match", "finish"]
 	peer_slots.erase(peer_id)
 	peers.erase(slot)
 	ready[slot] = false
 	rematch_ready[slot] = false
-	if was_match:
+	if was_active_match:
 		phase = "result"
-		simulation.finish_by_disconnect(slot)
+		if not bool(simulation.state["match_over"]):
+			simulation.finish_by_disconnect(slot)
 		status = "対戦相手との接続が切れました。"
 	else:
 		if phase == "countdown":
@@ -154,6 +157,12 @@ func step(delta: float) -> void:
 			phase = "match"
 			status = "FIGHT"
 		return
+	if phase == "finish":
+		finish_remaining = maxf(0.0, finish_remaining - delta)
+		if finish_remaining <= 0.0:
+			phase = "result"
+			status = "試合終了"
+		return
 	if phase != "match":
 		return
 	simulation_tick += 1
@@ -164,8 +173,13 @@ func step(delta: float) -> void:
 	simulation.step(delta, active_inputs)
 	_collect_presentations()
 	if bool(simulation.state["match_over"]):
-		phase = "result"
-		status = "試合終了"
+		if _is_knockout():
+			phase = "finish"
+			finish_remaining = FINISH_DURATION
+			status = "決着！"
+		else:
+			phase = "result"
+			status = "試合終了"
 
 func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 	var recipient_phase := phase
@@ -177,12 +191,19 @@ func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 	value["result_lobby_slots"] = result_lobby_slots.duplicate()
 	value["connected_slots"] = peers.keys()
 	value["countdown_remaining"] = countdown_remaining
+	value["finish_remaining"] = finish_remaining
 	return value
+
+
+func _is_knockout() -> bool:
+	var players: Dictionary = simulation.state["players"]
+	return int(players[1]["hp"]) <= 0 or int(players[2]["hp"]) <= 0
 
 
 func _start_countdown() -> void:
 	phase = "countdown"
 	countdown_remaining = READY_DURATION
+	finish_remaining = 0.0
 	status = "READY"
 	inputs = {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}}
 	input_received_ticks = {1: -999999, 2: -999999}

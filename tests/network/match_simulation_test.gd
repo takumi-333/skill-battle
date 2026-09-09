@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_challenge_miss_sequence_and_snapshot()
 	_test_session_event_deduplication()
 	_test_session_ready_start()
+	_test_session_knockout_finish_phase()
 	_test_session_result_actions()
 	_test_session_disconnect_transitions()
 	_test_snapshot_metadata_and_recipient_filtering()
@@ -517,6 +518,28 @@ func _test_session_ready_start() -> void:
 	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
 	assert(is_equal_approx(float(session.simulation.state["time_remaining"]), 90.0))
+
+
+func _test_session_knockout_finish_phase() -> void:
+	var session := MatchSession.new("finish-room")
+	assert(session.join(11, 1) == 1)
+	assert(session.join(12, 2) == 2)
+	session.phase = "match"
+	session.simulation.call("_apply_damage", 2, 100, "test")
+	assert(bool(session.simulation.state["match_over"]))
+	assert(int(session.simulation.state["players"][2]["hp"]) == 0)
+	session.step(MatchProtocol.TICK_SECONDS)
+	assert(session.phase == "finish")
+	assert(is_equal_approx(float(session.make_snapshot()["finish_remaining"]), MatchSession.FINISH_DURATION))
+	assert(not session.submit_input(11, MatchProtocol.make_input(1, Vector2.RIGHT)))
+	assert(not session.submit_event(11, MatchProtocol.make_event(1, "small_skill")))
+	session.step(MatchSession.FINISH_DURATION)
+	assert(session.phase == "result")
+	var timeout_session := MatchSession.new("timeout-room")
+	timeout_session.phase = "match"
+	timeout_session.simulation.state["time_remaining"] = 0.0
+	timeout_session.step(MatchProtocol.TICK_SECONDS)
+	assert(timeout_session.phase == "result")
 
 
 func _test_session_result_actions() -> void:

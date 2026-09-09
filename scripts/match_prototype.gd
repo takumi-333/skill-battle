@@ -254,6 +254,8 @@ const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
 const MATCH_READY_DURATION := 1.0
 const MATCH_FIGHT_DISPLAY_DURATION := 0.75
+const MATCH_FINISH_DURATION := 2.0
+const MATCH_FINISH_TIME_SCALE := 0.20
 const BATTLE_BGM_NORMAL_VOLUME_DB := -8.0
 const BATTLE_BGM_FOCUS_VOLUME_DB := -19.0
 const BATTLE_BGM_FADE_OUT_SECONDS := 0.8
@@ -408,6 +410,8 @@ var hack_vision_overlay: ColorRect
 var phase: String = "lobby"
 var screen: String = "title"
 var countdown_remaining: float = 0.0
+var finish_remaining: float = 0.0
+var finish_visual_snapshot_captured := false
 var p1_selection: int = 0
 var p2_selection: int = 1
 var p1_ready: bool = false
@@ -893,12 +897,15 @@ func arithmetic_skill3_candidates() -> PackedStringArray:
 
 
 func _process(delta: float) -> void:
-	character_animation_elapsed += delta
-	challenge_miss_flash = maxf(0.0, challenge_miss_flash - delta)
-	challenge_shake = maxf(0.0, challenge_shake - delta)
-	screen_shake_time = maxf(0.0, screen_shake_time - delta)
-	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - delta)
-	update_match_start_prompt(delta)
+	var visual_delta := delta * (MATCH_FINISH_TIME_SCALE if phase == "finish" else 1.0)
+	character_animation_elapsed += visual_delta
+	challenge_miss_flash = maxf(0.0, challenge_miss_flash - visual_delta)
+	challenge_shake = maxf(0.0, challenge_shake - visual_delta)
+	screen_shake_time = maxf(0.0, screen_shake_time - visual_delta)
+	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - visual_delta)
+	if phase == "finish":
+		_advance_finish_visuals(visual_delta)
+	update_match_start_prompt(visual_delta)
 	update_battle_bgm_focus()
 	update_hack_vision_overlay()
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
@@ -932,6 +939,15 @@ func _process(delta: float) -> void:
 		status_text = "READY"
 		if countdown_remaining <= 0.0:
 			begin_match()
+		if network_mode == "host":
+			sync_network_state(delta)
+		update_hud()
+		queue_redraw()
+		return
+	if phase == "finish":
+		finish_remaining = maxf(0.0, finish_remaining - delta)
+		if finish_remaining <= 0.0:
+			show_result(match_state.winner_id)
 		if network_mode == "host":
 			sync_network_state(delta)
 		update_hud()
@@ -1072,9 +1088,8 @@ func try_attack(player_id: int) -> void:
 	var target_center := get_player_hitbox_center(target["position"])
 	if hit_area.intersects_player_hitbox(target_center, PLAYER_HITBOX_RADIUS_X, PLAYER_HITBOX_RADIUS_Y):
 		apply_damage(target_id, normal_attack_damage(player), "%sの斬撃" % player["name"])
-		status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
-		if target["hp"] <= 0:
-			finish_match(player_id)
+		if phase != "finish":
+			status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
 	else:
 		if award_hack_vision_miss(player_id):
 			status_text = "%sの空振りを解析。妨害ポイント +0.5" % player["name"]
@@ -2190,7 +2205,26 @@ func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 	target["hit_time"] = 0.20
 	players[target_id] = target
 	if int(target["hp"]) <= 0:
-		finish_match(2 if target_id == 1 else 1)
+		begin_knockout_finish(2 if target_id == 1 else 1)
+
+
+func begin_knockout_finish(winner_id: int) -> void:
+	match_state.match_over = true
+	match_state.winner_id = winner_id
+	phase = "finish"
+	finish_remaining = MATCH_FINISH_DURATION
+	finish_visual_snapshot_captured = true
+	arithmetic_point_collections.clear()
+	set_challenge_overlay_visible(false)
+	status_text = "%sの勝利！" % players[winner_id]["name"]
+
+
+func _advance_finish_visuals(visual_delta: float) -> void:
+	for player_id in players.keys():
+		var player: Dictionary = players[player_id]
+		player["hit_time"] = maxf(0.0, float(player.get("hit_time", 0.0)) - visual_delta)
+		players[player_id] = player
+	match_state.players = players
 
 
 func finish_match(winner_id: int, fade_out_bgm := false) -> void:
@@ -2222,7 +2256,12 @@ func reset_match() -> void:
 
 
 func show_result(winner_id: int) -> void:
+	var was_finish := phase == "finish"
 	phase = "result"
+	finish_remaining = 0.0
+	finish_visual_snapshot_captured = false
+	if was_finish:
+		stop_battle_bgm()
 	var first: Dictionary = players[1]
 	var second: Dictionary = players[2]
 	var winner_name := result_player_display_name(winner_id)
@@ -2868,10 +2907,15 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	var previous_phase := phase
 	phase = str(snapshot.get("phase", "lobby"))
 	countdown_remaining = float(snapshot.get("countdown_remaining", 0.0))
+	finish_remaining = float(snapshot.get("finish_remaining", 0.0))
+	if phase == "finish" and previous_phase != "finish":
+		finish_visual_snapshot_captured = false
+	elif phase != "finish":
+		finish_visual_snapshot_captured = false
 	if previous_phase == "countdown" and phase == "match":
 		match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
 		play_battle_bgm()
-	elif previous_phase == "match" and phase == "result":
+	elif previous_phase in ["match", "finish"] and phase == "result":
 		stop_battle_bgm(match_state.time_remaining <= 0.0)
 	elif phase == "match" and not battle_bgm_player.playing:
 		play_battle_bgm()
@@ -2890,6 +2934,8 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	_update_dedicated_trident_screen_shake()
 	_apply_dedicated_challenges_snapshot(snapshot.get("challenges", {}))
+	if phase == "finish":
+		set_challenge_overlay_visible(false)
 	var first_snapshot := dedicated_current_snapshot.is_empty()
 	if first_snapshot:
 		dedicated_previous_snapshot = snapshot.duplicate(true)
@@ -2898,11 +2944,13 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	dedicated_current_snapshot = snapshot.duplicate(true)
 	dedicated_snapshot_received_msec = Time.get_ticks_msec()
 	_apply_dedicated_visual_snapshot(dedicated_current_snapshot if first_snapshot or phase != "match" else dedicated_previous_snapshot)
+	if phase == "finish":
+		finish_visual_snapshot_captured = true
 	if phase == "lobby":
 		if screen != "online_waiting":
 			apply_screen_state("online_waiting")
 		refresh_lobby_label()
-	elif phase in ["countdown", "match"] and screen != "match":
+	elif phase in ["countdown", "match", "finish"] and screen != "match":
 		apply_screen_state("match")
 	elif phase == "result" and screen != "result":
 		show_result(match_state.winner_id)
@@ -2912,7 +2960,7 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 
 
 func interpolate_dedicated_snapshot(delta: float) -> void:
-	if dedicated_current_snapshot.is_empty():
+	if dedicated_current_snapshot.is_empty() or phase == "finish":
 		return
 	var elapsed := float(Time.get_ticks_msec() - dedicated_snapshot_received_msec) / 1000.0
 	var ratio := clampf(elapsed / DEDICATED_INTERPOLATION_SECONDS, 0.0, 1.0)
@@ -2921,6 +2969,8 @@ func interpolate_dedicated_snapshot(delta: float) -> void:
 
 
 func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
+	if phase == "finish" and finish_visual_snapshot_captured:
+		return
 	var visual_players: Dictionary = snapshot.get("players", {})
 	if visual_players.is_empty():
 		return
@@ -2968,6 +3018,7 @@ func _clear_dedicated_snapshot_buffer() -> void:
 	dedicated_snapshot_received_msec = 0
 	dedicated_last_server_tick = -1
 	dedicated_input_acknowledgements.clear()
+	finish_visual_snapshot_captured = false
 	dedicated_hammer_presentation_angles.clear()
 
 
@@ -3777,9 +3828,7 @@ func _on_server_disconnected() -> void:
 
 
 func process_client_network_input(_delta: float) -> void:
-	if phase == "lobby":
-		return
-	if phase == "result":
+	if phase != "match":
 		return
 	var move := Vector2.ZERO
 	move.x = float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
@@ -3834,6 +3883,7 @@ func make_network_state(recipient_slot := 0) -> Dictionary:
 		"p1_ready": p1_ready,
 		"p2_ready": p2_ready,
 		"countdown_remaining": countdown_remaining,
+		"finish_remaining": finish_remaining,
 		"status_text": status_text,
 		"rematch_ready": result_rematch_ready,
 		"result_lobby_slots": result_lobby_slots,
@@ -3857,10 +3907,11 @@ func make_network_state(recipient_slot := 0) -> Dictionary:
 func receive_network_state(state: Dictionary) -> void:
 	if network_mode != "client":
 		return
+	var freeze_finish_visuals := phase == "finish" and finish_visual_snapshot_captured
 	var incoming_players: Dictionary = state["players"]
-	if network_target_players.is_empty():
+	if not freeze_finish_visuals and network_target_players.is_empty():
 		players = incoming_players.duplicate(true)
-	else:
+	elif not freeze_finish_visuals:
 		for player_id in [1, 2]:
 			var current_player: Dictionary = players[player_id]
 			var incoming_player: Dictionary = incoming_players[player_id]
@@ -3868,17 +3919,23 @@ func receive_network_state(state: Dictionary) -> void:
 			current_player = incoming_player.duplicate(true)
 			current_player["position"] = current_position
 			players[player_id] = current_player
-	network_target_players = incoming_players.duplicate(true)
+	if not freeze_finish_visuals:
+		network_target_players = incoming_players.duplicate(true)
 	match_state.players = players
 	match_state.time_remaining = float(state["time_remaining"])
 	match_state.match_over = bool(state["match_over"])
 	match_state.winner_id = int(state["winner_id"])
 	var previous_phase := phase
 	phase = str(state["phase"])
+	finish_remaining = float(state.get("finish_remaining", 0.0))
+	if phase == "finish" and previous_phase != "finish":
+		finish_visual_snapshot_captured = false
+	elif phase != "finish":
+		finish_visual_snapshot_captured = false
 	if previous_phase == "countdown" and phase == "match":
 		match_start_fight_remaining = MATCH_FIGHT_DISPLAY_DURATION
 		play_battle_bgm()
-	elif previous_phase == "match" and phase == "result":
+	elif previous_phase in ["match", "finish"] and phase == "result":
 		stop_battle_bgm(match_state.time_remaining <= 0.0)
 	elif phase == "match" and not battle_bgm_player.playing:
 		play_battle_bgm()
@@ -3891,29 +3948,32 @@ func receive_network_state(state: Dictionary) -> void:
 	status_text = str(state["status_text"])
 	result_rematch_ready = state.get("rematch_ready", {1: false, 2: false}).duplicate()
 	result_lobby_slots = state.get("result_lobby_slots", {1: false, 2: false}).duplicate()
-	skill_projectiles = MatchProtocol.dictionary_array(state.get("skill_projectiles", []))
-	magic_zones = MatchProtocol.dictionary_array(state.get("magic_zones", []))
-	shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
-	trident_impacts = MatchProtocol.dictionary_array(state.get("trident_impacts", []))
-	hammer_spins = MatchProtocol.dictionary_array(state.get("hammer_spins", []))
-	decoys = MatchProtocol.dictionary_array(state.get("decoys", []))
-	arithmetic_point_collections = MatchProtocol.dictionary_array(state.get("arithmetic_point_collections", []))
-	arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
-	arithmetic_flash_center = state.get("arithmetic_flash_center", Vector2.ZERO)
-	arithmetic_flash_owner_id = int(state.get("arithmetic_flash_owner_id", 0))
+	if not freeze_finish_visuals:
+		skill_projectiles = MatchProtocol.dictionary_array(state.get("skill_projectiles", []))
+		magic_zones = MatchProtocol.dictionary_array(state.get("magic_zones", []))
+		shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
+		trident_impacts = MatchProtocol.dictionary_array(state.get("trident_impacts", []))
+		hammer_spins = MatchProtocol.dictionary_array(state.get("hammer_spins", []))
+		decoys = MatchProtocol.dictionary_array(state.get("decoys", []))
+		arithmetic_point_collections = MatchProtocol.dictionary_array(state.get("arithmetic_point_collections", []))
+		arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
+		arithmetic_flash_center = state.get("arithmetic_flash_center", Vector2.ZERO)
+		arithmetic_flash_owner_id = int(state.get("arithmetic_flash_owner_id", 0))
 	var incoming_challenge_owner := int(state["challenge_owner"])
 	var incoming_challenge_skill := str(state["challenge_skill"])
 	if challenge_owner != incoming_challenge_owner or challenge_skill != incoming_challenge_skill:
 		challenge_trace_points.clear()
 		challenge_trace_drawing = false
 		challenge_definition = null
-	challenge_owner = incoming_challenge_owner
-	challenge_skill = incoming_challenge_skill
-	challenge_prompt = str(state["challenge_prompt"])
+	challenge_owner = 0 if phase == "finish" else incoming_challenge_owner
+	challenge_skill = "" if phase == "finish" else incoming_challenge_skill
+	challenge_prompt = "" if phase == "finish" else str(state["challenge_prompt"])
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
 	if challenge_skill == "skill3_typing":
 		challenge_answer = challenge_prompt
 	challenge_target_points = make_trace_target(challenge_skill.begins_with("big"), 3.5 if challenge_skill == "skill3_trace" else 0.0) if _is_trace_challenge() else PackedVector2Array()
+	if phase == "finish":
+		finish_visual_snapshot_captured = true
 	update_client_ui_from_state()
 
 
@@ -4210,6 +4270,8 @@ func get_idle_texture(visual_id: String) -> Texture2D:
 
 func begin_match() -> void:
 	phase = "match"
+	finish_remaining = 0.0
+	finish_visual_snapshot_captured = false
 	apply_screen_state("match")
 	match_state.match_over = false
 	match_state.time_remaining = MATCH_DURATION
@@ -4229,6 +4291,8 @@ func prepare_match_start() -> void:
 	configure_player(2, p2_selection)
 	phase = "countdown"
 	countdown_remaining = MATCH_READY_DURATION
+	finish_remaining = 0.0
+	finish_visual_snapshot_captured = false
 	match_start_fight_remaining = 0.0
 	status_text = "READY"
 	apply_screen_state("match")
@@ -4238,6 +4302,8 @@ func prepare_match_start() -> void:
 
 
 func reset_match_runtime_state() -> void:
+	finish_remaining = 0.0
+	finish_visual_snapshot_captured = false
 	skill_projectiles.clear()
 	for projectile_node in key_cap_projectile_nodes.values():
 		projectile_node.queue_free()

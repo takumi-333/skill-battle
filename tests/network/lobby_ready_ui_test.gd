@@ -119,7 +119,23 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	prototype.call("refresh_lobby_label")
 	assert(not start_button.visible)
 	prototype.set("local_player_id", 1)
-	var result_snapshot: Dictionary = typing_snapshot.duplicate(true)
+	var finish_snapshot: Dictionary = typing_snapshot.duplicate(true)
+	finish_snapshot["phase"] = "finish"
+	finish_snapshot["match_over"] = true
+	finish_snapshot["winner_id"] = 1
+	finish_snapshot["finish_remaining"] = 2.0
+	finish_snapshot["challenges"] = {}
+	finish_snapshot["players"][2]["hp"] = 0
+	finish_snapshot["players"][2]["hit_time"] = 0.2
+	prototype.call("_on_dedicated_snapshot_received", finish_snapshot)
+	assert(str(prototype.get("phase")) == "finish")
+	assert(str(prototype.get("screen")) == "match")
+	assert(is_equal_approx(float(prototype.get("finish_remaining")), 2.0))
+	assert(not (prototype.get_node("ChallengeLayer/Challenge") as Control).visible)
+	prototype.call("_process", 0.5)
+	var finish_players: Dictionary = prototype.get("players")
+	assert(is_equal_approx(float(finish_players[2]["hit_time"]), 0.1))
+	var result_snapshot: Dictionary = finish_snapshot.duplicate(true)
 	result_snapshot["phase"] = "result"
 	result_snapshot["match_over"] = true
 	result_snapshot["winner_id"] = 1
