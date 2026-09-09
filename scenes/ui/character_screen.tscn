@@ -253,10 +253,23 @@ layout_mode = 0
 offset_left = 660.0
 offset_top = 130.0
 offset_right = 1230.0
-offset_bottom = 220.0
+offset_bottom = 178.0
 theme_override_font_sizes/font_size = 20
 text = "Type faster to charge skills and release attacks."
 autowrap_mode = 3
+
+[node name="InterferencePointDescription" type="Label" parent="." unique_id=1782341159]
+layout_mode = 0
+offset_left = 660.0
+offset_top = 181.0
+offset_right = 1230.0
+offset_bottom = 238.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.64, 0.75, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "妨害ポイント\nデコイが相手の攻撃で消えるたび0.1獲得。通常攻撃の威力と攻撃速度が上昇。"
+autowrap_mode = 3
+visible = false
 
 [node name="Skill1Title" type="Label" parent="." unique_id=1959722266]
 layout_mode = 0

@@ -515,6 +515,7 @@ var character_background: TextureRect
 var character_portrait: TextureRect
 var character_name_label: Label
 var character_description_label: Label
+var character_interference_point_description_label: Label
 var character_saved_label: Label
 var character_save_texture: TextureRect
 var character_save_button: Button
@@ -3308,6 +3309,7 @@ func create_character_ui() -> void:
 	character_portrait = $UIRoot/Character/Portrait as TextureRect
 	character_name_label = $UIRoot/Character/Name as Label
 	character_description_label = $UIRoot/Character/Description as Label
+	character_interference_point_description_label = $UIRoot/Character/InterferencePointDescription as Label
 	character_saved_label = $UIRoot/Character/Saved as Label
 	character_save_texture = $UIRoot/Character/SaveTexture as TextureRect
 	character_save_button = $UIRoot/Character/SaveButton as Button
@@ -3413,6 +3415,7 @@ func update_character_screen() -> void:
 	var visual_index := ["typist", "arithmetician", "chanter"].find(visual_id)
 	character_name_label.text = character_names()[visual_index]
 	character_description_label.text = descriptions[visual_index]
+	character_interference_point_description_label.visible = visual_id == "arithmetician"
 	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
 	character_save_texture.texture = character_save_texture_for(visual_id)
 	character_home_texture.texture = character_save_texture_for(visual_id)
@@ -3539,15 +3542,30 @@ func skill_description(visual_id: String, skill_index: int, candidate_index: int
 		return "このスキルは現在準備中です。"
 	if visual_id == "typist":
 		if skill_index == 0:
-			return "鍵片を連続で打ち出し、素早い入力で攻撃を強化する打鍵士の基本スキル。"
+			return formatted_skill_description(2, 6, "入力した文字数だけ鍵片を作り、相手へ順に射出する。高得点なら発射直後の鍵片がゆるく相手を追尾する、素早い入力向けの基本技。")
 		if skill_index == 1 and candidate_index == 0:
-			return "三叉の衝撃を前方へ放ち、複数の敵をまとめて吹き飛ばす。"
+			return formatted_skill_description(5, 8, "長いワードを打ち切ると、正面と左右へ5方向の衝撃波を放つ。50点以上では周囲にも波動が発生する。相手の接近を拒む制圧技。")
 		if skill_index == 1:
-			return "追従する鍵片を連続発射し、入力の勢いを攻撃へ変える。"
-		return "大槌を振り回し、周囲の敵を遠くへ吹き飛ばす。"
+			return formatted_skill_description(7, 7, "入力した文字数だけ鍵片を作り、短い間隔で連続射出する。鍵片は追尾しないため、相手の移動先を読んで弾幕で逃げ道をふさごう。")
+		return formatted_skill_description(3, 20, "長いワードを打ち切ると、ハンマーを振り回しながら移動できる。高得点ほど持続時間とハンマーが大きくなり、60点以上では鍵片も射出する。")
 	if visual_id == "arithmetician":
-		return "数式を解き明かして魔力を収束させ、強力な術式を発動する。"
-	return "詠唱の軌跡をなぞって魔力を操り、周囲に持続する効果を残す。"
+		if skill_index == 0:
+			return formatted_skill_description(2, 7, "数式を解くと、多数の分身を発生させて相手を惑わせる。相手には本物と見分けにくく、破壊された分身から妨害ポイントを得られる。")
+		return formatted_skill_description(15, 10, "数式を解くと、一定時間だけ姿を消す。攻撃時と定期的な瞬間だけ相手に姿を見せるため、接近や離脱に向く。")
+	if skill_index == 0 and candidate_index == 0:
+		return formatted_skill_description(2, -1, "円の紋章をなぞると、相手の足元に月の魔方陣を3回展開する。少し後に光柱が現れ、魔方陣の中にいる相手へ継続ダメージを与える。")
+	if skill_index == 0:
+		return formatted_skill_description(3, -1, "渦巻きの紋章をなぞると、周囲16方向へ時計回りに月光弾を放つ。高得点ほど射撃する周回数が増える、近づかせないための弾幕技。")
+	if skill_index == 1:
+		return formatted_skill_description(6, -1, "大きな渦巻きの紋章をなぞると、上下から逆方向へ月光弾を同時に放つ。高得点ほど弾幕が長く続き、広い範囲の進路を断つ。")
+	return formatted_skill_description(8, -1, "複雑な渦巻きの紋章をなぞると、四方から月光弾を連続射出する。高得点ほど周回数が増え、密度の高い全方位弾幕になる。")
+
+
+func formatted_skill_description(cooldown_seconds: int, time_limit_seconds: int, description: String) -> String:
+	var header := "クールタイム：%d秒" % cooldown_seconds
+	if time_limit_seconds >= 0:
+		header += "\n制限時間：%d秒" % time_limit_seconds
+	return "%s\n\nスキル説明\n%s" % [header, description]
 
 
 func play_skill_panel_click() -> void:
