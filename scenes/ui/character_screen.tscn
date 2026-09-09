@@ -16,6 +16,9 @@ border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.08, 0.08, 0.12, 0.9)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_skill_detail_panel"]
+bg_color = Color(0.01, 0.015, 0.04, 0.72)
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_typist_face"]
 atlas = ExtResource("4_portrait_typist")
 region = Rect2(450, 0, 450, 450)
@@ -147,16 +150,6 @@ scale = Vector2(0.1, 0.1)
 texture = ExtResource("9_frame_typist")
 expand_mode = 1
 
-[node name="CharacterThemeBar" type="ColorRect" parent="." unique_id=203818448]
-z_index = 1
-layout_mode = 0
-offset_left = 668.0
-offset_top = 182.0
-offset_right = 1197.0
-offset_bottom = 190.0
-mouse_filter = 2
-color = Color(0.278431, 0.682353, 0.498039, 1)
-
 [node name="Selector" type="ScrollContainer" parent="." unique_id=1006994317]
 layout_mode = 0
 offset_left = 58.0
@@ -257,19 +250,6 @@ offset_bottom = 178.0
 theme_override_font_sizes/font_size = 20
 text = "Type faster to charge skills and release attacks."
 autowrap_mode = 3
-
-[node name="InterferencePointDescription" type="Label" parent="." unique_id=1782341159]
-layout_mode = 0
-offset_left = 660.0
-offset_top = 181.0
-offset_right = 1230.0
-offset_bottom = 238.0
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.64, 0.75, 1, 1)
-theme_override_font_sizes/font_size = 14
-text = "妨害ポイント\nデコイが相手の攻撃で消えるたび0.1獲得。通常攻撃の威力と攻撃速度が上昇。"
-autowrap_mode = 3
-visible = false
 
 [node name="Skill1Title" type="Label" parent="." unique_id=1959722266]
 layout_mode = 0
@@ -489,6 +469,7 @@ offset_top = 36.0
 offset_right = 1216.0
 offset_bottom = 684.0
 mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_skill_detail_panel")
 
 [node name="Frame" type="TextureRect" parent="SkillDetailOverlay/Panel" unique_id=203818452]
 z_index = 1

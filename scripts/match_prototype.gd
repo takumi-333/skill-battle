@@ -322,6 +322,7 @@ const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
 const BATTLE_BGM_SOUND: AudioStream = preload("res://assets/audio/battle_bgm_rising_tension.mp3")
 const SKILL_PANEL_CLICK_SOUND: AudioStream = preload("res://assets/audio/skill_panel_click.wav")
 const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
+const DAMAGE_HIT_SOUND: AudioStream = preload("res://assets/audio/damage_hit.wav")
 const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 const UI_LOGO: Texture2D = preload("res://assets/ui/logo_title.png")
 const UI_PANEL_FRAME: Texture2D = preload("res://assets/ui/panel_frame.png")
@@ -344,6 +345,7 @@ const SKILL_TYPIST_TRIDENT: Texture2D = preload("res://assets/ui/skill_icons/typ
 const SKILL_TYPIST_KEYCAP_II: Texture2D = preload("res://assets/ui/skill_icons/typist_keycap_ii.png")
 const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_infinite_series.png")
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
+const SKILL_ARITHMETICIAN_HACK_VISION: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_hack_vision.png")
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
 const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_2.png")
 const SKILL_CHANTER_EVENING_MOON: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_1.png")
@@ -522,14 +524,12 @@ var character_background: TextureRect
 var character_portrait: TextureRect
 var character_name_label: Label
 var character_description_label: Label
-var character_interference_point_description_label: Label
 var character_saved_label: Label
 var character_save_texture: TextureRect
 var character_save_button: Button
 var character_home_texture: TextureRect
 var character_selector_frame: TextureRect
 var character_content_frame: TextureRect
-var character_theme_bar: ColorRect
 var character_skill_rows: Array[HBoxContainer] = []
 var character_skill_selection: Dictionary = {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]}
 var character_selection: int = 0
@@ -809,6 +809,15 @@ func play_typist_typing_key_sound() -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = TYPIST_TYPING_KEY_SOUND
 	player.volume_db = -4.0
+	add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+func play_damage_hit_sound() -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = DAMAGE_HIT_SOUND
+	player.volume_db = 0.0
 	add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()
@@ -2018,7 +2027,7 @@ func update_hammer_spins(delta: float) -> void:
 		destroy_decoys_near_segment(owner_id, get_player_hitbox_center(owner["position"]), hammer_position, PLAYER_HITBOX_RADIUS_Y + 12.0)
 		var target_id := 2 if owner_id == 1 else 1
 		if float(spin["hit_timer"]) <= 0.0 and players.has(target_id) and is_point_near_hammer_segment(get_player_hitbox_center(players[target_id]["position"]), get_player_hitbox_center(owner["position"]), hammer_position, PLAYER_HITBOX_RADIUS_Y + 12.0):
-			apply_damage(target_id, 10 + floori(float(score) * 0.2), "ぶんまわし")
+			apply_damage(target_id, 10 + floori(float(score) * 0.2), "黄金大旋槌")
 			spin["hit_timer"] = TYPIST_SKILL3_HAMMER_HIT_INTERVAL
 		if score >= 60 and float(spin["keycap_timer"]) <= 0.0:
 			var facing: Vector2 = owner["facing"].normalized()
@@ -2204,6 +2213,7 @@ func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
 	players[target_id] = target
+	play_damage_hit_sound()
 	if int(target["hp"]) <= 0:
 		begin_knockout_finish(2 if target_id == 1 else 1)
 
@@ -2900,6 +2910,7 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	if incoming_tick < dedicated_last_server_tick:
 		return
 	dedicated_last_server_tick = incoming_tick
+	_play_dedicated_damage_hit_sounds(incoming_players)
 	match_state.players = incoming_players
 	match_state.time_remaining = float(snapshot.get("time_remaining", MATCH_DURATION))
 	match_state.match_over = bool(snapshot.get("match_over", false))
@@ -2966,6 +2977,19 @@ func interpolate_dedicated_snapshot(delta: float) -> void:
 	var ratio := clampf(elapsed / DEDICATED_INTERPOLATION_SECONDS, 0.0, 1.0)
 	_apply_dedicated_visual_snapshot(MatchProtocol.interpolate_visual_state(dedicated_previous_snapshot, dedicated_current_snapshot, ratio))
 	_advance_hammer_presentations(delta)
+
+
+func _play_dedicated_damage_hit_sounds(incoming_players: Dictionary) -> void:
+	if dedicated_current_snapshot.is_empty():
+		return
+	var previous_players: Dictionary = dedicated_current_snapshot.get("players", {})
+	for player_id in incoming_players:
+		var incoming_player: Dictionary = incoming_players[player_id]
+		var previous_player: Dictionary = previous_players.get(player_id, {})
+		if previous_player.is_empty():
+			continue
+		if int(incoming_player.get("hp", 0)) < int(previous_player.get("hp", 0)):
+			play_damage_hit_sound()
 
 
 func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
@@ -3437,14 +3461,12 @@ func create_character_ui() -> void:
 	character_portrait = $UIRoot/Character/Portrait as TextureRect
 	character_name_label = $UIRoot/Character/Name as Label
 	character_description_label = $UIRoot/Character/Description as Label
-	character_interference_point_description_label = $UIRoot/Character/InterferencePointDescription as Label
 	character_saved_label = $UIRoot/Character/Saved as Label
 	character_save_texture = $UIRoot/Character/SaveTexture as TextureRect
 	character_save_button = $UIRoot/Character/SaveButton as Button
 	character_home_texture = $UIRoot/Character/HomeTexture as TextureRect
 	character_selector_frame = $UIRoot/Character/SelectorFrame as TextureRect
 	character_content_frame = $UIRoot/Character/CharacterContentFrame as TextureRect
-	character_theme_bar = $UIRoot/Character/CharacterThemeBar as ColorRect
 	character_skill_detail_overlay = $UIRoot/Character/SkillDetailOverlay as Control
 	character_skill_detail_panel = $UIRoot/Character/SkillDetailOverlay/Panel as Panel
 	character_skill_detail_frame = $UIRoot/Character/SkillDetailOverlay/Panel/Frame as TextureRect
@@ -3525,14 +3547,6 @@ func character_selector_frame_for(visual_id: String) -> Texture2D:
 	return TYPIST_SELECTOR_FRAME
 
 
-func character_theme_color_for(visual_id: String) -> Color:
-	if visual_id == "arithmetician":
-		return ARITHMETICIAN_THEME_COLOR
-	if visual_id == "chanter":
-		return CHANTER_THEME_COLOR
-	return TYPIST_THEME_COLOR
-
-
 func update_character_screen() -> void:
 	if character_panel == null:
 		return
@@ -3543,13 +3557,11 @@ func update_character_screen() -> void:
 	var visual_index := ["typist", "arithmetician", "chanter"].find(visual_id)
 	character_name_label.text = character_names()[visual_index]
 	character_description_label.text = descriptions[visual_index]
-	character_interference_point_description_label.visible = visual_id == "arithmetician"
 	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
 	character_save_texture.texture = character_save_texture_for(visual_id)
 	character_home_texture.texture = character_save_texture_for(visual_id)
 	character_selector_frame.texture = character_selector_frame_for(visual_id)
 	character_content_frame.texture = character_selector_frame_for(visual_id)
-	character_theme_bar.color = character_theme_color_for(visual_id)
 	if character_skill_detail_overlay.visible:
 		update_skill_detail()
 	for skill_index in 3:
@@ -3582,7 +3594,7 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 		return ["三叉震槌", "鍵片追弾II", "未実装", "未実装", "未実装"]
 	if skill_index == 2:
 		if visual_id == "typist":
-			return ["ぶんまわし", "未実装", "未実装", "未実装", "未実装"]
+			return ["黄金大旋槌", "未実装", "未実装", "未実装", "未実装"]
 		return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "arithmetician":
 		return ["無限級数", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
@@ -3678,8 +3690,8 @@ func skill_description(visual_id: String, skill_index: int, candidate_index: int
 		return formatted_skill_description(3, 20, "長いワードを打ち切ると、ハンマーを振り回しながら移動できる。高得点ほど持続時間とハンマーが大きくなり、60点以上では鍵片も射出する。")
 	if visual_id == "arithmetician":
 		if skill_index == 0:
-			return formatted_skill_description(2, 7, "数式を解くと、多数の分身を発生させて相手を惑わせる。相手には本物と見分けにくく、破壊された分身から妨害ポイントを得られる。")
-		return formatted_skill_description(15, 10, "数式を解くと、一定時間だけ姿を消す。攻撃時と定期的な瞬間だけ相手に姿を見せるため、接近や離脱に向く。")
+			return formatted_skill_description(2, 7, "数式を解くと、多数の分身を発生させて相手を惑わせる。相手には本物と見分けにくく、相手の攻撃でデコイが消えるたびに妨害ポイントを0.1獲得する。")
+		return formatted_skill_description(15, 10, "数式を解くと、一定時間だけ姿を消す。攻撃時と定期的な瞬間だけ相手に姿を見せるため、接近や離脱に向く。このスキルでは妨害ポイントを獲得しない。")
 	if skill_index == 0 and candidate_index == 0:
 		return formatted_skill_description(2, -1, "円の紋章をなぞると、相手の足元に月の魔方陣を3回展開する。少し後に光柱が現れ、魔方陣の中にいる相手へ継続ダメージを与える。")
 	if skill_index == 0:
@@ -4441,7 +4453,7 @@ func update_challenge_ui(elapsed: float) -> void:
 	var challenge_player: Dictionary = players[challenge_owner] if challenge_owner in players else {}
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	if challenge_skill == "skill3_typing":
-		skill_name = "ぶんまわし（スキル3）"
+		skill_name = "黄金大旋槌（スキル3）"
 	elif challenge_skill == "skill3_arithmetic_hack_vision":
 		skill_name = "視覚妨害（ハックビジョン）"
 	elif challenge_skill == "skill3_trace":
@@ -4613,7 +4625,11 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 			return SKILL_TYPIST_HAMMER if selected_index == 0 else SKILL_EMPTY_ICON
 		return SKILL_EMPTY_ICON
 	if visual_id == "arithmetician":
-		return SKILL_ARITHMETICIAN_INFINITE_SERIES if skill_index == 0 else SKILL_ARITHMETICIAN_CONVERGENCE
+		if skill_index == 0:
+			return SKILL_ARITHMETICIAN_INFINITE_SERIES
+		if skill_index == 1:
+			return SKILL_ARITHMETICIAN_CONVERGENCE
+		return SKILL_ARITHMETICIAN_HACK_VISION
 	if visual_id == "chanter":
 		if skill_index == 0:
 			return SKILL_CHANTER_EVENING_MOON if selected_index == 1 else SKILL_CHANTER_CIRCLE_DESCENT

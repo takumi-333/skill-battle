@@ -800,7 +800,7 @@ func _update_hammer_spins(delta: float) -> void:
 		_destroy_decoys_near_segment(owner, Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0)
 		var target := _other(owner)
 		if float(spin["hit_timer"]) <= 0.0 and _point_hits_segment(Vector2(state["players"][target]["position"]), Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0):
-			_apply_damage(target, 10 + floori(float(spin["score"]) * 0.2), "ぶんまわし")
+			_apply_damage(target, 10 + floori(float(spin["score"]) * 0.2), "黄金大旋槌")
 			spin["hit_timer"] = 0.28
 		if int(spin["score"]) >= 60 and float(spin["keycap_timer"]) <= 0.0:
 			if state["skill_projectiles"].size() < MAX_PROJECTILES:
