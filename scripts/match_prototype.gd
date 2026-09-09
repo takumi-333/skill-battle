@@ -248,7 +248,7 @@ const NORMAL_ATTACK_OUTER_RANGE := SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 const NORMAL_ATTACK_HAND_OFFSET := 10.0
 const WEAPON_HANDLE_UV := Vector2(0.07, 0.94)
 const WEAPON_TIP_UV := Vector2(0.93, 0.07)
-const ATTACK_COOLDOWN := 0.5
+const ATTACK_COOLDOWN := 5.0
 const ATTACK_DURATION := 0.28
 const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
@@ -4212,7 +4212,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["name"] = user_display_name if is_local_player else names[selection]
 	player["has_display_name"] = is_local_player
 	player["color"] = colors[selection]
-	player["normal_damage"] = 12 if selection == 0 else (10 if selection == 1 else 11)
+	player["normal_damage"] = 3 if selection == 0 else (1 if selection == 1 else 2)
 	player["hp"] = 100
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
