@@ -38,6 +38,10 @@ const ARITHMETICIAN_DECOY_NOISE_DURATION := 0.12
 const ARITHMETICIAN_FLASH_DURATION := 0.2
 const ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL := 2.5
 const ARITHMETICIAN_DECOY_HIT_RADIUS := 30.0
+const ARITHMETICIAN_DECOY_INTERFERENCE_POINTS := 0.1
+const ARITHMETICIAN_POINT_COLLECTION_WAIT := 1.0
+const ARITHMETICIAN_POINT_COLLECTION_SPEED := 620.0
+const ARITHMETICIAN_POINT_COLLECTION_ARRIVAL_DISTANCE := 18.0
 
 const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
@@ -71,6 +75,7 @@ func reset() -> void:
 		"trident_impacts": [],
 		"decoys": [],
 		"arithmetic_flashes": [],
+		"arithmetic_point_collections": [],
 		"hammer_spins": [],
 	}
 	configure_loadout(1, 0, "typist_trident")
@@ -142,6 +147,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	_update_hammer_spins(delta)
 	_update_decoys(delta)
 	_update_arithmetic_flashes(delta)
+	_update_arithmetic_point_collections(delta)
 	if float(state["time_remaining"]) <= 0.0 and not bool(state["match_over"]):
 		_finish_by_hp()
 
@@ -149,6 +155,7 @@ func finish_by_disconnect(leaving_slot: int) -> void:
 	state["match_over"] = true
 	state["winner_id"] = 2 if leaving_slot == 1 else 1
 	state["status_text"] = "対戦相手との接続が切れました。"
+	state["arithmetic_point_collections"].clear()
 
 func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 	var player: Dictionary = state["players"][slot]
@@ -597,8 +604,7 @@ func _destroy_decoy_at_index(index: int) -> void:
 	var player: Dictionary = state["players"][owner]
 	if str(player.get("character_id", "")) != "arithmetic":
 		return
-	player["arithmetic_interference_multiplier"] = snappedf(float(player.get("arithmetic_interference_multiplier", 1.0)) + 0.1, 0.1)
-	state["players"][owner] = player
+	state["arithmetic_point_collections"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(decoy["position"]), "amount": ARITHMETICIAN_DECOY_INTERFERENCE_POINTS, "wait_time": ARITHMETICIAN_POINT_COLLECTION_WAIT})
 
 func _update_decoys(delta: float) -> void:
 	for index in range(state["decoys"].size() - 1, -1, -1):
@@ -630,6 +636,30 @@ func _update_arithmetic_flashes(delta: float) -> void:
 			state["arithmetic_flashes"].remove_at(index)
 		else:
 			state["arithmetic_flashes"][index] = flash
+
+func _update_arithmetic_point_collections(delta: float) -> void:
+	for index in range(state["arithmetic_point_collections"].size() - 1, -1, -1):
+		var collection: Dictionary = state["arithmetic_point_collections"][index]
+		var owner := int(collection.get("owner_id", 0))
+		if not state["players"].has(owner):
+			state["arithmetic_point_collections"].remove_at(index)
+			continue
+		var previous_wait_time := float(collection.get("wait_time", 0.0))
+		var wait_time := maxf(0.0, previous_wait_time - delta)
+		collection["wait_time"] = wait_time
+		if wait_time > 0.0:
+			state["arithmetic_point_collections"][index] = collection
+			continue
+		var player: Dictionary = state["players"][owner]
+		var target := Vector2(player["position"]) + Vector2(0.0, -18.0)
+		var flight_delta := maxf(0.0, delta - previous_wait_time)
+		collection["position"] = Vector2(collection["position"]).move_toward(target, ARITHMETICIAN_POINT_COLLECTION_SPEED * flight_delta)
+		if Vector2(collection["position"]).distance_to(target) > ARITHMETICIAN_POINT_COLLECTION_ARRIVAL_DISTANCE:
+			state["arithmetic_point_collections"][index] = collection
+			continue
+		player["arithmetic_interference_multiplier"] = snappedf(float(player.get("arithmetic_interference_multiplier", 1.0)) + float(collection.get("amount", 0.0)), 0.1)
+		state["players"][owner] = player
+		state["arithmetic_point_collections"].remove_at(index)
 
 func _spawn_zone(owner: int, score: int, delay: float, duration: float) -> void:
 	state["magic_zones"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2.ZERO, "lifetime": 0.0, "active_duration": duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": 1.0 / 60.0, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 1 + roundi(float(score) * 0.06), "spawned": false})
@@ -754,9 +784,11 @@ func _apply_damage(target_slot: int, damage: int, _attack_name: String) -> void:
 		state["match_over"] = true
 		state["winner_id"] = _other(target_slot)
 		state["status_text"] = "%sの勝利！" % str(state["players"][_other(target_slot)]["name"])
+		state["arithmetic_point_collections"].clear()
 
 func _finish_by_hp() -> void:
 	state["match_over"] = true
+	state["arithmetic_point_collections"].clear()
 	var p1 := int(state["players"][1]["hp"])
 	var p2 := int(state["players"][2]["hp"])
 	state["winner_id"] = 1 if p1 > p2 else (2 if p2 > p1 else 0)

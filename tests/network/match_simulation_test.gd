@@ -90,6 +90,40 @@ func _test_arithmetician_interference_points() -> void:
 	assert(owner_attack_simulation.handle_event(1, {"type": "attack"}))
 	assert(owner_attack_simulation.state["decoys"].size() == 1)
 	assert(is_equal_approx(float(owner_attack_simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
+	owner_attack_simulation._destroy_decoy_at_point(1, Vector2(180, 100))
+	assert(owner_attack_simulation.state["decoys"].size() == 1)
+	owner_attack_simulation._destroy_decoy_at_point(2, Vector2(180, 100))
+	assert(owner_attack_simulation.state["decoys"].is_empty())
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(owner_attack_simulation.state["arithmetic_point_collections"][0]["amount"]), 0.1))
+	assert(is_equal_approx(float(owner_attack_simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
+	owner_attack_simulation.step(0.99, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(owner_attack_simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
+	owner_attack_simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(180, 100)}]
+	owner_attack_simulation._destroy_decoy_at_point(2, Vector2(180, 100))
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 2)
+	owner_attack_simulation.step(0.21, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(float(owner_attack_simulation.state["arithmetic_point_collections"][0]["wait_time"]) > 0.7)
+	assert(is_equal_approx(float(owner_attack_simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.1))
+	owner_attack_simulation.state["arithmetic_point_collections"].clear()
+
+	owner_attack_simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(180, 100)}]
+	owner_attack_simulation._destroy_decoys_in_radius(1, Vector2(180, 100), 10.0)
+	assert(owner_attack_simulation.state["decoys"].size() == 1)
+	owner_attack_simulation._destroy_decoys_in_radius(2, Vector2(180, 100), 10.0)
+	assert(owner_attack_simulation.state["decoys"].is_empty())
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 1)
+	owner_attack_simulation.state["arithmetic_point_collections"].clear()
+
+	owner_attack_simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(180, 100)}]
+	owner_attack_simulation._destroy_decoys_near_segment(1, Vector2(100, 100), Vector2(200, 100), 10.0)
+	assert(owner_attack_simulation.state["decoys"].size() == 1)
+	owner_attack_simulation._destroy_decoys_near_segment(2, Vector2(100, 100), Vector2(200, 100), 10.0)
+	assert(owner_attack_simulation.state["decoys"].is_empty())
+	assert(owner_attack_simulation.state["arithmetic_point_collections"].size() == 1)
+	owner_attack_simulation.state["arithmetic_point_collections"].clear()
 
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(1, 1, "", "", 0, 0)
@@ -99,7 +133,8 @@ func _test_arithmetician_interference_points() -> void:
 	simulation.state["decoys"] = [{"owner_id": 1, "position": Vector2(100, 100)}]
 	assert(simulation.handle_event(2, {"type": "attack"}))
 	assert(simulation.state["decoys"].is_empty())
-	assert(is_equal_approx(float(simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.1))
+	assert(simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
 
 	simulation.state["players"][1]["arithmetic_interference_multiplier"] = 1.5
 	simulation.state["players"][1]["position"] = Vector2(100, 100)
@@ -128,9 +163,17 @@ func _test_arithmetician_skills() -> void:
 	assert(is_equal_approx(float(simulation.state["players"][1]["buff_speed_multiplier"]), 1.1))
 	assert(int(simulation.state["players"][1]["attack_damage_buff"]) == 5)
 	assert(simulation.state["arithmetic_flashes"].size() == 1)
+	simulation._destroy_decoy_at_point(2, Vector2(simulation.state["decoys"][0]["position"]))
+	assert(is_equal_approx(float(simulation.state["players"][1]["arithmetic_interference_multiplier"]), 1.0))
+	assert(simulation.state["arithmetic_point_collections"].size() == 1)
 	var flash_snapshot := MatchProtocol.snapshot("arithmetician-test", simulation.state, "match", "", 1)
 	assert(flash_snapshot["arithmetic_flashes"].size() == 1)
+	assert(flash_snapshot["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(flash_snapshot["arithmetic_point_collections"][0]["amount"]), 0.1))
+	assert(is_equal_approx(float(flash_snapshot["players"][1]["arithmetic_interference_multiplier"]), 1.0))
 
+	simulation.state["players"][1]["arithmetic_interference_multiplier"] = 1.0
+	simulation.state["arithmetic_point_collections"].clear()
 	for expected in [[0, 10, 20.0, Vector2(10.0, 500.0)], [59, 19, 20.0, Vector2(10.0, 500.0)], [60, 20, 30.0, Vector2(20.0, 700.0)], [69, 29, 30.0, Vector2(20.0, 700.0)], [70, 30, 30.0, Vector2(20.0, 700.0)], [79, 39, 30.0, Vector2(20.0, 700.0)], [80, 45, 40.0, Vector2(20.0, 1000.0)], [89, 54, 40.0, Vector2(20.0, 1000.0)], [90, 70, 40.0, Vector2(20.0, 1000.0)], [100, 80, 40.0, Vector2(20.0, 1000.0)]]:
 		simulation.state["players"][1]["position"] = Vector2(840, 387)
 		simulation._spawn_decoys(1, int(expected[0]))
@@ -378,18 +421,22 @@ func _test_visual_snapshot_interpolation() -> void:
 		"players": {1: {"position": Vector2(0, 0), "facing": Vector2.RIGHT}},
 		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(10, 0), "velocity": Vector2.RIGHT, "lifetime": 2.0}],
 		"magic_zones": [{"presentation_id": 8, "owner_id": 1, "position": Vector2.ZERO, "spawned": false}],
+		"arithmetic_point_collections": [{"presentation_id": 9, "owner_id": 1, "position": Vector2(10, 20), "amount": 0.1, "wait_time": 1.0}],
 		"shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
 	}
 	var current := {
 		"players": {1: {"position": Vector2(20, 0), "facing": Vector2.DOWN}},
 		"skill_projectiles": [{"projectile_id": 7, "owner_id": 1, "position": Vector2(30, 0), "velocity": Vector2.DOWN, "lifetime": 1.0}],
 		"magic_zones": [{"presentation_id": 8, "owner_id": 1, "position": Vector2(600, 400), "spawned": true}],
+		"arithmetic_point_collections": [{"presentation_id": 9, "owner_id": 1, "position": Vector2(30, 40), "amount": 0.1, "wait_time": 0.5}],
 		"shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
 	}
 	var blended := MatchProtocol.interpolate_visual_state(previous, current, 0.5)
 	assert(Vector2(blended["players"][1]["position"]).is_equal_approx(Vector2(10, 0)))
 	assert(Vector2(blended["skill_projectiles"][0]["position"]).is_equal_approx(Vector2(20, 0)))
 	assert(Vector2(blended["magic_zones"][0]["position"]).is_equal_approx(Vector2(600, 400)))
+	assert(Vector2(blended["arithmetic_point_collections"][0]["position"]).is_equal_approx(Vector2(20, 30)))
+	assert(is_equal_approx(float(blended["arithmetic_point_collections"][0]["wait_time"]), 0.75))
 	assert(is_equal_approx(float(blended["skill_projectiles"][0]["lifetime"]), 1.5))
 	assert(absf(MatchProtocol.lerp_angle_shortest(6.2, 0.1, 0.5) - 0.008407) < 0.02)
 

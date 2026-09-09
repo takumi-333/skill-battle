@@ -193,7 +193,7 @@ func take_presentations() -> Array[Dictionary]:
 	return value
 
 func _collect_presentations() -> void:
-	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "hammer_spins"]:
+	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins"]:
 		for entity in simulation.state.get(kind, []):
 			var item: Dictionary = entity
 			var presentation_id := int(item.get("presentation_id", 0))
@@ -204,7 +204,7 @@ func _collect_presentations() -> void:
 
 func _presentation_state(source: Dictionary) -> Dictionary:
 	var result := {}
-	for key in ["presentation_id", "owner_id", "visual_id", "position", "velocity", "facing", "origin", "center", "score", "angle", "lifetime", "delay", "duration", "elapsed", "released", "active_duration", "spawned", "chip", "key_cap"]:
+	for key in ["presentation_id", "owner_id", "visual_id", "position", "velocity", "facing", "origin", "center", "score", "angle", "lifetime", "delay", "duration", "elapsed", "released", "active_duration", "spawned", "chip", "key_cap", "amount", "wait_time"]:
 		if source.has(key):
 			result[key] = source[key]
 	return result

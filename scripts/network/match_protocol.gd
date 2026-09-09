@@ -68,10 +68,10 @@ const PLAYER_SNAPSHOT_KEYS := [
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
-	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown",
+	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "arithmetic_interference_multiplier",
 ]
 const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin"]
-const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time"]
+const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time", "wait_time"]
 
 static func snapshot(room_id: String, state: Dictionary, phase: String, status: String, recipient_slot := 0, server_tick := 0, input_acknowledgements: Dictionary = {}) -> Dictionary:
 	var challenges: Dictionary = {}
@@ -97,6 +97,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"trident_impacts": state.get("trident_impacts", []).duplicate(true),
 		"decoys": state.get("decoys", []).duplicate(true),
 		"arithmetic_flashes": state.get("arithmetic_flashes", []).duplicate(true),
+		"arithmetic_point_collections": state.get("arithmetic_point_collections", []).duplicate(true),
 		"hammer_spins": state.get("hammer_spins", []).duplicate(true),
 	}
 
@@ -115,7 +116,7 @@ static func interpolate_visual_state(previous: Dictionary, current: Dictionary, 
 	var value := current.duplicate(true)
 	var clamped_ratio := clampf(ratio, 0.0, 1.0)
 	value["players"] = _interpolate_players(previous.get("players", {}), current.get("players", {}), clamped_ratio)
-	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "hammer_spins"]:
+	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins"]:
 		value[entity_key] = _interpolate_entities(previous.get(entity_key, []), current.get(entity_key, []), clamped_ratio)
 	return value
 

@@ -291,6 +291,10 @@ const ARITHMETICIAN_DECOY_THIN_ALPHA := 0.22
 const ARITHMETICIAN_DECOY_NORMAL_ALPHA := 1.0
 const ARITHMETICIAN_FLASH_RADIUS := 1000.0
 const ARITHMETICIAN_FLASH_DURATION := 0.2
+const ARITHMETICIAN_DECOY_INTERFERENCE_POINTS := 0.1
+const ARITHMETICIAN_POINT_COLLECTION_WAIT := 1.0
+const ARITHMETICIAN_POINT_COLLECTION_SPEED := 620.0
+const ARITHMETICIAN_POINT_COLLECTION_ARRIVAL_DISTANCE := 18.0
 const TYPING_PROJECTILE_INTERVAL := 0.5
 const TYPING_HOMING_SCORE_THRESHOLD := 80
 const TYPING_HOMING_DURATION := 0.7
@@ -394,6 +398,7 @@ var shockwaves: Array[Dictionary] = []
 var trident_impacts: Array[Dictionary] = []
 var hammer_spins: Array[Dictionary] = []
 var decoys: Array[Dictionary] = []
+var arithmetic_point_collections: Array[Dictionary] = []
 var arithmetic_flash_time: float = 0.0
 var arithmetic_flash_center := Vector2.ZERO
 var arithmetic_flash_owner_id: int = 0
@@ -931,6 +936,7 @@ func _process(delta: float) -> void:
 	update_shockwaves(delta)
 	update_trident_impacts(delta)
 	update_decoys(delta)
+	update_arithmetic_point_collections(delta)
 	sync_key_cap_projectiles()
 	if network_mode == "host":
 		sync_network_state(delta)
@@ -1811,6 +1817,31 @@ func update_decoys(delta: float) -> void:
 			decoys[index] = decoy
 
 
+func update_arithmetic_point_collections(delta: float) -> void:
+	for index in range(arithmetic_point_collections.size() - 1, -1, -1):
+		var collection: Dictionary = arithmetic_point_collections[index]
+		var owner_id := int(collection.get("owner_id", 0))
+		if not players.has(owner_id):
+			arithmetic_point_collections.remove_at(index)
+			continue
+		var previous_wait_time := float(collection.get("wait_time", 0.0))
+		var wait_time := maxf(0.0, previous_wait_time - delta)
+		collection["wait_time"] = wait_time
+		if wait_time > 0.0:
+			arithmetic_point_collections[index] = collection
+			continue
+		var owner: Dictionary = players[owner_id]
+		var target := Vector2(owner["position"]) + Vector2(0.0, -18.0)
+		var flight_delta := maxf(0.0, delta - previous_wait_time)
+		collection["position"] = Vector2(collection["position"]).move_toward(target, ARITHMETICIAN_POINT_COLLECTION_SPEED * flight_delta)
+		if Vector2(collection["position"]).distance_to(target) > ARITHMETICIAN_POINT_COLLECTION_ARRIVAL_DISTANCE:
+			arithmetic_point_collections[index] = collection
+			continue
+		owner["arithmetic_interference_multiplier"] = snappedf(float(owner.get("arithmetic_interference_multiplier", 1.0)) + float(collection.get("amount", 0.0)), 0.1)
+		players[owner_id] = owner
+		arithmetic_point_collections.remove_at(index)
+
+
 func update_skill_projectiles(delta: float) -> void:
 	for index in range(skill_projectiles.size() - 1, -1, -1):
 		var projectile: Dictionary = skill_projectiles[index]
@@ -2048,8 +2079,7 @@ func destroy_decoy_at_index(index: int) -> void:
 	var owner: Dictionary = players[owner_id]
 	if str(owner.get("character_id", "")) != "arithmetic":
 		return
-	owner["arithmetic_interference_multiplier"] = snappedf(float(owner.get("arithmetic_interference_multiplier", 1.0)) + 0.1, 0.1)
-	players[owner_id] = owner
+	arithmetic_point_collections.append({"owner_id": owner_id, "position": Vector2(decoy["position"]), "amount": ARITHMETICIAN_DECOY_INTERFERENCE_POINTS, "wait_time": ARITHMETICIAN_POINT_COLLECTION_WAIT})
 
 
 func can_move_player_to(player_id: int, next_position: Vector2) -> bool:
@@ -2088,6 +2118,7 @@ func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 func finish_match(winner_id: int, fade_out_bgm := false) -> void:
 	match_state.match_over = true
 	match_state.winner_id = winner_id
+	arithmetic_point_collections.clear()
 	stop_battle_bgm(fade_out_bgm)
 	set_challenge_overlay_visible(false)
 	status_text = "%sの勝利！ Rキーで再戦できます。" % players[winner_id]["name"]
@@ -2100,6 +2131,7 @@ func finish_match_by_time() -> void:
 	if first_hp == second_hp:
 		match_state.match_over = true
 		match_state.winner_id = 0
+		arithmetic_point_collections.clear()
 		status_text = "時間切れ、引き分け！ Rキーで再戦できます。"
 		stop_battle_bgm(true)
 		show_result(0)
@@ -2821,6 +2853,7 @@ func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
 	_apply_dedicated_arithmetic_flashes(MatchProtocol.dictionary_array(snapshot.get("arithmetic_flashes", [])))
+	arithmetic_point_collections = MatchProtocol.dictionary_array(snapshot.get("arithmetic_point_collections", []))
 	hammer_spins = MatchProtocol.dictionary_array(snapshot.get("hammer_spins", []))
 
 func _apply_dedicated_arithmetic_flashes(flashes: Array[Dictionary]) -> void:
@@ -2940,6 +2973,14 @@ func receive_skill_presentation(presentation: Dictionary) -> void:
 	if kind == "arithmetic_flashes":
 		var flash: Dictionary = presentation.get("state", {})
 		_apply_dedicated_arithmetic_flashes([flash])
+		return
+	if kind == "arithmetic_point_collections":
+		var collection: Dictionary = presentation.get("state", {})
+		var collection_id := int(presentation.get("presentation_id", 0))
+		for existing in arithmetic_point_collections:
+			if int(existing.get("presentation_id", 0)) == collection_id:
+				return
+		arithmetic_point_collections.append(collection)
 		return
 	if kind != "hammer_spins":
 		return
@@ -3220,6 +3261,7 @@ func return_to_home() -> void:
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
+	arithmetic_point_collections.clear()
 	arithmetic_flash_time = 0.0
 	arithmetic_flash_center = Vector2.ZERO
 	arithmetic_flash_owner_id = 0
@@ -3706,6 +3748,7 @@ func make_network_state(recipient_slot := 0) -> Dictionary:
 		"trident_impacts": trident_impacts,
 		"hammer_spins": hammer_spins,
 		"decoys": decoys,
+		"arithmetic_point_collections": arithmetic_point_collections,
 		"arithmetic_flash_time": arithmetic_flash_time,
 		"arithmetic_flash_center": arithmetic_flash_center,
 		"arithmetic_flash_owner_id": arithmetic_flash_owner_id,
@@ -3759,6 +3802,7 @@ func receive_network_state(state: Dictionary) -> void:
 	trident_impacts = MatchProtocol.dictionary_array(state.get("trident_impacts", []))
 	hammer_spins = MatchProtocol.dictionary_array(state.get("hammer_spins", []))
 	decoys = MatchProtocol.dictionary_array(state.get("decoys", []))
+	arithmetic_point_collections = MatchProtocol.dictionary_array(state.get("arithmetic_point_collections", []))
 	arithmetic_flash_time = float(state.get("arithmetic_flash_time", 0.0))
 	arithmetic_flash_center = state.get("arithmetic_flash_center", Vector2.ZERO)
 	arithmetic_flash_owner_id = int(state.get("arithmetic_flash_owner_id", 0))
@@ -4112,6 +4156,7 @@ func reset_match_runtime_state() -> void:
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
 	decoys.clear()
+	arithmetic_point_collections.clear()
 	arithmetic_flash_time = 0.0
 	arithmetic_flash_center = Vector2.ZERO
 	arithmetic_flash_owner_id = 0
@@ -4475,6 +4520,8 @@ func _draw() -> void:
 		var decoy_owner_id := int(decoy["owner_id"])
 		var decoy_alpha := ARITHMETICIAN_DECOY_THIN_ALPHA if decoy_owner_id == local_player_id else ARITHMETICIAN_DECOY_NORMAL_ALPHA
 		draw_decoy(decoy, decoy_alpha)
+	for collection in arithmetic_point_collections:
+		draw_arithmetic_point_collection(collection)
 	# 光柱はキャラクター前面に描画し、柱内の人物だけを黒いシルエットで
 	# 描き直して、光の中に立っていることが分かるようにする。
 	for zone in magic_zones:
@@ -4933,6 +4980,17 @@ func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 		for strip_index in range(3):
 			var strip_y := sprite_rect.position.y + 12.0 + float(strip_index) * 17.0
 			draw_rect(Rect2(sprite_rect.position.x, strip_y, sprite_rect.size.x, 3.0), Color(0.35, 0.85, 1.0, 0.32 * noise_ratio * alpha), true)
+
+
+func draw_arithmetic_point_collection(collection: Dictionary) -> void:
+	var position_value := Vector2(collection.get("position", Vector2.ZERO))
+	var wait_ratio := clampf(float(collection.get("wait_time", 0.0)) / ARITHMETICIAN_POINT_COLLECTION_WAIT, 0.0, 1.0)
+	var amount := float(collection.get("amount", 0.0))
+	var text_color := Color(0.58, 0.86, 1.0, 0.96)
+	if wait_ratio > 0.0:
+		var pulse := 1.0 + sin(character_animation_elapsed * 5.0) * 0.06
+		draw_circle(position_value + Vector2(0.0, -40.0), 17.0 * pulse, Color(0.20, 0.58, 1.0, 0.16))
+	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-32.0, -34.0), "+%.1f" % amount, HORIZONTAL_ALIGNMENT_CENTER, 64.0, 16, text_color)
 
 
 func draw_arithmetic_flash() -> void:
