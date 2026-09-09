@@ -3409,7 +3409,7 @@ func update_character_screen() -> void:
 	var visual_id := character_visual_id()
 	character_background.texture = character_background_texture(visual_id)
 	character_portrait.texture = get_idle_texture(visual_id)
-	var descriptions: Array[String] = ["Type faster to charge skills and release attacks.", "Solve patterns and equations to shape powerful spells.", "Trace rhythms and chants to control lingering magic."]
+	var descriptions: Array[String] = ["タイピング能力で戦うファイター\nタイピングを正確に速く行うことで強くなる", "計算能力で戦うファイター\n敵を妨害する能力で、相手の妨害に成功するほど解析をすすめ、自身の力を向上させる", "紋章を正確になぞる能力で戦うファイター\n呪文の詠唱で弾幕を張ることに特化している"]
 	var visual_index := ["typist", "arithmetician", "chanter"].find(visual_id)
 	character_name_label.text = character_names()[visual_index]
 	character_description_label.text = descriptions[visual_index]
