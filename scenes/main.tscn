@@ -17,6 +17,7 @@
 [ext_resource type="PackedScene" uid="uid://ivc74gheh83m" path="res://scenes/ui/practice_screen.tscn" id="25_kmb1v"]
 [ext_resource type="PackedScene" uid="uid://dryw4nkuq3y4u" path="res://scenes/ui/debug_screen.tscn" id="26_fuf3a"]
 [ext_resource type="PackedScene" uid="uid://db64jtnbdduy2" path="res://scenes/ui/character_screen.tscn" id="27_character"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hack_vision_overlay.tscn" id="28_hack_vision"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jkv2x"]
 bg_color = Color(0, 0, 0, 0)
@@ -86,8 +87,6 @@ metadata/editor_ui_preview = true
 
 [node name="MenuBackground" parent="UIRoot" unique_id=901240895 instance=ExtResource("3_yq6so")]
 
-[node name="HUD" parent="UIRoot" unique_id=141761890 instance=ExtResource("5_fv21b")]
-
 [node name="MatchStartPrompt" parent="UIRoot" instance=ExtResource("6_start_prompt")]
 visible = false
 
@@ -117,6 +116,11 @@ visible = false
 theme_override_styles/panel = SubResource("StyleBoxFlat_yc10j")
 
 [node name="Character" parent="UIRoot" unique_id=1631461301 instance=ExtResource("27_character")]
+
+[node name="HUDLayer" type="CanvasLayer" parent="."]
+layer = 4
+
+[node name="HUD" parent="HUDLayer" unique_id=141761890 instance=ExtResource("5_fv21b")]
 
 [node name="ChallengeLayer" type="CanvasLayer" parent="." unique_id=470598353]
 layer = 2
@@ -189,3 +193,5 @@ volume_db = -7.0
 [node name="BattleBGMPlayer" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("18_battle_bgm")
 bus = &"BattleBGM"
+
+[node name="HackVision" parent="." instance=ExtResource("28_hack_vision")]

@@ -265,6 +265,8 @@ const BIG_TYPING_SKILL_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const TYPIST_SKILL3_COOLDOWN := 3.0
+const ARITHMETICIAN_HACK_VISION_COOLDOWN := 12.0
+const ARITHMETICIAN_HACK_VISION_CHALLENGE_LIMIT := 15.0
 const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
 const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
 const TYPIST_SKILL3_HAMMER_HIT_INTERVAL := 0.28
@@ -402,6 +404,7 @@ var arithmetic_point_collections: Array[Dictionary] = []
 var arithmetic_flash_time: float = 0.0
 var arithmetic_flash_center := Vector2.ZERO
 var arithmetic_flash_owner_id: int = 0
+var hack_vision_overlay: ColorRect
 var phase: String = "lobby"
 var screen: String = "title"
 var countdown_remaining: float = 0.0
@@ -583,7 +586,7 @@ var menu_background_root: Control
 @export var menu_layout: MenuLayoutData
 
 @onready var ui_root: CanvasLayer = $UIRoot
-@onready var hud_root: Control = $UIRoot/HUD
+@onready var hud_root: Control = $HUDLayer/HUD
 @onready var challenge_layer: CanvasLayer = $ChallengeLayer
 @onready var screen_manager: Node = $UIScreenManager
 
@@ -643,6 +646,8 @@ func _ready() -> void:
 	create_network_ui()
 	create_navigation_ui()
 	create_character_ui()
+	hack_vision_overlay = $HackVision/Overlay as ColorRect
+	hack_vision_overlay.visible = false
 	connect_existing_ui_clicks(self)
 	screen_manager.call("configure", {
 		"title": title_panel,
@@ -867,6 +872,12 @@ func create_challenge_definitions() -> void:
 	big_arithmetic.time_limit_seconds = BIG_CHALLENGE_LIMIT
 	big_arithmetic.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["arithmetic_big"] = big_arithmetic
+	var hack_vision_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
+	hack_vision_arithmetic.challenge_type = "arithmetic"
+	hack_vision_arithmetic.candidates = arithmetic_skill3_candidates()
+	hack_vision_arithmetic.time_limit_seconds = ARITHMETICIAN_HACK_VISION_CHALLENGE_LIMIT
+	hack_vision_arithmetic.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["arithmetic_skill3"] = hack_vision_arithmetic
 
 
 func arithmetic_skill1_candidates() -> PackedStringArray:
@@ -877,6 +888,10 @@ func arithmetic_skill2_candidates() -> PackedStringArray:
 	return PackedStringArray(["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255", "18 + 5 * 14", "7 + 6 * 8 + 15", "21 + 22 + 23 + 24", "176 + 248", "32 + 7 * 11", "9 + 5 * 12 + 18", "14 + 16 + 18 + 20", "187 + 326", "25 + 6 * 13", "8 + 9 * 7 + 14", "15 + 17 + 19 + 21"])
 
 
+func arithmetic_skill3_candidates() -> PackedStringArray:
+	return PackedStringArray(["33 * 44 + 16 * 6 + 29", "28 * 47 + 15 * 7 + 34", "36 * 42 + 18 * 5 + 27", "31 * 46 + 14 * 8 + 25", "27 * 53 + 17 * 6 + 32", "34 * 41 + 19 * 5 + 28", "29 * 48 + 16 * 7 + 31", "37 * 39 + 13 * 8 + 26", "32 * 45 + 17 * 6 + 35"])
+
+
 func _process(delta: float) -> void:
 	character_animation_elapsed += delta
 	challenge_miss_flash = maxf(0.0, challenge_miss_flash - delta)
@@ -885,6 +900,7 @@ func _process(delta: float) -> void:
 	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - delta)
 	update_match_start_prompt(delta)
 	update_battle_bgm_focus()
+	update_hack_vision_overlay()
 	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
 		if screen == "title":
 			title_animation_elapsed += delta
@@ -1017,6 +1033,9 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	player["small_cooldown"] = maxf(0.0, float(player["small_cooldown"]) - delta)
 	player["big_cooldown"] = maxf(0.0, float(player["big_cooldown"]) - delta)
 	player["skill3_cooldown"] = maxf(0.0, float(player.get("skill3_cooldown", 0.0)) - delta)
+	player["hack_vision_time"] = maxf(0.0, float(player.get("hack_vision_time", 0.0)) - delta)
+	if float(player["hack_vision_time"]) <= 0.0:
+		player["hack_vision_owner_id"] = 0
 	player["buff_time"] = maxf(0.0, float(player["buff_time"]) - delta)
 	if float(player["buff_time"]) <= 0.0:
 		player["attack_damage_buff"] = 0
@@ -1057,7 +1076,24 @@ func try_attack(player_id: int) -> void:
 		if target["hp"] <= 0:
 			finish_match(player_id)
 	else:
-		status_text = "%sは斬撃を振った。" % player["name"]
+		if award_hack_vision_miss(player_id):
+			status_text = "%sの空振りを解析。妨害ポイント +0.5" % player["name"]
+		else:
+			status_text = "%sは斬撃を振った。" % player["name"]
+
+
+func award_hack_vision_miss(attacker_id: int) -> bool:
+	var affected: Dictionary = players[attacker_id]
+	if float(affected.get("hack_vision_time", 0.0)) <= 0.0:
+		return false
+	var owner_id := int(affected.get("hack_vision_owner_id", 0))
+	if owner_id == attacker_id or not players.has(owner_id):
+		return false
+	var source: Dictionary = players[owner_id]
+	if str(source.get("character_id", "")) != "arithmetic":
+		return false
+	arithmetic_point_collections.append({"owner_id": owner_id, "position": Vector2(affected["position"]), "amount": 0.5, "wait_time": 0.0})
+	return true
 
 
 func start_small_skill(owner_id: int) -> void:
@@ -1073,6 +1109,29 @@ func start_skill3(owner_id: int) -> void:
 		return
 	var player: Dictionary = players[owner_id]
 	if bool(player["focused"]) or float(player.get("skill3_cooldown", 0.0)) > 0.0:
+		return
+	if str(player.get("character_id", "")) == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision":
+		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_skill3"]
+		challenge_owner = owner_id
+		challenge_skill = "skill3_arithmetic_hack_vision"
+		challenge_definition = arithmetic_definition
+		challenge_prompt = arithmetic_definition.candidates[randi_range(0, arithmetic_definition.candidates.size() - 1)] + " = ?"
+		challenge_answer = str(evaluate_arithmetic(challenge_prompt.trim_suffix(" = ?")))
+		challenge_typing_index = 0
+		challenge_typed_characters = ""
+		challenge_trace_points.clear()
+		player["focused"] = true
+		player["challenge_elapsed"] = 0.0
+		players[owner_id] = player
+		set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
+		typing_input.visible = true
+		challenge_trace_canvas.visible = false
+		typing_input.text = ""
+		if network_mode != "host" or owner_id == 1:
+			typing_input.grab_focus()
+		apply_challenge_layout("arithmetic")
+		status_text = "%sがスキル3の集中を開始！" % player["name"]
+		update_challenge_ui(0.0)
 		return
 	if str(player.get("character_id", "")) == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0":
 		challenge_owner = owner_id
@@ -1415,13 +1474,13 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	var owner_id: int = challenge_owner
 	var player: Dictionary = players[owner_id]
 	var is_big: bool = challenge_skill.begins_with("big")
-	var is_skill3: bool = challenge_skill == "skill3_typing" or challenge_skill == "skill3_trace"
+	var is_skill3: bool = challenge_skill == "skill3_typing" or challenge_skill == "skill3_trace" or challenge_skill == "skill3_arithmetic_hack_vision"
 	var challenge_time: float = float(player["challenge_elapsed"])
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
 	if is_skill3:
-		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN
+		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)
 	elif is_big:
 		player["big_cooldown"] = 10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 	else:
@@ -1475,6 +1534,16 @@ func spawn_typing_projectile(score: int) -> void:
 	})
 
 
+func spawn_hack_vision_projectile(owner_id: int, score: int) -> void:
+	var owner: Dictionary = players[owner_id]
+	var target_id := 2 if owner_id == 1 else 1
+	var direction := (Vector2(players[target_id]["position"]) - Vector2(owner["position"])).normalized()
+	if direction.length_squared() <= 0.0:
+		direction = Vector2(owner.get("facing", Vector2.RIGHT))
+	skill_projectiles.append({"projectile_id": next_projectile_id, "owner_id": owner_id, "position": get_player_hitbox_center(owner["position"]) + direction * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9})
+	next_projectile_id += 1
+
+
 func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 	var owner: Dictionary = players[owner_id]
 	var character_id: String = str(owner["character_id"])
@@ -1504,7 +1573,9 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			})
 			next_trident_impact_id += 1
 	elif character_id == "arithmetic":
-		if not is_big:
+		if challenge_skill == "skill3_arithmetic_hack_vision":
+			spawn_hack_vision_projectile(owner_id, score)
+		elif not is_big:
 			# 再発動時は、前回のデコイをすべて消してから新しく生成する。
 			decoys.clear()
 			var decoy_count := arithmetic_decoy_count(score)
@@ -1884,13 +1955,19 @@ func update_skill_projectiles(delta: float) -> void:
 		var target_id: int = 2 if owner_id == 1 else 1
 		var target: Dictionary = players[target_id]
 		var target_position: Vector2 = target["position"]
-		if destroy_decoy_at_point(owner_id, position_value, SKILL_PROJECTILE_RADIUS):
+		if not bool(projectile.get("hack_vision", false)) and destroy_decoy_at_point(owner_id, position_value, SKILL_PROJECTILE_RADIUS):
 			if not bool(projectile["piercing"]):
 				skill_projectiles.remove_at(index)
 				continue
 		if is_point_in_player_hitbox(position_value, target_position, SKILL_PROJECTILE_RADIUS):
-			apply_damage(target_id, int(projectile["damage"]), "ブレード弾")
-			status_text = "ブレード弾が%sに命中！" % target["name"]
+			if bool(projectile.get("hack_vision", false)):
+				target["hack_vision_time"] = maxf(float(target.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
+				target["hack_vision_owner_id"] = owner_id
+				players[target_id] = target
+				status_text = "%sの視界にノイズが走った！" % target["name"]
+			else:
+				apply_damage(target_id, int(projectile["damage"]), "ブレード弾")
+				status_text = "ブレード弾が%sに命中！" % target["name"]
 			if bool(projectile["piercing"]):
 				var projectile_velocity: Vector2 = projectile["velocity"]
 				var projectile_direction: Vector2 = projectile_velocity.normalized()
@@ -2259,17 +2336,17 @@ func result_player_display_name(player_id: int) -> String:
 
 
 func create_hud() -> void:
-	player_one_label = $UIRoot/HUD/PlayerOneLabel
+	player_one_label = hud_root.get_node("PlayerOneLabel") as Label
 	player_one_label.text = "HP 100 / 100"
 	player_one_label.add_theme_font_size_override("font_size", 24)
-	hp_bar = $UIRoot/HUD/HPBar
+	hp_bar = hud_root.get_node("HPBar") as ProgressBar
 	hp_bar.min_value = 0.0
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
-	arithmetic_multiplier_label = $UIRoot/HUD/ArithmeticMultiplier
+	arithmetic_multiplier_label = hud_root.get_node("ArithmeticMultiplier") as Label
 	arithmetic_multiplier_label.visible = false
-	opponent_hp_bar = $UIRoot/HUD/OpponentHPBar
+	opponent_hp_bar = hud_root.get_node("OpponentHPBar") as ProgressBar
 	opponent_hp_bar.min_value = 0.0
 	opponent_hp_bar.max_value = 100.0
 	opponent_hp_bar.value = 100.0
@@ -2294,15 +2371,15 @@ func create_hud() -> void:
 	opponent_hp_fill.corner_radius_bottom_right = 3
 	opponent_hp_bar.add_theme_stylebox_override("background", hp_background)
 	opponent_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
-	timer_label = $UIRoot/HUD/Timer
-	status_label = $UIRoot/HUD/Status
+	timer_label = hud_root.get_node("Timer") as Label
+	status_label = hud_root.get_node("Status") as Label
 	status_label.add_theme_font_size_override("font_size", 16)
 
-	controls_label = $UIRoot/HUD/Controls
+	controls_label = hud_root.get_node("Controls") as Label
 	controls_label.text = "移動: 矢印キー  通常攻撃: 1\nスキル1/2/3: 2・3・4  課題中止: Esc"
 	controls_label.add_theme_font_size_override("font_size", 15)
 	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
-	gameplay_home_button = $UIRoot/HUD/HomeButton
+	gameplay_home_button = hud_root.get_node("HomeButton") as Button
 	style_menu_button(gameplay_home_button)
 	gameplay_home_button.add_theme_font_size_override("font_size", 18)
 	if not gameplay_home_button.pressed.is_connected(return_to_home):
@@ -4206,7 +4283,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
 	player["big_skill_id"] = "typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else "typist_trident"
-	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else "")
+	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("arithmetic_hack_vision" if visual_id == "arithmetician" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else ""))
 	player["visual_id"] = visual_ids[selection]
 	var is_local_player := player_id == (local_player_id if network_mode == "client" else 1)
 	player["name"] = user_display_name if is_local_player else names[selection]
@@ -4224,6 +4301,8 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["attack_damage_buff"] = 0
 	player["invisible_time"] = 0.0
 	player["invisible_flicker"] = 0.0
+	player["hack_vision_time"] = 0.0
+	player["hack_vision_owner_id"] = 0
 	player["small_cooldown"] = 0.0
 	player["big_cooldown"] = 0.0
 	player["arithmetic_interference_multiplier"] = 1.0
@@ -4297,6 +4376,8 @@ func update_challenge_ui(elapsed: float) -> void:
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	if challenge_skill == "skill3_typing":
 		skill_name = "ぶんまわし（スキル3）"
+	elif challenge_skill == "skill3_arithmetic_hack_vision":
+		skill_name = "視覚妨害（ハックビジョン）"
 	elif challenge_skill == "skill3_trace":
 		skill_name = "十六夜（いざよい）"
 	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and not challenge_skill.begins_with("big"):
@@ -4346,6 +4427,20 @@ func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> 
 	return label
 
 
+func update_hack_vision_overlay() -> void:
+	if hack_vision_overlay == null:
+		return
+	var viewer_id := get_hud_player_id()
+	var remaining := float(players.get(viewer_id, {}).get("hack_vision_time", 0.0))
+	var active := screen == "match" and remaining > 0.0
+	hack_vision_overlay.visible = active
+	if not active:
+		return
+	var material := hack_vision_overlay.material as ShaderMaterial
+	if material:
+		material.set_shader_parameter("effect_strength", clampf(remaining / 0.45, 0.0, 1.0))
+
+
 func update_hud() -> void:
 	var hud_player_id := get_hud_player_id()
 	if not players.has(hud_player_id):
@@ -4370,7 +4465,7 @@ func update_hud() -> void:
 		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
 		var big_cooldown_duration := 10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
-		var skill3_cooldown_duration := CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN
+		var skill3_cooldown_duration := ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)
 		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
 	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
@@ -4422,7 +4517,7 @@ func is_skill_candidate_implemented(visual_id: String, skill_index: int, candida
 		return (skill_index == 0 and candidate_index == 0) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index == 0)
 	if visual_id == "chanter":
 		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index == 0) or (skill_index == 2 and candidate_index == 0)
-	return skill_index < 2 and candidate_index == 0
+	return skill_index < 3 and candidate_index == 0
 
 
 func first_implemented_skill_candidate(visual_id: String, skill_index: int) -> int:
@@ -4877,7 +4972,11 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 	var direction := velocity.normalized()
 	if bool(projectile.get("key_cap", false)):
 		return
-	if bool(projectile.get("fixed_direction", false)):
+	if bool(projectile.get("hack_vision", false)):
+		draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 8.0, Color("3d8fffa0"))
+		draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 2.0, Color("b8e6ff"))
+		draw_line(position_value - direction * 16.0, position_value + direction * 9.0, Color("4367ff"), 4.0)
+	elif bool(projectile.get("fixed_direction", false)):
 		var source_size := Vector2(CHANTER_BALL_TEXTURE.get_size())
 		var draw_size := source_size * (38.0 / maxf(source_size.x, source_size.y))
 		draw_set_transform(position_value + get_world_draw_offset(), direction.angle(), Vector2.ONE)

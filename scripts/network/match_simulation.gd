@@ -19,6 +19,7 @@ const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const SKILL3_COOLDOWN := 3.0
+const ARITHMETICIAN_HACK_VISION_COOLDOWN := 12.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
 const MAX_PROJECTILES := 320
@@ -49,6 +50,7 @@ const BIG_II_WORDS := ["Pursuit", "Track Down", "Follow the Trail", "Lock On", "
 const SKILL3_WORDS := ["Spin the Hammer, Scatter All", "Hammer Spin Sends Foes Flying", "Circle the Hammer, Crush All"]
 const ARITH_SMALL := ["12 + 3 * 8", "15 + 4 * 9", "18 + 5 * 14", "21 + 6 * 7"]
 const ARITH_BIG := ["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255"]
+const ARITH_HACK_VISION := ["33 * 44 + 16 * 6 + 29", "28 * 47 + 15 * 7 + 34", "36 * 42 + 18 * 5 + 27", "31 * 46 + 14 * 8 + 25", "27 * 53 + 17 * 6 + 32", "34 * 41 + 19 * 5 + 28", "29 * 48 + 16 * 7 + 31", "37 * 39 + 13 * 8 + 26", "32 * 45 + 17 * 6 + 35"]
 
 var state: Dictionary
 var _challenge_nonce := 0
@@ -97,9 +99,11 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["color"] = colors[character]
 	player["normal_damage"] = [3, 1, 2][character]
 	player["arithmetic_interference_multiplier"] = 1.0
+	player["hack_vision_time"] = 0.0
+	player["hack_vision_owner_id"] = 0
 	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
-	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else "")
+	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ""))
 	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -159,13 +163,15 @@ func finish_by_disconnect(leaving_slot: int) -> void:
 
 func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 	var player: Dictionary = state["players"][slot]
-	for key in ["attack_cooldown", "attack_time", "hit_time", "small_cooldown", "big_cooldown", "skill3_cooldown", "buff_time", "invisible_time", "invisible_flicker"]:
+	for key in ["attack_cooldown", "attack_time", "hit_time", "small_cooldown", "big_cooldown", "skill3_cooldown", "buff_time", "invisible_time", "invisible_flicker", "hack_vision_time"]:
 		player[key] = maxf(0.0, float(player.get(key, 0.0)) - delta)
 	if float(player["buff_time"]) <= 0.0:
 		player["buff_speed_multiplier"] = 1.0
 		player["attack_damage_buff"] = 0
 	if float(player["invisible_time"]) > 0.0 and float(player["invisible_flicker"]) <= 0.0:
 		player["invisible_flicker"] = ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL
+	if float(player.get("hack_vision_time", 0.0)) <= 0.0:
+		player["hack_vision_owner_id"] = 0
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	player["is_moving"] = false
 	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and move.length_squared() > 0.0:
@@ -199,7 +205,23 @@ func _try_normal_attack(slot: int) -> bool:
 		_apply_damage(target_slot, _normal_attack_damage(player), "%sの斬撃" % str(player["name"]))
 		state["status_text"] = "%sの斬撃が%sに命中！" % [str(player["name"]), str(target["name"])]
 	else:
-		state["status_text"] = "%sは斬撃を振った。" % str(player["name"])
+		if _award_hack_vision_miss(slot):
+			state["status_text"] = "%sの空振りを解析。妨害ポイント +0.5" % str(player["name"])
+		else:
+			state["status_text"] = "%sは斬撃を振った。" % str(player["name"])
+	return true
+
+func _award_hack_vision_miss(attacker: int) -> bool:
+	var affected: Dictionary = state["players"][attacker]
+	if float(affected.get("hack_vision_time", 0.0)) <= 0.0:
+		return false
+	var owner := int(affected.get("hack_vision_owner_id", 0))
+	if owner == attacker or not state["players"].has(owner):
+		return false
+	var source: Dictionary = state["players"][owner]
+	if str(source.get("character_id", "")) != "arithmetic":
+		return false
+	state["arithmetic_point_collections"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(affected["position"]), "amount": 0.5, "wait_time": 0.0})
 	return true
 
 func _start_challenge(slot: int, tier: String) -> bool:
@@ -210,7 +232,7 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	if bool(player["focused"]):
 		return false
 	var character_id := str(player["character_id"])
-	if tier == "skill3" and character_id != "blade" and not (character_id == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0"):
+	if tier == "skill3" and character_id != "blade" and not (character_id == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision") and not (character_id == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0"):
 		return false
 	var cooldown_key := "skill3_cooldown" if tier == "skill3" else ("big_cooldown" if tier == "big" else "small_cooldown")
 	if float(player.get(cooldown_key, 0.0)) > 0.0:
@@ -250,9 +272,9 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 			skill = "small_typing"
 	elif character_id == "arithmetic":
 		challenge_type = "arithmetic"
-		values = ARITH_BIG if tier == "big" else ARITH_SMALL
-		limit = 10.0 if tier == "big" else 7.0
-		skill = "big_arithmetic" if tier == "big" else "small_arithmetic"
+		values = ARITH_HACK_VISION if tier == "skill3" else (ARITH_BIG if tier == "big" else ARITH_SMALL)
+		limit = 15.0 if tier == "skill3" else (10.0 if tier == "big" else 7.0)
+		skill = "skill3_arithmetic_hack_vision" if tier == "skill3" else ("big_arithmetic" if tier == "big" else "small_arithmetic")
 	else:
 		challenge_type = "tracing"
 		limit = 0.0
@@ -365,7 +387,7 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	player["challenge_total_time"] = float(player.get("challenge_total_time", 0.0)) + float(challenge["elapsed"])
 	player["challenge_elapsed"] = 0.0
 	if tier == "skill3":
-		player["skill3_cooldown"] = CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN
+		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN)
 	elif tier == "big":
 		if str(player.get("character_id", "")) == "arithmetic":
 			player["big_cooldown"] = ARITHMETIC_BIG_COOLDOWN
@@ -412,6 +434,8 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 	elif character_id == "arithmetic":
 		if tier == "small":
 			_spawn_decoys(owner, score)
+		elif tier == "skill3":
+			_spawn_hack_vision_projectile(owner, score)
 		else:
 			player = state["players"][owner]
 			player["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
@@ -470,6 +494,15 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction})
 	_next_projectile_id += 1
 
+func _spawn_hack_vision_projectile(owner: int, score: int) -> void:
+	var player: Dictionary = state["players"][owner]
+	var target := _other(owner)
+	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
+	if direction.length_squared() <= 0.0:
+		direction = Vector2(player["facing"])
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9})
+	_next_projectile_id += 1
+
 func _update_projectiles(delta: float) -> void:
 	for index in range(state["skill_projectiles"].size() - 1, -1, -1):
 		var projectile: Dictionary = state["skill_projectiles"][index]
@@ -496,12 +529,19 @@ func _update_projectiles(delta: float) -> void:
 			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		projectile["position"] = Vector2(projectile["position"]) + Vector2(projectile["velocity"]) * delta
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
-		if _destroy_decoy_at_point(owner, Vector2(projectile["position"]), PROJECTILE_RADIUS):
+		if not bool(projectile.get("hack_vision", false)) and _destroy_decoy_at_point(owner, Vector2(projectile["position"]), PROJECTILE_RADIUS):
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
 				continue
 		if _point_hits_player(Vector2(projectile["position"]), target, PROJECTILE_RADIUS):
-			_apply_damage(target, int(projectile["damage"]), "スキル弾")
+			if bool(projectile.get("hack_vision", false)):
+				var target_player: Dictionary = state["players"][target]
+				target_player["hack_vision_time"] = maxf(float(target_player.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
+				target_player["hack_vision_owner_id"] = owner
+				state["players"][target] = target_player
+				state["status_text"] = "%sの視界にノイズが走った！" % str(target_player["name"])
+			else:
+				_apply_damage(target, int(projectile["damage"]), "スキル弾")
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
 				continue

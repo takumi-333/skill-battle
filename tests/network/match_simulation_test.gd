@@ -214,6 +214,42 @@ func _test_arithmetician_skills() -> void:
 	big_simulation._spawn_skill(1, 0, {"tier": "big"})
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["invisible_time"]), 10.0))
 
+	var skill3_simulation := MatchSimulation.new()
+	skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 0)
+	assert(str(skill3_simulation.state["players"][1]["skill3_id"]) == "arithmetic_hack_vision")
+	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
+	assert(str(skill3_simulation.state["challenges"][1]["skill"]) == "skill3_arithmetic_hack_vision")
+	assert(is_equal_approx(float(skill3_simulation.state["challenges"][1]["limit"]), 15.0))
+	_complete_arithmetic(skill3_simulation, 1)
+	assert(skill3_simulation.state["skill_projectiles"].size() == 1)
+	assert(bool(skill3_simulation.state["skill_projectiles"][0]["hack_vision"]))
+	assert(is_equal_approx(float(skill3_simulation.state["players"][1]["skill3_cooldown"]), 12.0))
+	for tick in 70:
+		skill3_simulation.step(0.05, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(float(skill3_simulation.state["players"][2]["hack_vision_time"]) > 89.0)
+	assert(int(skill3_simulation.state["players"][2]["hack_vision_owner_id"]) == 1)
+	assert(skill3_simulation.handle_event(2, {"type": "attack"}))
+	assert(skill3_simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(skill3_simulation.state["arithmetic_point_collections"][0]["amount"]), 0.5))
+	skill3_simulation.state["arithmetic_point_collections"].clear()
+	skill3_simulation.state["players"][2]["attack_cooldown"] = 0.0
+	skill3_simulation.state["players"][1]["position"] = Vector2(100, 100)
+	skill3_simulation.state["players"][2]["position"] = Vector2(180, 100)
+	skill3_simulation.state["players"][2]["facing"] = Vector2.LEFT
+	assert(skill3_simulation.handle_event(2, {"type": "attack"}))
+	assert(skill3_simulation.state["arithmetic_point_collections"].is_empty())
+	skill3_simulation.state["players"][2]["attack_cooldown"] = 0.0
+	skill3_simulation.state["players"][2]["hack_vision_time"] = 0.0
+	assert(skill3_simulation.handle_event(2, {"type": "attack"}))
+	assert(skill3_simulation.state["arithmetic_point_collections"].is_empty())
+	var hack_snapshot := MatchProtocol.snapshot("arithmetician-skill3", skill3_simulation.state, "match", "", 2)
+	assert(int(hack_snapshot["players"][2]["hack_vision_owner_id"]) == 1)
+
+	var unavailable_skill3_simulation := MatchSimulation.new()
+	unavailable_skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
+	assert(str(unavailable_skill3_simulation.state["players"][1]["skill3_id"]).is_empty())
+	assert(not unavailable_skill3_simulation.handle_event(1, {"type": "skill3"}))
+
 func _test_chanter_skills() -> void:
 	var simulation := MatchSimulation.new()
 	simulation.configure_loadout(1, 2, "typist_trident")
