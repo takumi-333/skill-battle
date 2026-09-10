@@ -21,6 +21,11 @@ const CHANTER_SKILL2_COOLDOWN := 6.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const CHANTER_LUNAR_ECLIPSE_COOLDOWN := 10.0
 const SKILL3_COOLDOWN := 3.0
+const TYPIST_GOLDEN_TIME_I_COOLDOWN := 50.0
+const TYPIST_GOLDEN_TIME_II_COOLDOWN := 60.0
+const TYPIST_GOLDEN_TIME_III_COOLDOWN := 70.0
+const TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER := 1.25
+const TYPIST_GOLDEN_TIME_MISS_PENALTY := 0.9
 const ARITHMETICIAN_HACK_VISION_COOLDOWN := 12.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
@@ -57,6 +62,9 @@ const SMALL_WORDS := ["Track", "Chase", "Trace", "Trail", "Stalk"]
 const BIG_WORDS := ["Hammer Down", "Smash the Earth", "Break the Ground", "Slam the Hammer", "Crush the Floor"]
 const BIG_II_WORDS := ["Pursuit", "Track Down", "Follow the Trail", "Lock On", "On the Trail"]
 const SKILL3_WORDS := ["Spin the Hammer, Scatter All", "Hammer Spin Sends Foes Flying", "Circle the Hammer, Crush All"]
+const GOLDEN_TIME_I_WORDS := ["Zone Mode", "In the zone", "Typing Mode", "Typing Time", "Focus type"]
+const GOLDEN_TIME_II_WORDS := ["Enter the Zone", "Stay in the Zone", "Zone Control", "Hold the Zone", "Zone Master"]
+const GOLDEN_TIME_III_WORDS := ["Master the Typing Zone", "Control the Golden Zone", "Own the Entire Zone", "Keep the Zone Alive", "Rule the Typing Zone"]
 const ARITH_SMALL := ["12 + 3 * 8", "15 + 4 * 9", "18 + 5 * 14", "21 + 6 * 7"]
 const ARITH_BIG := ["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255"]
 const ARITH_PERFECT_MAPPING := ["28 + 7 * 18", "9 + 12 * 11 + 16", "24 + 25 + 26 + 27", "212 + 187", "31 + 8 * 15", "14 + 9 * 13 + 21", "29 + 30 + 31 + 32", "238 + 176", "26 + 6 * 19", "11 + 14 * 9 + 17", "18 + 20 + 22 + 24", "257 + 168", "33 + 5 * 17", "15 + 11 * 12 + 19", "27 + 28 + 29 + 30"]
@@ -113,9 +121,11 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["arithmetic_interference_multiplier"] = 1.0
 	player["hack_vision_time"] = 0.0
 	player["hack_vision_owner_id"] = 0
-	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
+	player["small_skill_id"] = "typist_golden_time_i" if character == 0 and small_skill_index == 1 else ("%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0])
 	player["big_skill_id"] = big_skill if character == 0 or (character == 1 and big_skill == "arithmetic_perfect_mapping") else "%s_big_0" % ids[character]
-	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else "")))
+	player["skill3_id"] = "typist_golden_time_iii" if character == 0 and skill3_index == 1 else ("typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else ""))))
+	player["typing_zone_time"] = 0.0
+	player["typing_zone_level"] = 0
 	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -177,7 +187,7 @@ func finish_by_disconnect(leaving_slot: int) -> void:
 
 func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 	var player: Dictionary = state["players"][slot]
-	for key in ["attack_cooldown", "attack_time", "hit_time", "small_cooldown", "big_cooldown", "skill3_cooldown", "buff_time", "invisible_time", "invisible_flicker", "hack_vision_time"]:
+	for key in ["attack_cooldown", "attack_time", "hit_time", "small_cooldown", "big_cooldown", "skill3_cooldown", "buff_time", "invisible_time", "invisible_flicker", "hack_vision_time", "typing_zone_time"]:
 		player[key] = maxf(0.0, float(player.get(key, 0.0)) - delta)
 	if float(player["buff_time"]) <= 0.0:
 		player["buff_speed_multiplier"] = 1.0
@@ -187,6 +197,8 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 	if float(player.get("hack_vision_time", 0.0)) <= 0.0:
 		player["hack_vision_owner_id"] = 0
 		player["hack_vision_suppress_interference_points"] = false
+	if float(player.get("typing_zone_time", 0.0)) <= 0.0:
+		player["typing_zone_level"] = 0
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	player["is_moving"] = false
 	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and not _is_lunar_eclipse_active(slot) and move.length_squared() > 0.0:
@@ -202,7 +214,7 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 
 func _try_normal_attack(slot: int) -> bool:
 	var player: Dictionary = state["players"][slot]
-	if bool(player["focused"]) or _is_lunar_eclipse_active(slot) or float(player["attack_cooldown"]) > 0.0:
+	if bool(player["focused"]) or _is_lunar_eclipse_active(slot) or _typing_zone_level(player) > 0 or float(player["attack_cooldown"]) > 0.0:
 		return false
 	player["attack_cooldown"] = _normal_attack_cooldown(player)
 	player["attack_time"] = NORMAL_DURATION
@@ -274,10 +286,18 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 	var skill := tier
 	var limit := 6.0
 	if character_id == "blade":
-		if tier == "skill3":
+		if tier == "skill3" and str(player.get("skill3_id", "")) == "typist_golden_time_iii":
+			values = GOLDEN_TIME_III_WORDS
+			limit = 8.0
+			skill = "skill3_typing_golden_time_iii"
+		elif tier == "skill3":
 			values = SKILL3_WORDS
 			limit = 20.0
 			skill = "skill3_typing"
+		elif tier == "big" and str(player.get("big_skill_id", "")) == "typist_golden_time_ii":
+			values = GOLDEN_TIME_II_WORDS
+			limit = 5.0
+			skill = "big_typing_golden_time_ii"
 		elif tier == "big" and str(player.get("big_skill_id", "")) == "typist_keycap_ii":
 			values = BIG_II_WORDS
 			limit = 7.0
@@ -286,6 +306,10 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 			values = BIG_WORDS
 			limit = 8.0
 			skill = "big_typing"
+		elif str(player.get("small_skill_id", "")) == "typist_golden_time_i":
+			values = GOLDEN_TIME_I_WORDS
+			limit = 3.0
+			skill = "small_typing_golden_time_i"
 		else:
 			values = SMALL_WORDS
 			skill = "small_typing"
@@ -299,6 +323,8 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 		challenge_type = "tracing"
 		limit = 0.0
 		skill = "skill3_trace_lunar_eclipse" if tier == "skill3" and str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else ("skill3_trace" if tier == "skill3" else ("big_trace" if tier == "big" else "small_trace"))
+	if challenge_type == "typing" and _typing_zone_level(player) >= 2:
+		limit *= TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER
 	var prompt := ""
 	var answer := ""
 	var target := PackedVector2Array()
@@ -326,6 +352,7 @@ func _receive_challenge_character(slot: int, character: String) -> bool:
 		return true
 	challenge["typed"] = typed + character
 	_set_challenge(slot, challenge)
+	_apply_typing_zone_input(slot, character)
 	if str(challenge["typed"]).length() >= answer.length():
 		_end_challenge(slot, true, _score_challenge(challenge), "")
 	return true
@@ -376,7 +403,7 @@ func _cancel_challenge(slot: int) -> bool:
 func _challenge_miss(owner: int, challenge: Dictionary) -> void:
 	var player: Dictionary = state["players"][owner]
 	player["challenge_errors"] = int(player.get("challenge_errors", 0)) + 1
-	challenge["elapsed"] = minf(float(challenge["limit"]), float(challenge["elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
+	challenge["elapsed"] = minf(float(challenge["limit"]), float(challenge["elapsed"]) + _typing_challenge_miss_penalty(player))
 	challenge["miss_sequence"] = int(challenge.get("miss_sequence", 0)) + 1
 	player["challenge_elapsed"] = challenge["elapsed"]
 	state["players"][owner] = player
@@ -408,14 +435,14 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	player["challenge_total_time"] = float(player.get("challenge_total_time", 0.0)) + float(challenge["elapsed"])
 	player["challenge_elapsed"] = 0.0
 	if tier == "skill3":
-		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN))
+		player["skill3_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN)))
 	elif tier == "big":
 		if str(player.get("character_id", "")) == "arithmetic":
 			player["big_cooldown"] = ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else ARITHMETIC_BIG_COOLDOWN
 		else:
-			player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
+			player["big_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "big_typing_golden_time_ii" else (7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN))
 	else:
-		player["small_cooldown"] = CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN
+		player["small_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN)
 	if success:
 		player["skill_successes"] = int(player.get("skill_successes", 0)) + 1
 		player["score_total"] = int(player.get("score_total", 0)) + score
@@ -442,7 +469,9 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 	var character_id := str(player["character_id"])
 	var tier := str(challenge["tier"])
 	if character_id == "blade":
-		if tier == "skill3":
+		if str(challenge.get("skill", "")).contains("golden_time"):
+			_activate_typing_zone(owner, _typing_zone_level_for_skill(str(challenge["skill"])), score)
+		elif tier == "skill3":
 			state["hammer_spins"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "score": score, "angle": 0.0, "lifetime": _hammer_duration(score), "hit_timer": 0.0, "keycap_timer": 0.5})
 		elif tier == "big" and str(player.get("big_skill_id", "")) == "typist_trident":
 			state["trident_impacts"].append({"impact_id": _next_trident_impact_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
@@ -581,6 +610,59 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 	# launch path for typist projectiles.
 	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction})
 	_next_projectile_id += 1
+
+
+func _typing_zone_level(player: Dictionary) -> int:
+	return int(player.get("typing_zone_level", 0)) if float(player.get("typing_zone_time", 0.0)) > 0.0 else 0
+
+
+func _typing_challenge_miss_penalty(player: Dictionary) -> float:
+	return TYPIST_GOLDEN_TIME_MISS_PENALTY if _typing_zone_level(player) > 0 else CHALLENGE_MISS_TIME_PENALTY
+
+
+func _typing_zone_level_for_skill(skill: String) -> int:
+	if skill.ends_with("golden_time_iii"):
+		return 3
+	if skill.ends_with("golden_time_ii"):
+		return 2
+	return 1
+
+
+func _golden_time_cooldown(skill: String) -> float:
+	match _typing_zone_level_for_skill(skill):
+		2: return TYPIST_GOLDEN_TIME_II_COOLDOWN
+		3: return TYPIST_GOLDEN_TIME_III_COOLDOWN
+		_: return TYPIST_GOLDEN_TIME_I_COOLDOWN
+
+
+func _typing_zone_duration(level: int, score: int) -> float:
+	if level == 1:
+		return 30.0 if score <= 30 else (45.0 if score <= 70 else 60.0)
+	if level == 2:
+		return 40.0 if score <= 30 else (50.0 if score <= 70 else 75.0)
+	return 50.0 if score <= 30 else (60.0 if score <= 70 else 90.0)
+
+
+func _activate_typing_zone(owner: int, level: int, score: int) -> void:
+	var player: Dictionary = state["players"][owner]
+	player["typing_zone_level"] = level
+	player["typing_zone_time"] = _typing_zone_duration(level, score)
+	state["players"][owner] = player
+
+
+func _apply_typing_zone_input(owner: int, character: String) -> void:
+	var player: Dictionary = state["players"][owner]
+	var level := _typing_zone_level(player)
+	if level <= 0 or state["skill_projectiles"].size() >= MAX_PROJECTILES:
+		return
+	var target := _other(owner)
+	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
+	if direction.length_squared() <= 0.0:
+		direction = Vector2(player.get("facing", Vector2.RIGHT))
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 550.0, "damage": 3, "lifetime": 2.0, "piercing": false, "delay": 0.0, "chip": character, "launched": true, "homing": level >= 2, "homing_time": 2.0 if level >= 2 else 0.0, "initial_angle": direction.angle(), "key_cap": true})
+	_next_projectile_id += 1
+	if level >= 3:
+		state["shockwaves"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "origin": Vector2(player["position"]), "delay": 0.0, "elapsed": 0.0, "radius": 0.0, "duration": 1.0, "speed": 200.0, "damage": 1, "knockback": 0.0, "hit": false})
 
 func _spawn_hack_vision_projectile(owner: int, score: int, suppress_interference_points: bool = false) -> void:
 	var player: Dictionary = state["players"][owner]
@@ -876,7 +958,7 @@ func _update_shockwaves(delta: float) -> void:
 		wave["delay"] = float(wave["delay"]) - delta
 		if float(wave["delay"]) <= 0.0:
 			wave["elapsed"] = float(wave["elapsed"]) + delta
-			wave["radius"] = 150.0 * float(wave["elapsed"])
+			wave["radius"] = float(wave.get("speed", 150.0)) * float(wave["elapsed"])
 			_destroy_decoys_in_radius(int(wave["owner_id"]), Vector2(wave["origin"]), float(wave["radius"]))
 			var target := _other(int(wave["owner_id"]))
 			if not bool(wave["hit"]) and Vector2(state["players"][target]["position"]).distance_to(Vector2(wave["origin"])) <= float(wave["radius"]) + PLAYER_RADIUS:
@@ -1014,7 +1096,11 @@ func _finish_by_hp() -> void:
 	state["status_text"] = "時間切れ、引き分け！" if int(state["winner_id"]) == 0 else "%sの勝利！" % str(state["players"][state["winner_id"]]["name"])
 
 func _score_challenge(challenge: Dictionary) -> int:
-	var ratio := clampf((float(challenge["limit"]) - float(challenge["elapsed"])) / float(challenge["limit"]), 0.0, 1.0)
+	var remaining := float(challenge["limit"]) - float(challenge["elapsed"])
+	var owner := int(challenge.get("owner", 0))
+	if state["players"].has(owner) and _typing_zone_level(state["players"][owner]) > 0:
+		remaining = minf(float(challenge["limit"]), remaining * TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER)
+	var ratio := clampf(remaining / float(challenge["limit"]), 0.0, 1.0)
 	return clampi(roundi(100.0 * (ratio + 0.85 / TAU * sin(TAU * ratio))), 0, 100)
 
 func _evaluate_arithmetic(expression: String) -> int:

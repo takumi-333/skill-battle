@@ -274,6 +274,15 @@ const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
 const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
 const TYPIST_SKILL3_HAMMER_HIT_INTERVAL := 0.28
 const TYPIST_SKILL3_KEYCAP_INTERVAL := 0.5
+const TYPIST_GOLDEN_TIME_I_COOLDOWN := 50.0
+const TYPIST_GOLDEN_TIME_II_COOLDOWN := 60.0
+const TYPIST_GOLDEN_TIME_III_COOLDOWN := 70.0
+const TYPIST_GOLDEN_TIME_I_LIMIT := 3.0
+const TYPIST_GOLDEN_TIME_II_LIMIT := 5.0
+const TYPIST_GOLDEN_TIME_III_LIMIT := 8.0
+const TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER := 1.25
+const TYPIST_GOLDEN_TIME_MISS_PENALTY := 0.9
+const TYPIST_GOLDEN_TIME_HOMING_DURATION := 2.0
 const SKILL_PROJECTILE_RADIUS := 10.0
 const BIG_CHALLENGE_LIMIT := 10.0
 const ARITHMETICIAN_PERFECT_MAPPING_CHALLENGE_LIMIT := 12.0
@@ -360,6 +369,9 @@ const SKILL_TYPIST_HAMMER: Texture2D = preload("res://assets/ui/skill_icons/typi
 const SKILL_TYPIST_KEYCAP: Texture2D = preload("res://assets/ui/skill_icons/typist_keycap.png")
 const SKILL_TYPIST_TRIDENT: Texture2D = preload("res://assets/ui/skill_icons/typist_trident.png")
 const SKILL_TYPIST_KEYCAP_II: Texture2D = preload("res://assets/ui/skill_icons/typist_keycap_ii.png")
+const SKILL_TYPIST_GOLDEN_TIME: Texture2D = preload("res://assets/ui/skill_icons/typist_typing_zone.png")
+const SKILL_TYPIST_GOLDEN_TIME_II: Texture2D = preload("res://assets/ui/skill_icons/typist_typing_zone_ii.png")
+const SKILL_TYPIST_GOLDEN_TIME_III: Texture2D = preload("res://assets/ui/skill_icons/typist_typing_zone_iii.png")
 const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_infinite_series.png")
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
 const SKILL_ARITHMETICIAN_PERFECT_MAPPING: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_supreme_mapping.png")
@@ -831,10 +843,10 @@ func set_battle_bgm_focus(is_focused: bool) -> void:
 	battle_bgm_volume_tween.tween_property(battle_bgm_player, "volume_db", BATTLE_BGM_FOCUS_VOLUME_DB if is_focused else BATTLE_BGM_NORMAL_VOLUME_DB, 0.18)
 
 
-func play_typist_typing_key_sound() -> void:
+func play_typist_typing_key_sound(volume_scale: float = 1.0) -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = TYPIST_TYPING_KEY_SOUND
-	player.volume_db = -4.0
+	player.volume_db = -4.0 + linear_to_db(maxf(volume_scale, 0.01))
 	add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()
@@ -929,11 +941,12 @@ func receive_challenge_miss_feedback(duration: float) -> void:
 
 
 func emit_typist_typing_key_sound() -> void:
-	play_typist_typing_key_sound()
+	var volume_scale := 1.3 if challenge_owner in players and typing_zone_level(players[challenge_owner]) >= 3 else 1.0
+	play_typist_typing_key_sound(volume_scale)
 	if network_mode == "host":
-		rpc("receive_typist_typing_key_sound")
+		rpc("receive_typist_typing_key_sound", volume_scale)
 	elif network_mode == "client":
-		rpc_id(1, "receive_typist_typing_key_sound")
+		rpc_id(1, "receive_typist_typing_key_sound", volume_scale)
 
 
 func lobby_debug_log(message: String) -> void:
@@ -979,6 +992,24 @@ func create_challenge_definitions() -> void:
 	skill3_typing.time_limit_seconds = TYPIST_SKILL3_CHALLENGE_LIMIT
 	skill3_typing.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["blade_skill3"] = skill3_typing
+	var golden_time_i: ChallengeDefinition = ChallengeDefinition.new()
+	golden_time_i.challenge_type = "typing"
+	golden_time_i.candidates = PackedStringArray(["Zone Mode", "In the zone", "Typing Mode", "Typing Time", "Focus type"])
+	golden_time_i.time_limit_seconds = TYPIST_GOLDEN_TIME_I_LIMIT
+	golden_time_i.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["blade_golden_time_i"] = golden_time_i
+	var golden_time_ii: ChallengeDefinition = ChallengeDefinition.new()
+	golden_time_ii.challenge_type = "typing"
+	golden_time_ii.candidates = PackedStringArray(["Enter the Zone", "Stay in the Zone", "Zone Control", "Hold the Zone", "Zone Master"])
+	golden_time_ii.time_limit_seconds = TYPIST_GOLDEN_TIME_II_LIMIT
+	golden_time_ii.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["blade_golden_time_ii"] = golden_time_ii
+	var golden_time_iii: ChallengeDefinition = ChallengeDefinition.new()
+	golden_time_iii.challenge_type = "typing"
+	golden_time_iii.candidates = PackedStringArray(["Master the Typing Zone", "Control the Golden Zone", "Own the Entire Zone", "Keep the Zone Alive", "Rule the Typing Zone"])
+	golden_time_iii.time_limit_seconds = TYPIST_GOLDEN_TIME_III_LIMIT
+	golden_time_iii.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["blade_golden_time_iii"] = golden_time_iii
 	var small_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
 	small_arithmetic.challenge_type = "arithmetic"
 	small_arithmetic.candidates = arithmetic_skill1_candidates()
@@ -1177,6 +1208,9 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	player["small_cooldown"] = maxf(0.0, float(player["small_cooldown"]) - delta)
 	player["big_cooldown"] = maxf(0.0, float(player["big_cooldown"]) - delta)
 	player["skill3_cooldown"] = maxf(0.0, float(player.get("skill3_cooldown", 0.0)) - delta)
+	player["typing_zone_time"] = maxf(0.0, float(player.get("typing_zone_time", 0.0)) - delta)
+	if float(player["typing_zone_time"]) <= 0.0:
+		player["typing_zone_level"] = 0
 	player["hack_vision_time"] = maxf(0.0, float(player.get("hack_vision_time", 0.0)) - delta)
 	if float(player["hack_vision_time"]) <= 0.0:
 		player["hack_vision_owner_id"] = 0
@@ -1194,7 +1228,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 
 func try_attack(player_id: int) -> void:
 	var player: Dictionary = players[player_id]
-	if bool(player["focused"]) or is_lunar_eclipse_active(player_id):
+	if bool(player["focused"]) or is_lunar_eclipse_active(player_id) or typing_zone_level(player) > 0:
 		if player_id == 1:
 			status_text = "集中中は通常攻撃を使えない。Escで課題を中止できる。"
 		return
@@ -1255,6 +1289,9 @@ func start_skill3(owner_id: int) -> void:
 		return
 	var player: Dictionary = players[owner_id]
 	if bool(player["focused"]) or is_lunar_eclipse_active(owner_id) or float(player.get("skill3_cooldown", 0.0)) > 0.0:
+		return
+	if str(player.get("skill3_id", "")) == "typist_golden_time_iii":
+		start_typist_golden_time_challenge(owner_id, "blade_golden_time_iii", "skill3_typing_golden_time_iii")
 		return
 	if str(player.get("character_id", "")) == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision":
 		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_skill3"]
@@ -1365,6 +1402,12 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	challenge_typed_characters = ""
 	challenge_definition = null
 	if character_id == "blade":
+		if not is_big and str(player.get("small_skill_id", "")) == "typist_golden_time_i":
+			start_typist_golden_time_challenge(owner_id, "blade_golden_time_i", "small_typing_golden_time_i")
+			return
+		if is_big and selected_big_skill == "typist_golden_time_ii":
+			start_typist_golden_time_challenge(owner_id, "blade_golden_time_ii", "big_typing_golden_time_ii")
+			return
 		var typing_definition_key := "blade_small"
 		if is_big and selected_big_skill == "typist_keycap_ii":
 			typing_definition_key = "blade_big_ii"
@@ -1406,6 +1449,31 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	status_text = "%sが%sの集中を開始！" % [player["name"], "スキル2" if is_big else "スキル1"]
 	update_challenge_ui(0.0)
 	update_trace_canvas()
+
+
+func start_typist_golden_time_challenge(owner_id: int, definition_key: String, skill_id: String) -> void:
+	var player: Dictionary = players[owner_id]
+	var definition: ChallengeDefinition = challenge_definitions[definition_key]
+	challenge_owner = owner_id
+	challenge_skill = skill_id
+	challenge_definition = definition
+	challenge_prompt = definition.candidates[randi_range(0, definition.candidates.size() - 1)]
+	challenge_answer = challenge_prompt
+	challenge_typing_index = 0
+	challenge_typed_characters = ""
+	challenge_trace_points.clear()
+	player["focused"] = true
+	player["challenge_elapsed"] = 0.0
+	players[owner_id] = player
+	set_challenge_overlay_visible(network_mode != "host" or owner_id == 1)
+	typing_input.visible = true
+	challenge_trace_canvas.visible = false
+	typing_input.text = ""
+	if network_mode != "host" or owner_id == 1:
+		typing_input.grab_focus()
+	apply_challenge_layout("blade")
+	status_text = "%sが黄金時間の課題を開始！" % player["name"]
+	update_challenge_ui(0.0)
 
 
 func evaluate_arithmetic(expression: String) -> int:
@@ -1576,7 +1644,7 @@ func _submit_arithmetic_answer(submitted_text: String) -> void:
 		end_active_challenge(true, score, "")
 		return
 	player["challenge_errors"] = int(player["challenge_errors"]) + 1
-	player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
+	player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + typing_challenge_miss_penalty(player))
 	players[challenge_owner] = player
 	challenge_typed_characters = ""
 	typing_input.text = ""
@@ -1614,7 +1682,7 @@ func _process_typing_character(character: String) -> void:
 	emit_typist_typing_key_sound()
 	if challenge_typing_index >= challenge_answer.length() or character != challenge_answer.substr(challenge_typing_index, 1):
 		player["challenge_errors"] = int(player["challenge_errors"]) + 1
-		player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
+		player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + typing_challenge_miss_penalty(player))
 		players[challenge_owner] = player
 		trigger_challenge_miss_feedback()
 		status_text = "入力ミス！ 残り時間が減少した。"
@@ -1622,13 +1690,14 @@ func _process_typing_character(character: String) -> void:
 		return
 	challenge_typing_index += 1
 	challenge_typed_characters += character
+	apply_typing_zone_input(challenge_owner, character)
 	if challenge_owner == local_player_id:
 		typing_input.text += character
 		typing_input.caret_column = typing_input.text.length()
 	if challenge_typing_index >= challenge_answer.length():
 		var elapsed: float = float(player["challenge_elapsed"])
 		var limit: float = get_challenge_time_limit()
-		var score := calc_score_by_time_only(limit - elapsed, limit)
+		var score := calc_typing_score(player, limit - elapsed, limit)
 		end_active_challenge(true, score, "")
 
 
@@ -1640,13 +1709,23 @@ func calc_score_by_time_only(remaining_time: float, time_limit: float, curve_amo
 	return clampi(roundi(score), 0, 100)
 
 
+func calc_typing_score(player: Dictionary, remaining_time: float, time_limit: float) -> int:
+	var adjusted_remaining := remaining_time
+	if typing_zone_level(player) > 0:
+		adjusted_remaining = minf(time_limit, remaining_time * TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER)
+	return calc_score_by_time_only(adjusted_remaining, time_limit)
+
+
 func get_challenge_time_limit() -> float:
 	if dedicated_connection and dedicated_connection.has_pending_join() and not dedicated_challenge_type.is_empty():
 		return dedicated_challenge_limit
 	if challenge_definition != null and challenge_definition.no_time_limit:
 		return 0.0
 	if challenge_definition != null:
-		return challenge_definition.time_limit_seconds
+		var limit := challenge_definition.time_limit_seconds
+		if challenge_owner in players and _is_typing_challenge() and typing_zone_level(players[challenge_owner]) >= 2:
+			return limit * TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER
+		return limit
 	return TRACE_CHALLENGE_LIMIT if _is_trace_challenge() else (ARITHMETIC_CHALLENGE_LIMIT if _is_arithmetic_challenge() else TYPING_CHALLENGE_LIMIT)
 
 
@@ -1656,17 +1735,17 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	var owner_id: int = challenge_owner
 	var player: Dictionary = players[owner_id]
 	var is_big: bool = challenge_skill.begins_with("big")
-	var is_skill3: bool = challenge_skill == "skill3_typing" or challenge_skill == "skill3_trace" or challenge_skill == "skill3_trace_lunar_eclipse" or challenge_skill == "skill3_arithmetic_hack_vision"
+	var is_skill3: bool = challenge_skill.begins_with("skill3_typing") or challenge_skill == "skill3_trace" or challenge_skill == "skill3_trace_lunar_eclipse" or challenge_skill == "skill3_arithmetic_hack_vision"
 	var challenge_time: float = float(player["challenge_elapsed"])
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
 	if is_skill3:
-		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN))
+		player["skill3_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
 	elif is_big:
-		player["big_cooldown"] = ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))
+		player["big_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "big_typing_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)))
 	else:
-		player["small_cooldown"] = CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN
+		player["small_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
 	if success:
 		player["skill_successes"] = int(player["skill_successes"]) + 1
 		player["score_total"] = int(player["score_total"]) + score
@@ -1731,6 +1810,9 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 	var owner: Dictionary = players[owner_id]
 	var character_id: String = str(owner["character_id"])
 	if character_id == "blade":
+		if challenge_skill.begins_with("small_typing_golden_time") or challenge_skill.begins_with("big_typing_golden_time") or challenge_skill.begins_with("skill3_typing_golden_time"):
+			activate_typing_zone(owner_id, typing_zone_level_for_skill(challenge_skill), score)
+			return
 		if challenge_skill == "skill3_typing":
 			hammer_spins.append({"owner_id": owner_id, "score": score, "angle": 0.0, "lifetime": typist_skill3_duration(score), "hit_timer": 0.0, "keycap_timer": TYPIST_SKILL3_KEYCAP_INTERVAL})
 			trigger_screen_shake(score)
@@ -1963,6 +2045,61 @@ func spawn_projectile(owner_id: int, score: int, is_big: bool, angle_offset: flo
 	next_projectile_id += 1
 
 
+func typing_zone_level(player: Dictionary) -> int:
+	return int(player.get("typing_zone_level", 0)) if float(player.get("typing_zone_time", 0.0)) > 0.0 else 0
+
+
+func typing_challenge_miss_penalty(player: Dictionary) -> float:
+	return TYPIST_GOLDEN_TIME_MISS_PENALTY if typing_zone_level(player) > 0 else CHALLENGE_MISS_TIME_PENALTY
+
+
+func typing_zone_level_for_skill(skill_id: String) -> int:
+	if skill_id.ends_with("golden_time_iii"):
+		return 3
+	if skill_id.ends_with("golden_time_ii"):
+		return 2
+	return 1
+
+
+func golden_time_cooldown(skill_id: String) -> float:
+	match typing_zone_level_for_skill(skill_id):
+		2: return TYPIST_GOLDEN_TIME_II_COOLDOWN
+		3: return TYPIST_GOLDEN_TIME_III_COOLDOWN
+		_: return TYPIST_GOLDEN_TIME_I_COOLDOWN
+
+
+func typing_zone_duration(level: int, score: int) -> float:
+	if level == 1:
+		return 30.0 if score <= 30 else (45.0 if score <= 70 else 60.0)
+	if level == 2:
+		return 40.0 if score <= 30 else (50.0 if score <= 70 else 75.0)
+	return 50.0 if score <= 30 else (60.0 if score <= 70 else 90.0)
+
+
+func activate_typing_zone(owner_id: int, level: int, score: int) -> void:
+	var owner: Dictionary = players[owner_id]
+	owner["typing_zone_level"] = level
+	owner["typing_zone_time"] = typing_zone_duration(level, score)
+	players[owner_id] = owner
+
+
+func apply_typing_zone_input(owner_id: int, character: String) -> void:
+	if not players.has(owner_id):
+		return
+	var owner: Dictionary = players[owner_id]
+	var level := typing_zone_level(owner)
+	if level <= 0:
+		return
+	var target_id := 2 if owner_id == 1 else 1
+	var direction := (Vector2(players[target_id]["position"]) - Vector2(owner["position"])).normalized()
+	if direction.length_squared() <= 0.0:
+		direction = Vector2(owner.get("facing", Vector2.RIGHT))
+	skill_projectiles.append({"projectile_id": next_projectile_id, "owner_id": owner_id, "position": get_player_hitbox_center(owner["position"]) + direction * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS), "velocity": direction * 550.0, "damage": 3, "lifetime": 2.0, "piercing": false, "delay": 0.0, "chip": character, "launched": true, "homing": level >= 2, "homing_time": TYPIST_GOLDEN_TIME_HOMING_DURATION if level >= 2 else 0.0, "initial_angle": direction.angle(), "key_cap": true})
+	next_projectile_id += 1
+	if level >= 3:
+		shockwaves.append({"owner_id": owner_id, "origin": get_player_hitbox_center(owner["position"]), "delay": 0.0, "elapsed": 0.0, "radius": 0.0, "duration": 1.0, "speed": 200.0, "damage": 1, "knockback": 0.0, "hit": false})
+
+
 func spawn_zone(owner_id: int, score: int, zone_position: Vector2, delay: float = 0.0, active_duration: float = 1.0) -> void:
 	magic_zones.append({"owner_id": owner_id, "position": clamp_to_arena(zone_position), "lifetime": 0.0, "active_duration": active_duration, "delay": delay, "elapsed": 0.0, "warning_duration": CHANTER_ZONE_WARNING_DURATION, "growth_frame_duration": CHANTER_ZONE_GROWTH_FRAME_DURATION, "damage_interval": CHANTER_ZONE_DAMAGE_INTERVAL, "next_damage_time": CHANTER_ZONE_WARNING_DURATION, "damage": 1 + roundi(float(score) * 0.06), "spawned": false})
 
@@ -2004,7 +2141,7 @@ func update_shockwaves(delta: float) -> void:
 		wave["delay"] = float(wave["delay"]) - delta
 		if float(wave["delay"]) <= 0.0:
 			wave["elapsed"] = float(wave["elapsed"]) + delta
-			wave["radius"] = SHOCKWAVE_SPEED * float(wave["elapsed"])
+			wave["radius"] = float(wave.get("speed", SHOCKWAVE_SPEED)) * float(wave["elapsed"])
 			destroy_decoys_in_radius(int(wave["owner_id"]), Vector2(wave["origin"]), float(wave["radius"]))
 			if not bool(wave["hit"]):
 				var target_id := 2 if int(wave["owner_id"]) == 1 else 1
@@ -3025,6 +3162,8 @@ func _send_dedicated_loadout(selection: int) -> void:
 	var big_skill := "typist_trident"
 	if selection == 0 and int(character_skill_selection.get("typist", [0, 0, 0])[1]) == 1:
 		big_skill = "typist_keycap_ii"
+	elif selection == 0 and int(character_skill_selection.get("typist", [0, 0, 0])[1]) == 2:
+		big_skill = "typist_golden_time_ii"
 	elif selection == 1 and int(character_skill_selection.get("arithmetician", [0, 0, 0])[1]) == 1:
 		big_skill = "arithmetic_perfect_mapping"
 	var visual_id: String = ["typist", "arithmetician", "chanter"][selection]
@@ -3950,12 +4089,12 @@ func update_character_screen() -> void:
 
 func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if visual_id == "typist" and skill_index == 0:
-		return ["鍵片追弾（けんぺんついだん）", "未実装", "未実装", "未実装", "未実装"]
+		return ["鍵片追弾（けんぺんついだん）", "黄金時間（おうごんじかん）", "未実装", "未実装", "未実装"]
 	if visual_id == "typist" and skill_index == 1:
-		return ["三叉震槌（さんさしんつい）", "鍵片追弾II（けんぺんついだん）", "未実装", "未実装", "未実装"]
+		return ["三叉震槌（さんさしんつい）", "鍵片追弾II（けんぺんついだん）", "黄金時間II（おうごんじかん）", "未実装", "未実装"]
 	if skill_index == 2:
 		if visual_id == "typist":
-			return ["黄金大旋槌（おうごんだいせんつい）", "未実装", "未実装", "未実装", "未実装"]
+			return ["黄金大旋槌（おうごんだいせんつい）", "黄金時間III（おうごんじかん）", "未実装", "未実装", "未実装"]
 		if visual_id == "arithmetician":
 			return ["視覚妨害（ハックビジョン）", "未実装", "未実装", "未実装", "未実装"]
 		if visual_id == "chanter":
@@ -4060,6 +4199,12 @@ func skill_description(visual_id: String, skill_index: int, candidate_index: int
 	if name == "未実装":
 		return "このスキルは現在準備中です。"
 	if visual_id == "typist":
+		if skill_index == 0 and candidate_index == 1:
+			return formatted_skill_description(50, 3, "短いワードを打ち切るとタイピングゾーンモードIへ入る。正しい入力が鍵片になり、成功時のスコアが上がる代わりに通常攻撃は使えない。")
+		if skill_index == 1 and candidate_index == 2:
+			return formatted_skill_description(60, 5, "短いワードを打ち切るとタイピングゾーンモードIIへ入る。鍵片はゆるく追尾し、タイピング課題の制限時間も伸びる。")
+		if skill_index == 2 and candidate_index == 1:
+			return formatted_skill_description(70, 8, "短いワードを打ち切るとタイピングゾーンモードIIIへ入る。追尾鍵片に加えて、正しい打鍵ごとに周囲へダメージ波動を放つ。")
 		if skill_index == 0:
 			return formatted_skill_description(2, 6, "入力した文字数だけ鍵片を作り、相手へ順に射出する。高得点なら発射直後の鍵片がゆるく相手を追尾する、素早い入力向けの基本技。")
 		if skill_index == 1 and candidate_index == 0:
@@ -4368,7 +4513,7 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_skill = "" if phase == "finish" else incoming_challenge_skill
 	challenge_prompt = "" if phase == "finish" else str(state["challenge_prompt"])
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
-	if challenge_skill == "skill3_typing":
+	if challenge_skill.begins_with("skill3_typing"):
 		challenge_answer = challenge_prompt
 	challenge_target_points = make_lunar_eclipse_trace_target() if challenge_skill == "skill3_trace_lunar_eclipse" else (make_trace_target(challenge_skill.begins_with("big"), 3.5 if challenge_skill == "skill3_trace" else 0.0) if _is_trace_challenge() else PackedVector2Array())
 	if phase == "finish":
@@ -4466,11 +4611,11 @@ func receive_remote_challenge_submission(submitted_text: String) -> void:
 
 
 @rpc("any_peer", "unreliable")
-func receive_typist_typing_key_sound() -> void:
+func receive_typist_typing_key_sound(volume_scale: float = 1.0) -> void:
 	if network_mode == "client":
-		play_typist_typing_key_sound()
+		play_typist_typing_key_sound(volume_scale)
 	elif network_mode == "host" and multiplayer.get_remote_sender_id() > 0 and challenge_owner == 2:
-		play_typist_typing_key_sound()
+		play_typist_typing_key_sound(volume_scale)
 
 
 @rpc("any_peer", "reliable")
@@ -4750,6 +4895,10 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
 	player["big_skill_id"] = "arithmetic_perfect_mapping" if visual_id == "arithmetician" and int(selected_skills[1]) == 1 else ("typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else ("typist_trident" if visual_id == "typist" else "%s_big_0" % ids[selection]))
 	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("arithmetic_hack_vision" if visual_id == "arithmetician" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else ("chanter_lunar_eclipse" if visual_id == "chanter" and int(selected_skills[2]) == 1 else "")))
+	if visual_id == "typist":
+		player["small_skill_id"] = "typist_golden_time_i" if int(selected_skills[0]) == 1 else "blade_small_0"
+		player["big_skill_id"] = "typist_golden_time_ii" if int(selected_skills[1]) == 2 else ("typist_keycap_ii" if int(selected_skills[1]) == 1 else "typist_trident")
+		player["skill3_id"] = "typist_golden_time_iii" if int(selected_skills[2]) == 1 else "typist_hammer_spin"
 	player["visual_id"] = visual_ids[selection]
 	var is_local_player := player_id == (local_player_id if network_mode == "client" else 1)
 	player["name"] = user_display_name if is_local_player else names[selection]
@@ -4772,6 +4921,9 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["hack_vision_suppress_interference_points"] = false
 	player["small_cooldown"] = 0.0
 	player["big_cooldown"] = 0.0
+	player["skill3_cooldown"] = 0.0
+	player["typing_zone_time"] = 0.0
+	player["typing_zone_level"] = 0
 	player["arithmetic_interference_multiplier"] = 1.0
 	player["position"] = Vector2(200, ARENA.get_center().y) if player_id == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if player_id == 1 else Vector2.LEFT
@@ -4933,12 +5085,12 @@ func update_hud() -> void:
 		opponent_arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(opponent_multiplier, 1.0) else "f(x) = %.1fx" % opponent_multiplier
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
-		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused)
-		var small_cooldown_duration := CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN
+		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused or typing_zone_level(own_player) > 0)
+		var small_cooldown_duration := TYPIST_GOLDEN_TIME_I_COOLDOWN if str(own_player.get("small_skill_id", "")) == "typist_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
 		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
-		var big_cooldown_duration := ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))
+		var big_cooldown_duration := TYPIST_GOLDEN_TIME_II_COOLDOWN if str(own_player.get("big_skill_id", "")) == "typist_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)))
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
-		var skill3_cooldown_duration := ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(own_player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN))
+		var skill3_cooldown_duration := TYPIST_GOLDEN_TIME_III_COOLDOWN if str(own_player.get("skill3_id", "")) == "typist_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(own_player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
 		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
 	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
@@ -4987,7 +5139,7 @@ func is_skill_candidate_implemented(visual_id: String, skill_index: int, candida
 	if candidate_index < 0 or candidate_index >= 5:
 		return false
 	if visual_id == "typist":
-		return (skill_index == 0 and candidate_index == 0) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index == 0)
+		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index < 3) or (skill_index == 2 and candidate_index < 2)
 	if visual_id == "chanter":
 		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index == 0) or (skill_index == 2 and candidate_index < 2)
 	if visual_id == "arithmetician":
@@ -5015,11 +5167,11 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 		return lock_icon_for(visual_id)
 	if visual_id == "typist":
 		if skill_index == 0:
-			return SKILL_TYPIST_KEYCAP
+			return SKILL_TYPIST_GOLDEN_TIME if selected_index == 1 else SKILL_TYPIST_KEYCAP
 		if skill_index == 1:
-			return SKILL_TYPIST_KEYCAP_II if selected_index == 1 else SKILL_TYPIST_TRIDENT
+			return SKILL_TYPIST_GOLDEN_TIME_II if selected_index == 2 else (SKILL_TYPIST_KEYCAP_II if selected_index == 1 else SKILL_TYPIST_TRIDENT)
 		if skill_index == 2:
-			return SKILL_TYPIST_HAMMER if selected_index == 0 else SKILL_EMPTY_ICON
+			return SKILL_TYPIST_GOLDEN_TIME_III if selected_index == 1 else (SKILL_TYPIST_HAMMER if selected_index == 0 else SKILL_EMPTY_ICON)
 		return SKILL_EMPTY_ICON
 	if visual_id == "arithmetician":
 		if skill_index == 0:
@@ -5483,6 +5635,9 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		return
 	if bool(player["focused"]):
 		draw_focus_particles(player)
+	var zone_level := typing_zone_level(player)
+	if zone_level > 0:
+		draw_typing_zone_aura(position_value, zone_level, float(player.get("typing_zone_time", 0.0)))
 	var is_moving: bool = bool(player.get("is_moving", false))
 	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
 	var sprite_column: int = get_sprite_direction_column(facing)
@@ -5502,6 +5657,14 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		# オンライン対戦では、判定そのものに影響しない赤いデバッグ枠を描画しない。
 		if network_mode == "local":
 			draw_debug_normal_attack_hit_area(position_value, facing)
+
+
+func draw_typing_zone_aura(position_value: Vector2, level: int, remaining: float) -> void:
+	var pulse := 1.0 + 0.06 * sin(character_animation_elapsed * TAU * 2.0)
+	var color := Color(0.26, 0.93, 0.56, 0.22 + 0.08 * float(level))
+	draw_circle(position_value + Vector2(0.0, -18.0), (34.0 + 5.0 * float(level)) * pulse, color, false, 2.0)
+	draw_arc(position_value + Vector2(0.0, -18.0), (42.0 + 5.0 * float(level)) * pulse, -PI * 0.78, PI * 0.54, 20, Color(0.54, 1.0, 0.66, 0.48), 2.0, true)
+	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-36.0, -108.0), "ZONE %d  %.0fs" % [level, ceilf(remaining)], HORIZONTAL_ALIGNMENT_CENTER, 72.0, 12, Color(0.70, 1.0, 0.78, 0.90))
 
 
 func draw_hack_vision_status_noise(position_value: Vector2, remaining: float) -> void:
