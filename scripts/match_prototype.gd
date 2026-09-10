@@ -322,7 +322,11 @@ const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
 const BATTLE_BGM_SOUND: AudioStream = preload("res://assets/audio/battle_bgm_rising_tension.mp3")
 const SKILL_PANEL_CLICK_SOUND: AudioStream = preload("res://assets/audio/skill_panel_click.wav")
 const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
-const DAMAGE_HIT_SOUND: AudioStream = preload("res://assets/audio/damage_hit.wav")
+const DAMAGE_HIT_SOUND: AudioStream = preload("res://assets/audio/damaged.mp3")
+const TRIDENT_LANDING_SOUND: AudioStream = preload("res://assets/audio/game_hit_midheavy.wav")
+const SKILL_MISS_SOUND: AudioStream = preload("res://assets/audio/skill_miss.mp3")
+const WRITING_SOUND: AudioStream = preload("res://assets/audio/writing_sound.wav")
+const WRITING_SOUND_IDLE_STOP_MSEC := 90
 const DOT_GOTHIC_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 const UI_LOGO: Texture2D = preload("res://assets/ui/logo_title.png")
 const UI_PANEL_FRAME: Texture2D = preload("res://assets/ui/panel_frame.png")
@@ -433,6 +437,8 @@ var screen_shake_time: float = 0.0
 var screen_shake_strength: float = 0.0
 var challenge_trace_points: PackedVector2Array = PackedVector2Array()
 var challenge_trace_drawing: bool = false
+var writing_sound_player: AudioStreamPlayer
+var writing_sound_last_motion_msec := 0
 var challenge_target_points: PackedVector2Array = PackedVector2Array()
 var trace_evaluator = TraceEvaluatorData.new()
 var last_trace_result: Dictionary = {}
@@ -634,6 +640,7 @@ class NormalAttackHitArea:
 func _ready() -> void:
 	load_user_settings()
 	load_focus_particle_textures()
+	setup_writing_sound_player()
 	if menu_layout == null:
 		menu_layout = MenuLayoutData.new()
 	# @tool runs in the editor and its connection guards use metadata so the
@@ -819,10 +826,89 @@ func play_typist_typing_key_sound() -> void:
 func play_damage_hit_sound() -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = DAMAGE_HIT_SOUND
-	player.volume_db = 0.0
+	player.volume_db = -3.0
 	add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()
+
+
+func play_trident_landing_sound() -> void:
+	play_one_shot_sound(TRIDENT_LANDING_SOUND)
+
+
+func play_skill_miss_sound() -> void:
+	play_one_shot_sound(SKILL_MISS_SOUND)
+
+
+func play_one_shot_sound(sound: AudioStream, volume_db := 0.0) -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = sound
+	player.volume_db = volume_db
+	add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+func setup_writing_sound_player() -> void:
+	writing_sound_player = AudioStreamPlayer.new()
+	writing_sound_player.stream = WRITING_SOUND
+	writing_sound_player.volume_db = -5.0
+	add_child(writing_sound_player)
+
+
+func note_challenge_trace_motion() -> void:
+	writing_sound_last_motion_msec = Time.get_ticks_msec()
+	if writing_sound_player and not writing_sound_player.playing:
+		writing_sound_player.play()
+
+
+func stop_writing_sound() -> void:
+	writing_sound_last_motion_msec = 0
+	if writing_sound_player and writing_sound_player.playing:
+		writing_sound_player.stop()
+
+
+func update_writing_sound() -> void:
+	if not challenge_trace_drawing or writing_sound_last_motion_msec <= 0:
+		stop_writing_sound()
+		return
+	if Time.get_ticks_msec() - writing_sound_last_motion_msec > WRITING_SOUND_IDLE_STOP_MSEC:
+		stop_writing_sound()
+
+
+func emit_shared_sound(sound_kind: StringName) -> void:
+	match sound_kind:
+		&"damage": play_damage_hit_sound()
+		&"trident_landing": play_trident_landing_sound()
+	if network_mode == "host":
+		rpc("receive_shared_sound", sound_kind)
+
+
+@rpc("authority", "unreliable")
+func receive_shared_sound(sound_kind: StringName) -> void:
+	if network_mode != "client":
+		return
+	match sound_kind:
+		&"damage": play_damage_hit_sound()
+		&"trident_landing": play_trident_landing_sound()
+
+
+func trigger_challenge_miss_feedback(duration := 0.22) -> void:
+	challenge_miss_flash = duration
+	challenge_shake = duration
+	if network_mode != "host" or challenge_owner == 1:
+		play_skill_miss_sound()
+	if network_mode == "host" and challenge_owner == 2:
+		rpc("receive_challenge_miss_feedback", duration)
+
+
+@rpc("authority", "reliable")
+func receive_challenge_miss_feedback(duration: float) -> void:
+	if network_mode != "client":
+		return
+	challenge_miss_flash = duration
+	challenge_shake = duration
+	play_skill_miss_sound()
 
 
 func emit_typist_typing_key_sound() -> void:
@@ -914,6 +1000,7 @@ func _process(delta: float) -> void:
 	challenge_shake = maxf(0.0, challenge_shake - visual_delta)
 	screen_shake_time = maxf(0.0, screen_shake_time - visual_delta)
 	arithmetic_flash_time = maxf(0.0, arithmetic_flash_time - visual_delta)
+	update_writing_sound()
 	if phase == "finish":
 		_advance_finish_visuals(visual_delta)
 	update_match_start_prompt(visual_delta)
@@ -1422,8 +1509,7 @@ func _submit_arithmetic_answer(submitted_text: String) -> void:
 	players[challenge_owner] = player
 	challenge_typed_characters = ""
 	typing_input.text = ""
-	challenge_miss_flash = 0.22
-	challenge_shake = 0.22
+	trigger_challenge_miss_feedback()
 	status_text = "回答を間違えた。残り時間が減少した。"
 	update_challenge_ui(float(player["challenge_elapsed"]))
 
@@ -1459,8 +1545,7 @@ func _process_typing_character(character: String) -> void:
 		player["challenge_errors"] = int(player["challenge_errors"]) + 1
 		player["challenge_elapsed"] = minf(get_challenge_time_limit(), float(player["challenge_elapsed"]) + CHALLENGE_MISS_TIME_PENALTY)
 		players[challenge_owner] = player
-		challenge_miss_flash = 0.22
-		challenge_shake = 0.22
+		trigger_challenge_miss_feedback()
 		status_text = "入力ミス！ 残り時間が減少した。"
 		update_challenge_ui(float(player["challenge_elapsed"]))
 		return
@@ -1532,6 +1617,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	challenge_skill = ""
 	challenge_trace_points.clear()
 	challenge_trace_drawing = false
+	stop_writing_sound()
 	challenge_target_points.clear()
 	update_trace_canvas()
 
@@ -1792,6 +1878,7 @@ func update_trident_impacts(delta: float) -> void:
 			spawn_trident_attack(impact)
 			impact["released"] = true
 			trigger_screen_shake(int(impact.get("score", 0)))
+			emit_shared_sound(&"trident_landing")
 		if float(impact["elapsed"]) >= float(impact.get("duration", 0.55)):
 			trident_impacts.remove_at(index)
 		else:
@@ -2215,7 +2302,7 @@ func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
 	players[target_id] = target
-	play_damage_hit_sound()
+	emit_shared_sound(&"damage")
 	if int(target["hp"]) <= 0:
 		begin_knockout_finish(2 if target_id == 1 else 1)
 
@@ -3060,6 +3147,7 @@ func _update_dedicated_trident_screen_shake() -> void:
 		var released := bool(impact.get("released", false))
 		if released and not bool(dedicated_trident_release_states.get(impact_id, false)):
 			trigger_screen_shake(int(impact.get("score", 0)))
+			play_trident_landing_sound()
 		current_states[impact_id] = released
 	dedicated_trident_release_states = current_states
 
@@ -3095,8 +3183,7 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 	challenge_definition = null
 	var miss_sequence := int(challenge.get("miss_sequence", 0))
 	if miss_sequence > dedicated_challenge_miss_sequence:
-		challenge_miss_flash = 0.22
-		challenge_shake = 0.22
+		trigger_challenge_miss_feedback()
 	dedicated_challenge_miss_sequence = miss_sequence
 	set_challenge_overlay_visible(true)
 	typing_input.visible = dedicated_challenge_type != "tracing"
@@ -4366,6 +4453,7 @@ func reset_match_runtime_state() -> void:
 	challenge_typed_characters = ""
 	challenge_trace_points.clear()
 	challenge_trace_drawing = false
+	stop_writing_sound()
 	challenge_target_points.clear()
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
@@ -4510,8 +4598,7 @@ func end_trace_challenge_from_result(trace_result: Dictionary) -> void:
 		return
 	# なぞりはマウスを離した時点でしか失敗を検出できないため、既存の
 	# 文字・算術入力ミスと同じフィードバックを閉じる前に短時間表示する。
-	challenge_miss_flash = CHANTER_TRACE_FAILURE_FEEDBACK_DURATION
-	challenge_shake = CHANTER_TRACE_FAILURE_FEEDBACK_DURATION
+	trigger_challenge_miss_feedback(CHANTER_TRACE_FAILURE_FEEDBACK_DURATION)
 	update_challenge_ui(float(players[challenge_owner].get("challenge_elapsed", 0.0)))
 	var failed_owner := challenge_owner
 	var failed_skill := challenge_skill
@@ -5387,6 +5474,7 @@ func _input(event: InputEvent) -> void:
 			if not challenge_trace_drawing:
 				return
 			challenge_trace_drawing = false
+			stop_writing_sound()
 			if dedicated_connection and dedicated_connection.has_pending_join():
 				dedicated_connection.send_event("challenge_trace", challenge_trace_points)
 				return
@@ -5401,6 +5489,7 @@ func _input(event: InputEvent) -> void:
 			return
 		if challenge_trace_canvas != null and challenge_trace_canvas.get_global_rect().has_point(event.position):
 			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
+			note_challenge_trace_motion()
 			update_trace_canvas()
 
 

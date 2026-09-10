@@ -21,6 +21,7 @@ func _run() -> void:
 	_test_dedicated_snapshot_ui(prototype)
 	_test_dedicated_trace_persistence(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
+	_test_sound_effect_setup(prototype)
 	# The test supplies a pending reservation to exercise dedicated-only UI.
 	# Clear it before the next frame so the scene never attempts a real RPC.
 	(prototype.get("dedicated_connection") as Node).set("_join_data", {})
@@ -242,3 +243,27 @@ func _test_dedicated_trident_landing_shake(prototype: Node) -> void:
 	prototype.set("screen_shake_time", 0.0)
 	prototype.call("_on_dedicated_snapshot_received", landed_snapshot)
 	assert(is_zero_approx(float(prototype.get("screen_shake_time"))))
+
+
+func _test_sound_effect_setup(prototype: Node) -> void:
+	for path in [
+		"res://assets/audio/damaged.mp3",
+		"res://assets/audio/game_hit_midheavy.wav",
+		"res://assets/audio/skill_miss.mp3",
+		"res://assets/audio/writing_sound.wav",
+	]:
+		assert(ResourceLoader.exists(path))
+	assert(prototype.has_method("emit_shared_sound"))
+	assert(prototype.has_method("trigger_challenge_miss_feedback"))
+	var writing_player := prototype.get("writing_sound_player") as AudioStreamPlayer
+	assert(writing_player != null)
+	assert(writing_player.stream != null)
+	var writing_stream := writing_player.stream as AudioStreamWAV
+	assert(writing_stream != null)
+	assert(writing_stream.loop_mode == AudioStreamWAV.LOOP_DISABLED)
+	prototype.call("note_challenge_trace_motion")
+	assert(int(prototype.get("writing_sound_last_motion_msec")) > 0)
+	assert(writing_player.playing)
+	prototype.call("stop_writing_sound")
+	assert(is_zero_approx(float(prototype.get("writing_sound_last_motion_msec"))))
+	assert(not writing_player.playing)
