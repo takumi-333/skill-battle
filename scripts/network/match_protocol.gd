@@ -43,7 +43,7 @@ static func valid_event(value: Variant, previous_sequence: int) -> bool:
 		"challenge_trace":
 			return payload is PackedVector2Array and (payload as PackedVector2Array).size() <= MAX_TRACE_POINTS
 		"loadout":
-			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
+			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii", "arithmetic_perfect_mapping"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
 		_:
 			return payload == null
 
@@ -68,7 +68,7 @@ const PLAYER_SNAPSHOT_KEYS := [
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
-	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "arithmetic_interference_multiplier", "hack_vision_time", "hack_vision_owner_id",
+	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "arithmetic_interference_multiplier", "hack_vision_time", "hack_vision_owner_id", "hack_vision_suppress_interference_points",
 ]
 const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin", "center"]
 const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time", "wait_time"]
@@ -98,6 +98,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"decoys": state.get("decoys", []).duplicate(true),
 		"arithmetic_flashes": state.get("arithmetic_flashes", []).duplicate(true),
 		"arithmetic_point_collections": state.get("arithmetic_point_collections", []).duplicate(true),
+		"perfect_mapping_effects": state.get("perfect_mapping_effects", []).duplicate(true),
 		"hammer_spins": state.get("hammer_spins", []).duplicate(true),
 		"lunar_eclipses": state.get("lunar_eclipses", []).duplicate(true),
 	}
@@ -117,7 +118,7 @@ static func interpolate_visual_state(previous: Dictionary, current: Dictionary, 
 	var value := current.duplicate(true)
 	var clamped_ratio := clampf(ratio, 0.0, 1.0)
 	value["players"] = _interpolate_players(previous.get("players", {}), current.get("players", {}), clamped_ratio)
-	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins", "lunar_eclipses"]:
+	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "perfect_mapping_effects", "hammer_spins", "lunar_eclipses"]:
 		value[entity_key] = _interpolate_entities(previous.get(entity_key, []), current.get(entity_key, []), clamped_ratio)
 	return value
 

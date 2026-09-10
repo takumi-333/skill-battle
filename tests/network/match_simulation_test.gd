@@ -4,6 +4,7 @@ func _init() -> void:
 	_test_state_and_normal_attack()
 	_test_typist_skills()
 	_test_arithmetician_skills()
+	_test_arithmetician_perfect_mapping()
 	_test_arithmetician_interference_points()
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
@@ -260,6 +261,32 @@ func _test_arithmetician_skills() -> void:
 	unavailable_skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
 	assert(str(unavailable_skill3_simulation.state["players"][1]["skill3_id"]).is_empty())
 	assert(not unavailable_skill3_simulation.handle_event(1, {"type": "skill3"}))
+
+func _test_arithmetician_perfect_mapping() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 1, "arithmetic_perfect_mapping")
+	simulation.configure_loadout(2, 1, "arithmetic_perfect_mapping")
+	assert(str(simulation.state["players"][1]["big_skill_id"]) == "arithmetic_perfect_mapping")
+	assert(simulation.handle_event(1, {"type": "big_skill"}))
+	var challenge: Dictionary = simulation.state["challenges"][1]
+	assert(str(challenge["skill"]) == "big_arithmetic_perfect_mapping")
+	assert(is_equal_approx(float(challenge["limit"]), 12.0))
+	assert(str(challenge["prompt"]).trim_suffix(" = ?") in MatchSimulation.ARITH_PERFECT_MAPPING)
+	_complete_arithmetic(simulation, 1)
+	assert(is_equal_approx(float(simulation.state["players"][1]["big_cooldown"]), 10.0))
+	assert(simulation.state["perfect_mapping_effects"].size() == 1)
+	assert(str(simulation.state["perfect_mapping_effects"][0]["copied_skill"]) != "arithmetic_perfect_mapping")
+	var mapping_snapshot := MatchProtocol.snapshot("perfect-mapping", simulation.state, "match", "", 1)
+	assert(mapping_snapshot["perfect_mapping_effects"].size() == 1)
+	simulation.step(1.21, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(simulation.state["perfect_mapping_effects"].is_empty())
+
+	var no_point_simulation := MatchSimulation.new()
+	no_point_simulation.configure_loadout(1, 1, "arithmetic_perfect_mapping")
+	no_point_simulation._spawn_copied_skill(1, 80, "arithmetic_small_0")
+	assert(not no_point_simulation.state["decoys"].is_empty())
+	no_point_simulation._destroy_decoy_at_point(2, Vector2(no_point_simulation.state["decoys"][0]["position"]))
+	assert(no_point_simulation.state["arithmetic_point_collections"].is_empty())
 
 func _test_chanter_skills() -> void:
 	var simulation := MatchSimulation.new()

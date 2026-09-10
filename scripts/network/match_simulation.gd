@@ -14,6 +14,7 @@ const NORMAL_COOLDOWN := 3.0
 const NORMAL_DURATION := 0.28
 const TYPING_COOLDOWN := 2.0
 const ARITHMETIC_BIG_COOLDOWN := 15.0
+const ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN := 10.0
 const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
@@ -58,6 +59,7 @@ const BIG_II_WORDS := ["Pursuit", "Track Down", "Follow the Trail", "Lock On", "
 const SKILL3_WORDS := ["Spin the Hammer, Scatter All", "Hammer Spin Sends Foes Flying", "Circle the Hammer, Crush All"]
 const ARITH_SMALL := ["12 + 3 * 8", "15 + 4 * 9", "18 + 5 * 14", "21 + 6 * 7"]
 const ARITH_BIG := ["22 + 4 * 16", "4 + 8 * 9 + 12", "16 + 17 + 18 + 19", "164 + 255"]
+const ARITH_PERFECT_MAPPING := ["28 + 7 * 18", "9 + 12 * 11 + 16", "24 + 25 + 26 + 27", "212 + 187", "31 + 8 * 15", "14 + 9 * 13 + 21", "29 + 30 + 31 + 32", "238 + 176", "26 + 6 * 19", "11 + 14 * 9 + 17", "18 + 20 + 22 + 24", "257 + 168", "33 + 5 * 17", "15 + 11 * 12 + 19", "27 + 28 + 29 + 30"]
 const ARITH_HACK_VISION := ["33 * 44 + 16 * 6 + 29", "28 * 47 + 15 * 7 + 34", "36 * 42 + 18 * 5 + 27", "31 * 46 + 14 * 8 + 25", "27 * 53 + 17 * 6 + 32", "34 * 41 + 19 * 5 + 28", "29 * 48 + 16 * 7 + 31", "37 * 39 + 13 * 8 + 26", "32 * 45 + 17 * 6 + 35"]
 
 var state: Dictionary
@@ -86,6 +88,7 @@ func reset() -> void:
 		"decoys": [],
 		"arithmetic_flashes": [],
 		"arithmetic_point_collections": [],
+		"perfect_mapping_effects": [],
 		"hammer_spins": [],
 		"lunar_eclipses": [],
 	}
@@ -111,7 +114,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["hack_vision_time"] = 0.0
 	player["hack_vision_owner_id"] = 0
 	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
-	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
+	player["big_skill_id"] = big_skill if character == 0 or (character == 1 and big_skill == "arithmetic_perfect_mapping") else "%s_big_0" % ids[character]
 	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else "")))
 	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
@@ -162,6 +165,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	_update_decoys(delta)
 	_update_arithmetic_flashes(delta)
 	_update_arithmetic_point_collections(delta)
+	_update_perfect_mapping_effects(delta)
 	if float(state["time_remaining"]) <= 0.0 and not bool(state["match_over"]):
 		_finish_by_hp()
 
@@ -182,6 +186,7 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 		player["invisible_flicker"] = ARITHMETICIAN_INVISIBILITY_FLICKER_INTERVAL
 	if float(player.get("hack_vision_time", 0.0)) <= 0.0:
 		player["hack_vision_owner_id"] = 0
+		player["hack_vision_suppress_interference_points"] = false
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	player["is_moving"] = false
 	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and not _is_lunar_eclipse_active(slot) and move.length_squared() > 0.0:
@@ -224,6 +229,8 @@ func _try_normal_attack(slot: int) -> bool:
 func _award_hack_vision_miss(attacker: int) -> bool:
 	var affected: Dictionary = state["players"][attacker]
 	if float(affected.get("hack_vision_time", 0.0)) <= 0.0:
+		return false
+	if bool(affected.get("hack_vision_suppress_interference_points", false)):
 		return false
 	var owner := int(affected.get("hack_vision_owner_id", 0))
 	if owner == attacker or not state["players"].has(owner):
@@ -284,9 +291,10 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 			skill = "small_typing"
 	elif character_id == "arithmetic":
 		challenge_type = "arithmetic"
-		values = ARITH_HACK_VISION if tier == "skill3" else (ARITH_BIG if tier == "big" else ARITH_SMALL)
-		limit = 15.0 if tier == "skill3" else (10.0 if tier == "big" else 7.0)
-		skill = "skill3_arithmetic_hack_vision" if tier == "skill3" else ("big_arithmetic" if tier == "big" else "small_arithmetic")
+		var uses_perfect_mapping := tier == "big" and str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping"
+		values = ARITH_HACK_VISION if tier == "skill3" else (ARITH_PERFECT_MAPPING if uses_perfect_mapping else (ARITH_BIG if tier == "big" else ARITH_SMALL))
+		limit = 15.0 if tier == "skill3" else (12.0 if uses_perfect_mapping else (10.0 if tier == "big" else 7.0))
+		skill = "skill3_arithmetic_hack_vision" if tier == "skill3" else ("big_arithmetic_perfect_mapping" if uses_perfect_mapping else ("big_arithmetic" if tier == "big" else "small_arithmetic"))
 	else:
 		challenge_type = "tracing"
 		limit = 0.0
@@ -403,7 +411,7 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN))
 	elif tier == "big":
 		if str(player.get("character_id", "")) == "arithmetic":
-			player["big_cooldown"] = ARITHMETIC_BIG_COOLDOWN
+			player["big_cooldown"] = ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else ARITHMETIC_BIG_COOLDOWN
 		else:
 			player["big_cooldown"] = 7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)
 	else:
@@ -449,6 +457,8 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			_spawn_decoys(owner, score)
 		elif tier == "skill3":
 			_spawn_hack_vision_projectile(owner, score)
+		elif str(challenge.get("skill", "")) == "big_arithmetic_perfect_mapping":
+			_spawn_perfect_mapping(owner, score)
 		else:
 			player = state["players"][owner]
 			player["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
@@ -474,6 +484,68 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 					var shot_delay := float(cycle * 16 + shot) * 0.08
 					_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
 					_spawn_projectile(owner, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
+
+func _perfect_mapping_copy_candidates(owner: int) -> Array[String]:
+	var target := _other(owner)
+	if not state["players"].has(target):
+		return []
+	var player: Dictionary = state["players"][target]
+	var candidates: Array[String] = []
+	for skill_id in [str(player.get("small_skill_id", "")), str(player.get("big_skill_id", "")), str(player.get("skill3_id", ""))]:
+		if _is_perfect_mapping_copyable(skill_id):
+			candidates.append(skill_id)
+	return candidates
+
+func _is_perfect_mapping_copyable(skill_id: String) -> bool:
+	return skill_id in ["blade_small_0", "typist_keycap_ii", "typist_trident", "typist_hammer_spin", "arithmetic_small_0", "arithmetic_big_0", "arithmetic_hack_vision", "chanter_small_0", "chanter_small_1", "chanter_big_0", "chanter_skill3_0", "chanter_lunar_eclipse"]
+
+func _spawn_perfect_mapping(owner: int, score: int) -> void:
+	var candidates := _perfect_mapping_copy_candidates(owner)
+	if candidates.is_empty():
+		state["status_text"] = "%sの完全写像は写し取れる技を検出できなかった。" % str(state["players"][owner]["name"])
+		return
+	var copied_skill: String = candidates[randi_range(0, candidates.size() - 1)]
+	state["perfect_mapping_effects"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "copied_skill": copied_skill, "tile_count": candidates.size(), "score": score, "elapsed": 0.0, "duration": 1.2})
+
+func _spawn_copied_skill(owner: int, score: int, copied_skill: String) -> void:
+	var player: Dictionary = state["players"][owner]
+	if copied_skill == "blade_small_0" or copied_skill == "typist_keycap_ii":
+		var words := SMALL_WORDS if copied_skill == "blade_small_0" else BIG_II_WORDS
+		var word: String = str(words[randi_range(0, words.size() - 1)])
+		var interval := 0.5 if copied_skill == "blade_small_0" else 0.3
+		for index in range(word.length()):
+			_spawn_projectile(owner, score, false, 0.0, float(index) * interval, word[index])
+	elif copied_skill == "typist_trident":
+		state["trident_impacts"].append({"impact_id": _next_trident_impact_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "origin": Vector2(player["position"]), "facing": Vector2(player["facing"]), "score": score, "elapsed": 0.0, "strike_duration": 1.0, "duration": 1.9, "released": false})
+		_next_trident_impact_id += 1
+	elif copied_skill == "typist_hammer_spin":
+		state["hammer_spins"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "score": score, "angle": 0.0, "lifetime": _hammer_duration(score), "hit_timer": 0.0, "keycap_timer": 0.5})
+	elif copied_skill == "arithmetic_small_0":
+		_spawn_decoys(owner, score, true)
+	elif copied_skill == "arithmetic_big_0":
+		player["buff_time"] = lerpf(10.0, 20.0, float(score) / 100.0)
+		player["buff_speed_multiplier"] = 1.25
+		player["attack_damage_buff"] = 1
+		player["invisible_time"] = player["buff_time"]
+		player["invisible_flicker"] = 0.0
+		state["players"][owner] = player
+	elif copied_skill == "arithmetic_hack_vision":
+		_spawn_hack_vision_projectile(owner, score, true)
+	elif copied_skill == "chanter_small_0":
+		for index in 3:
+			_spawn_zone(owner, score, float(index) * 1.5, 2.0 if index < 2 else 2.5)
+	elif copied_skill == "chanter_small_1":
+		_spawn_chanter_clockwise_volley(owner, score)
+	elif copied_skill == "chanter_big_0":
+		for cycle in _chanter_skill2_cycle_count(score):
+			for shot in 16:
+				var shot_delay := float(cycle * 16 + shot) * 0.08
+				_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
+				_spawn_projectile(owner, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
+	elif copied_skill == "chanter_skill3_0":
+		_spawn_chanter_skill3_volley(owner, score)
+	elif copied_skill == "chanter_lunar_eclipse":
+		_spawn_lunar_eclipse(owner, score)
 
 func _chanter_skill2_cycle_count(score: int) -> int:
 	if score <= 30:
@@ -510,13 +582,13 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction})
 	_next_projectile_id += 1
 
-func _spawn_hack_vision_projectile(owner: int, score: int) -> void:
+func _spawn_hack_vision_projectile(owner: int, score: int, suppress_interference_points: bool = false) -> void:
 	var player: Dictionary = state["players"][owner]
 	var target := _other(owner)
 	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
 	if direction.length_squared() <= 0.0:
 		direction = Vector2(player["facing"])
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9, "suppress_interference_points": suppress_interference_points})
 	_next_projectile_id += 1
 
 func _update_projectiles(delta: float) -> void:
@@ -554,6 +626,7 @@ func _update_projectiles(delta: float) -> void:
 				var target_player: Dictionary = state["players"][target]
 				target_player["hack_vision_time"] = maxf(float(target_player.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
 				target_player["hack_vision_owner_id"] = owner
+				target_player["hack_vision_suppress_interference_points"] = bool(projectile.get("suppress_interference_points", false))
 				state["players"][target] = target_player
 				state["status_text"] = "%sの視界にノイズが走った！" % str(target_player["name"])
 			else:
@@ -566,7 +639,7 @@ func _update_projectiles(delta: float) -> void:
 		else:
 			state["skill_projectiles"][index] = projectile
 
-func _spawn_decoys(owner: int, score: int) -> void:
+func _spawn_decoys(owner: int, score: int, suppress_interference_points: bool = false) -> void:
 	var decoys: Array = state["decoys"]
 	decoys.clear()
 	var player: Dictionary = state["players"][owner]
@@ -577,7 +650,7 @@ func _spawn_decoys(owner: int, score: int) -> void:
 		var position_angle := randf_range(0.0, TAU)
 		var radius := randf_range(radius_range.x, radius_range.y)
 		var movement_offset_angle := TAU * float(randi_range(0, 7)) / 8.0
-		decoys.append({"presentation_id": _take_presentation_id(), "owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(movement_offset_angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(position_angle) * radius), "owner_position": Vector2(player["position"]), "movement_offset_angle": movement_offset_angle, "is_moving": false, "animation_phase": randf_range(0.0, 1.0), "lifetime": lifetime, "noise_timer": randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL), "noise_time": 0.0, "noise_phase": randf_range(0.0, TAU), "flash_time": ARITHMETICIAN_FLASH_DURATION})
+		decoys.append({"presentation_id": _take_presentation_id(), "owner_id": owner, "visual_id": "arithmetician", "facing": Vector2(player["facing"]).rotated(movement_offset_angle), "position": _clamp_to_arena(Vector2(player["position"]) + Vector2.from_angle(position_angle) * radius), "owner_position": Vector2(player["position"]), "movement_offset_angle": movement_offset_angle, "is_moving": false, "animation_phase": randf_range(0.0, 1.0), "lifetime": lifetime, "noise_timer": randf_range(ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL, ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL), "noise_time": 0.0, "noise_phase": randf_range(0.0, TAU), "flash_time": ARITHMETICIAN_FLASH_DURATION, "suppress_interference_points": suppress_interference_points})
 	player["buff_time"] = lifetime
 	player["buff_speed_multiplier"] = 1.1
 	player["attack_damage_buff"] = 5
@@ -654,6 +727,8 @@ func _destroy_decoys_near_segment(attacker: int, start: Vector2, end: Vector2, p
 func _destroy_decoy_at_index(index: int) -> void:
 	var decoy: Dictionary = state["decoys"][index]
 	state["decoys"].remove_at(index)
+	if bool(decoy.get("suppress_interference_points", false)):
+		return
 	var owner := int(decoy.get("owner_id", 0))
 	if not state["players"].has(owner):
 		return
@@ -692,6 +767,16 @@ func _update_arithmetic_flashes(delta: float) -> void:
 			state["arithmetic_flashes"].remove_at(index)
 		else:
 			state["arithmetic_flashes"][index] = flash
+
+func _update_perfect_mapping_effects(delta: float) -> void:
+	for index in range(state["perfect_mapping_effects"].size() - 1, -1, -1):
+		var effect: Dictionary = state["perfect_mapping_effects"][index]
+		effect["elapsed"] = float(effect.get("elapsed", 0.0)) + delta
+		if float(effect["elapsed"]) >= float(effect.get("duration", 1.2)):
+			_spawn_copied_skill(int(effect["owner_id"]), int(effect.get("score", 0)), str(effect["copied_skill"]))
+			state["perfect_mapping_effects"].remove_at(index)
+		else:
+			state["perfect_mapping_effects"][index] = effect
 
 func _update_arithmetic_point_collections(delta: float) -> void:
 	for index in range(state["arithmetic_point_collections"].size() - 1, -1, -1):
