@@ -3601,6 +3601,10 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if skill_index == 2:
 		if visual_id == "typist":
 			return ["黄金大旋槌（おうごんだいせんつい）", "未実装", "未実装", "未実装", "未実装"]
+		if visual_id == "arithmetician":
+			return ["視覚妨害（ハックビジョン）", "未実装", "未実装", "未実装", "未実装"]
+		if visual_id == "chanter":
+			return ["十六夜（いざよい）", "未実装", "未実装", "未実装", "未実装"]
 		return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "arithmetician":
 		return ["無限級数（インフィニティ・フラクタル）", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
@@ -3609,7 +3613,6 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 			return ["月柱（げっちゅう）・昇華（しょうか）", "宵月（よいづき）", "未実装", "未実装", "未実装"]
 		if skill_index == 1:
 			return ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
-		return ["十六夜（いざよい）", "未実装", "未実装", "未実装", "未実装"]
 	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 
 
@@ -3712,7 +3715,9 @@ func skill_description(visual_id: String, skill_index: int, candidate_index: int
 	if visual_id == "arithmetician":
 		if skill_index == 0:
 			return formatted_skill_description(2, 7, "数式を解くと、多数の分身を発生させて相手を惑わせる。相手には本物と見分けにくく、相手の攻撃でデコイが消えるたびに妨害ポイントを0.1獲得する。")
-		return formatted_skill_description(15, 10, "数式を解くと、一定時間だけ姿を消す。攻撃時と定期的な瞬間だけ相手に姿を見せるため、接近や離脱に向く。このスキルでは妨害ポイントを獲得しない。")
+		if skill_index == 1:
+			return formatted_skill_description(15, 10, "数式を解くと、一定時間だけ姿を消す。攻撃時と定期的な瞬間だけ相手に姿を見せるため、接近や離脱に向く。このスキルでは妨害ポイントを獲得しない。")
+		return formatted_skill_description(12, 15, "数式を解くと、必中の妨害弾を相手へ放つ。命中した相手の画面にはノイズが発生し、通常攻撃を外すたびに妨害ポイントを0.5獲得する。")
 	if skill_index == 0 and candidate_index == 0:
 		return formatted_skill_description(2, -1, "円の紋章をなぞると、相手の足元に月の魔方陣を3回展開する。少し後に光柱が現れ、魔方陣の中にいる相手へ継続ダメージを与える。")
 	if skill_index == 0:
