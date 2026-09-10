@@ -4,6 +4,7 @@ func _init() -> void:
 	_test_state_and_normal_attack()
 	_test_typist_skills()
 	_test_arithmetician_skills()
+	_test_hack_vision_full_homing()
 	_test_arithmetician_perfect_mapping()
 	_test_arithmetician_interference_points()
 	_test_chanter_skills()
@@ -261,6 +262,23 @@ func _test_arithmetician_skills() -> void:
 	unavailable_skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
 	assert(str(unavailable_skill3_simulation.state["players"][1]["skill3_id"]).is_empty())
 	assert(not unavailable_skill3_simulation.handle_event(1, {"type": "skill3"}))
+
+
+func _test_hack_vision_full_homing() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.state["players"][1]["position"] = Vector2(100, 100)
+	simulation.state["players"][2]["position"] = Vector2(400, 100)
+	simulation._spawn_hack_vision_projectile(1, 100)
+	assert(is_equal_approx(float(simulation.state["skill_projectiles"][0]["lifetime"]), 5.0))
+
+	# Move the target perpendicular to the launch direction. The next update must
+	# immediately align the Hack Vision projectile with that new direction.
+	simulation.state["players"][2]["position"] = Vector2(140, 700)
+	simulation._update_projectiles(0.1)
+	var projectile: Dictionary = simulation.state["skill_projectiles"][0]
+	assert(Vector2(projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+	assert(is_equal_approx(float(projectile["lifetime"]), 4.9))
+
 
 func _test_arithmetician_perfect_mapping() -> void:
 	var simulation := MatchSimulation.new()

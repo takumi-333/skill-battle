@@ -1723,7 +1723,7 @@ func spawn_hack_vision_projectile(owner_id: int, score: int, suppress_interferen
 	var direction := (Vector2(players[target_id]["position"]) - Vector2(owner["position"])).normalized()
 	if direction.length_squared() <= 0.0:
 		direction = Vector2(owner.get("facing", Vector2.RIGHT))
-	skill_projectiles.append({"projectile_id": next_projectile_id, "owner_id": owner_id, "position": get_player_hitbox_center(owner["position"]) + direction * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9, "suppress_interference_points": suppress_interference_points})
+	skill_projectiles.append({"projectile_id": next_projectile_id, "owner_id": owner_id, "position": get_player_hitbox_center(owner["position"]) + direction * (PLAYER_HITBOX_RADIUS_X + SKILL_PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 5.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 5.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9, "suppress_interference_points": suppress_interference_points})
 	next_projectile_id += 1
 
 
@@ -2218,12 +2218,16 @@ func update_skill_projectiles(delta: float) -> void:
 			var homing_target_id := 2 if homing_owner_id == 1 else 1
 			var homing_direction := (Vector2(players[homing_target_id]["position"]) - Vector2(projectile["position"])).normalized()
 			if homing_direction.length_squared() > 0.0:
-				var initial_angle := float(projectile["initial_angle"])
-				var current_angle := Vector2(projectile["velocity"]).angle()
-				var desired_angle := initial_angle + clampf(angle_difference(initial_angle, homing_direction.angle()), -TYPING_HOMING_MAX_ANGLE, TYPING_HOMING_MAX_ANGLE)
-				var next_angle := rotate_toward(current_angle, desired_angle, TYPING_HOMING_TURN_SPEED * delta)
 				var projectile_speed := Vector2(projectile["velocity"]).length()
-				projectile["velocity"] = Vector2.from_angle(next_angle) * projectile_speed
+				if bool(projectile.get("hack_vision", false)):
+					# Hack Vision is guaranteed homing, unlike the Typist's limited turn.
+					projectile["velocity"] = homing_direction * projectile_speed
+				else:
+					var initial_angle := float(projectile["initial_angle"])
+					var current_angle := Vector2(projectile["velocity"]).angle()
+					var desired_angle := initial_angle + clampf(angle_difference(initial_angle, homing_direction.angle()), -TYPING_HOMING_MAX_ANGLE, TYPING_HOMING_MAX_ANGLE)
+					var next_angle := rotate_toward(current_angle, desired_angle, TYPING_HOMING_TURN_SPEED * delta)
+					projectile["velocity"] = Vector2.from_angle(next_angle) * projectile_speed
 			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		var position_value: Vector2 = projectile["position"] + projectile["velocity"] * delta
 		projectile["position"] = position_value

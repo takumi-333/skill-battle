@@ -588,7 +588,7 @@ func _spawn_hack_vision_projectile(owner: int, score: int, suppress_interference
 	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
 	if direction.length_squared() <= 0.0:
 		direction = Vector2(player["facing"])
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 4.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 4.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9, "suppress_interference_points": suppress_interference_points})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + direction * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": direction * 420.0, "damage": 0, "lifetime": 5.0, "piercing": false, "delay": 0.0, "chip": "", "launched": true, "homing": true, "homing_time": 5.0, "initial_angle": direction.angle(), "key_cap": false, "hack_vision": true, "hack_duration": float(score) * 0.9, "suppress_interference_points": suppress_interference_points})
 	_next_projectile_id += 1
 
 func _update_projectiles(delta: float) -> void:
@@ -613,7 +613,12 @@ func _update_projectiles(delta: float) -> void:
 			projectile["launched"] = true
 		if bool(projectile["homing"]) and float(projectile["homing_time"]) > 0.0:
 			var desired := (Vector2(state["players"][target]["position"]) - Vector2(projectile["position"])).normalized()
-			projectile["velocity"] = Vector2(projectile["velocity"]).lerp(desired * Vector2(projectile["velocity"]).length(), minf(1.0, 0.6 * delta))
+			if bool(projectile.get("hack_vision", false)):
+				# Hack Vision is a guaranteed-homing interference projectile: its heading
+				# always matches the target's current direction.
+				projectile["velocity"] = desired * Vector2(projectile["velocity"]).length()
+			else:
+				projectile["velocity"] = Vector2(projectile["velocity"]).lerp(desired * Vector2(projectile["velocity"]).length(), minf(1.0, 0.6 * delta))
 			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		projectile["position"] = Vector2(projectile["position"]) + Vector2(projectile["velocity"]) * delta
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
