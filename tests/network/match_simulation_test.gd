@@ -28,6 +28,11 @@ func _init() -> void:
 
 func _test_state_and_normal_attack() -> void:
 	var simulation := MatchSimulation.new()
+	assert(int(simulation.state["players"][1]["normal_damage"]) == 5)
+	assert(int(simulation.state["players"][2]["normal_damage"]) == 2)
+	simulation.configure_loadout(2, 2, "")
+	assert(int(simulation.state["players"][2]["normal_damage"]) == 3)
+	simulation.configure_loadout(2, 1, "")
 	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(Vector2(200, 387)))
 	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(1480, 387)))
 	simulation.step(10.0, {1: {"move": Vector2.LEFT}, 2: {"move": Vector2.DOWN}})
@@ -41,7 +46,7 @@ func _test_state_and_normal_attack() -> void:
 	simulation.state["players"][1]["facing"] = Vector2.RIGHT
 	simulation.state["players"][2]["position"] = Vector2(180, 100)
 	assert(simulation.handle_event(1, {"type": "attack"}))
-	assert(int(simulation.state["players"][2]["hp"]) == 88)
+	assert(int(simulation.state["players"][2]["hp"]) == 95)
 	assert(not simulation.handle_event(1, {"type": "attack"}))
 
 
@@ -144,8 +149,8 @@ func _test_arithmetician_interference_points() -> void:
 	simulation.state["players"][2]["position"] = Vector2(180, 100)
 	simulation.state["players"][2]["hp"] = 100
 	assert(simulation.handle_event(1, {"type": "attack"}))
-	assert(int(simulation.state["players"][2]["hp"]) == 85)
-	assert(is_equal_approx(float(simulation.state["players"][1]["attack_cooldown"]), 0.5 / 1.5))
+	assert(int(simulation.state["players"][2]["hp"]) == 97)
+	assert(is_equal_approx(float(simulation.state["players"][1]["attack_cooldown"]), 3.0 / 1.5))
 
 	simulation.state["players"][1]["arithmetic_interference_multiplier"] = 2.0
 	simulation.state["players"][1]["position"] = Vector2(100, 100)
@@ -220,6 +225,10 @@ func _test_arithmetician_skills() -> void:
 	assert(str(skill3_simulation.state["players"][1]["skill3_id"]) == "arithmetic_hack_vision")
 	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
 	assert(str(skill3_simulation.state["challenges"][1]["skill"]) == "skill3_arithmetic_hack_vision")
+	var hack_vision_expression := str(skill3_simulation.state["challenges"][1]["prompt"]).trim_suffix(" = ?")
+	var hack_vision_candidates := PackedStringArray(["33 * 44 + 16 * 6 + 29", "28 * 47 + 15 * 7 + 34", "36 * 42 + 18 * 5 + 27", "31 * 46 + 14 * 8 + 25", "27 * 53 + 17 * 6 + 32", "34 * 41 + 19 * 5 + 28", "29 * 48 + 16 * 7 + 31", "37 * 39 + 13 * 8 + 26", "32 * 45 + 17 * 6 + 35"])
+	assert(hack_vision_expression in hack_vision_candidates)
+	assert(str(skill3_simulation.state["challenges"][1]["answer"]) == str(skill3_simulation._evaluate_arithmetic(hack_vision_expression)))
 	assert(is_equal_approx(float(skill3_simulation.state["challenges"][1]["limit"]), 15.0))
 	_complete_arithmetic(skill3_simulation, 1)
 	assert(skill3_simulation.state["skill_projectiles"].size() == 1)

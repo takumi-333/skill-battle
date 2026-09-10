@@ -248,7 +248,7 @@ const NORMAL_ATTACK_OUTER_RANGE := SLASH_RANGE + PLAYER_HITBOX_RADIUS_X
 const NORMAL_ATTACK_HAND_OFFSET := 10.0
 const WEAPON_HANDLE_UV := Vector2(0.07, 0.94)
 const WEAPON_TIP_UV := Vector2(0.93, 0.07)
-const ATTACK_COOLDOWN := 5.0
+const ATTACK_COOLDOWN := 3.0
 const ATTACK_DURATION := 0.28
 const NORMAL_ATTACK_FRAME_COUNT := 8
 const MATCH_DURATION := 90.0
@@ -484,6 +484,7 @@ var gameplay_home_button: Button
 var hp_bar: ProgressBar
 var opponent_hp_bar: ProgressBar
 var arithmetic_multiplier_label: Label
+var opponent_arithmetic_multiplier_label: Label
 var skill_widgets: Array[Node] = []
 var skill_hud_signature := ""
 var network_panel: Panel
@@ -537,6 +538,7 @@ var character_skill_detail_overlay: Control
 var character_skill_detail_panel: Panel
 var character_skill_detail_frame: TextureRect
 var character_skill_detail_icon: TextureRect
+var character_skill_detail_reading: Label
 var character_skill_detail_name: Label
 var character_skill_detail_description: Label
 var character_skill_detail_close_button: Button
@@ -2400,6 +2402,8 @@ func create_hud() -> void:
 	opponent_hp_bar.max_value = 100.0
 	opponent_hp_bar.value = 100.0
 	opponent_hp_bar.show_percentage = false
+	opponent_arithmetic_multiplier_label = hud_root.get_node("OpponentArithmeticMultiplier") as Label
+	opponent_arithmetic_multiplier_label.visible = false
 	var hp_background := StyleBoxFlat.new()
 	hp_background.bg_color = Color("070b14")
 	hp_background.border_color = Color("39435f")
@@ -2464,6 +2468,7 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	hp_bar.visible = is_visible
 	arithmetic_multiplier_label.visible = is_visible and arithmetic_multiplier_label.visible
 	opponent_hp_bar.visible = is_visible
+	opponent_arithmetic_multiplier_label.visible = is_visible and opponent_arithmetic_multiplier_label.visible
 	timer_label.visible = is_visible
 	status_label.visible = false
 	controls_label.visible = is_visible and network_mode == "practice"
@@ -3471,6 +3476,7 @@ func create_character_ui() -> void:
 	character_skill_detail_panel = $UIRoot/Character/SkillDetailOverlay/Panel as Panel
 	character_skill_detail_frame = $UIRoot/Character/SkillDetailOverlay/Panel/Frame as TextureRect
 	character_skill_detail_icon = $UIRoot/Character/SkillDetailOverlay/Panel/Icon as TextureRect
+	character_skill_detail_reading = $UIRoot/Character/SkillDetailOverlay/Panel/SkillReading as Label
 	character_skill_detail_name = $UIRoot/Character/SkillDetailOverlay/Panel/SkillName as Label
 	character_skill_detail_description = $UIRoot/Character/SkillDetailOverlay/Panel/SkillDescription as Label
 	character_skill_detail_close_texture = $UIRoot/Character/SkillDetailOverlay/Panel/CloseTexture as TextureRect
@@ -3589,22 +3595,34 @@ func update_character_screen() -> void:
 
 func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 	if visual_id == "typist" and skill_index == 0:
-		return ["鍵片追弾", "未実装", "未実装", "未実装", "未実装"]
+		return ["鍵片追弾（けんぺんついだん）", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "typist" and skill_index == 1:
-		return ["三叉震槌", "鍵片追弾II", "未実装", "未実装", "未実装"]
+		return ["三叉震槌（さんさしんつい）", "鍵片追弾II（けんぺんついだん）", "未実装", "未実装", "未実装"]
 	if skill_index == 2:
 		if visual_id == "typist":
-			return ["黄金大旋槌", "未実装", "未実装", "未実装", "未実装"]
+			return ["黄金大旋槌（おうごんだいせんつい）", "未実装", "未実装", "未実装", "未実装"]
 		return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "arithmetician":
-		return ["無限級数", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
+		return ["無限級数（インフィニティ・フラクタル）", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else ["最適解への収束", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "chanter":
 		if skill_index == 0:
-			return ["円環の降臨", "宵月（よいづき）", "未実装", "未実装", "未実装"]
+			return ["月柱（げっちゅう）・昇華（しょうか）", "宵月（よいづき）", "未実装", "未実装", "未実装"]
 		if skill_index == 1:
 			return ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
 		return ["十六夜（いざよい）", "未実装", "未実装", "未実装", "未実装"]
 	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
+
+
+func split_skill_name_and_reading(skill_name: String) -> Dictionary:
+	var reading_pattern := RegEx.new()
+	reading_pattern.compile("（([^（）]+)）")
+	var readings: PackedStringArray = []
+	for match in reading_pattern.search_all(skill_name):
+		readings.append(match.get_string(1))
+	return {
+		"name": reading_pattern.sub(skill_name, "", true),
+		"reading": "・".join(readings),
+	}
 
 
 func select_character(index: int) -> void:
@@ -3666,8 +3684,11 @@ func update_skill_detail() -> void:
 		return
 	var visual_id := character_visual_id()
 	var skill_name: String = skill_candidate_names(visual_id, character_skill_detail_slot)[character_skill_detail_candidate]
+	var display_name := split_skill_name_and_reading(skill_name)
 	character_skill_detail_icon.texture = get_skill_icon(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
-	character_skill_detail_name.text = skill_name
+	character_skill_detail_reading.text = str(display_name["reading"])
+	character_skill_detail_reading.visible = not character_skill_detail_reading.text.is_empty()
+	character_skill_detail_name.text = str(display_name["name"])
 	character_skill_detail_description.text = skill_description(visual_id, character_skill_detail_slot, character_skill_detail_candidate)
 	character_skill_detail_frame.texture = character_selector_frame_for(visual_id)
 	character_skill_detail_close_texture.texture = character_save_texture_for(visual_id)
@@ -4367,7 +4388,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["name"] = user_display_name if is_local_player else names[selection]
 	player["has_display_name"] = is_local_player
 	player["color"] = colors[selection]
-	player["normal_damage"] = 3 if selection == 0 else (1 if selection == 1 else 2)
+	player["normal_damage"] = 5 if selection == 0 else (2 if selection == 1 else 3)
 	player["hp"] = 100
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
@@ -4462,7 +4483,7 @@ func update_challenge_ui(elapsed: float) -> void:
 		skill_name = "月柱（げっちゅう）・昇華"
 	elif _is_trace_challenge() and str(challenge_player.get("character_id", "")) == "chanter" and challenge_skill.begins_with("big"):
 		skill_name = "望月（もちづき）"
-	challenge_title_label.text = skill_name
+	challenge_title_label.text = str(split_skill_name_and_reading(skill_name)["name"])
 	challenge_prompt_label.text = challenge_prompt
 	var limit: float = get_challenge_time_limit()
 	if limit <= 0.0:
@@ -4536,6 +4557,11 @@ func update_hud() -> void:
 		arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(multiplier, 1.0) else "f(x) = %.1fx" % multiplier
 	if not opponent_player.is_empty():
 		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
+	var is_opponent_arithmetician := str(opponent_player.get("character_id", "")) == "arithmetic"
+	opponent_arithmetic_multiplier_label.visible = is_opponent_arithmetician
+	if is_opponent_arithmetician:
+		var opponent_multiplier := float(opponent_player.get("arithmetic_interference_multiplier", 1.0))
+		opponent_arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(opponent_multiplier, 1.0) else "f(x) = %.1fx" % opponent_multiplier
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused)
@@ -5020,6 +5046,7 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 	if float(player.get("invisible_time", 0.0)) > 0.0 and player_id == local_player_id:
 		sprite_tint.a = 0.35
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
+	draw_hack_vision_status_noise(position_value, float(player.get("hack_vision_time", 0.0)))
 	var player_name := "あなた" if player_id == get_hud_player_id() else match_player_display_name(player_id)
 	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-58.0, -91.0), player_name, HORIZONTAL_ALIGNMENT_CENTER, 116.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
@@ -5028,6 +5055,26 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		# オンライン対戦では、判定そのものに影響しない赤いデバッグ枠を描画しない。
 		if network_mode == "local":
 			draw_debug_normal_attack_hit_area(position_value, facing)
+
+
+func draw_hack_vision_status_noise(position_value: Vector2, remaining: float) -> void:
+	if remaining <= 0.0:
+		return
+	# Cover the face itself with a flickering blue mosaic, making the status
+	# legible to both players without obscuring the entire character.
+	var intensity := clampf(remaining / 0.45, 0.45, 1.0)
+	var face_rect := Rect2(position_value + Vector2(-20.0, -42.0), Vector2(40.0, 32.0))
+	var mosaic_time: float = floor(character_animation_elapsed * 5.0)
+	draw_rect(face_rect, Color(0.03, 0.10, 0.34, 0.20 * intensity), true)
+	for row in range(4):
+		for column in range(5):
+			var cell_noise := sin(float(column) * 19.19 + float(row) * 37.73 + mosaic_time * 11.17)
+			if cell_noise <= -0.35:
+				continue
+			var cell_color := Color(0.12, 0.48, 1.0, (0.34 + absf(cell_noise) * 0.24) * intensity)
+			if (row + column) % 3 == 0:
+				cell_color = Color(0.38, 0.32, 1.0, cell_color.a)
+			draw_rect(Rect2(face_rect.position + Vector2(float(column) * 8.0, float(row) * 8.0), Vector2(8.0, 8.0)), cell_color, true)
 
 
 func draw_player_silhouette(player: Dictionary) -> void:

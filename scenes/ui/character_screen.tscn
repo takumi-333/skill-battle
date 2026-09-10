@@ -505,6 +505,18 @@ text = "スキル名"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SkillReading" type="Label" parent="SkillDetailOverlay/Panel" unique_id=203818460]
+z_index = 2
+layout_mode = 0
+offset_left = 482.0
+offset_top = 54.0
+offset_right = 1030.0
+offset_bottom = 88.0
+theme_override_colors/font_color = Color(0.78, 0.83, 0.95, 1)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="SkillDescription" type="Label" parent="SkillDetailOverlay/Panel" unique_id=203818455]
 z_index = 2
 layout_mode = 0

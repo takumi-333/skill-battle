@@ -10,7 +10,7 @@ const NORMAL_RANGE := 122.0
 const NORMAL_HALF_ANGLE_DOT := 0.57 # cos(55 degrees)
 const MATCH_DURATION := 90.0
 const FOCUS_SPEED_MULTIPLIER := 0.5
-const NORMAL_COOLDOWN := 5.0
+const NORMAL_COOLDOWN := 3.0
 const NORMAL_DURATION := 0.28
 const TYPING_COOLDOWN := 2.0
 const ARITHMETIC_BIG_COOLDOWN := 15.0
@@ -97,7 +97,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["name"] = sanitized_display_name if not sanitized_display_name.is_empty() else names[character]
 	player["has_display_name"] = not sanitized_display_name.is_empty()
 	player["color"] = colors[character]
-	player["normal_damage"] = [3, 1, 2][character]
+	player["normal_damage"] = [5, 2, 3][character]
 	player["arithmetic_interference_multiplier"] = 1.0
 	player["hack_vision_time"] = 0.0
 	player["hack_vision_owner_id"] = 0

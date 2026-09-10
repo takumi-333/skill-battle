@@ -10,17 +10,27 @@ float hash21(vec2 value) {
 
 void fragment() {
 	vec2 resolution = vec2(textureSize(screen_texture, 0));
-	vec2 centered = (SCREEN_UV - vec2(0.5)) * vec2(resolution.x / resolution.y, 1.0);
-	float distance_from_viewer = length(centered);
-	float peripheral = smoothstep(0.18, 0.72, distance_from_viewer) * effect_strength;
-	float block_size = mix(1.0, 13.0, peripheral);
-	vec2 coarse_uv = (floor(SCREEN_UV * resolution / block_size) + 0.5) * block_size / resolution;
-	vec3 scene = texture(screen_texture, coarse_uv).rgb;
-	vec2 cell = floor(SCREEN_UV * resolution / vec2(8.0, 5.0));
-	float grain = hash21(cell + floor(TIME * 17.0));
-	float scanline = step(0.84, fract(SCREEN_UV.y * resolution.y / 7.0 + TIME * 4.0));
-	float broken_strip = step(0.90, hash21(vec2(floor(SCREEN_UV.y * resolution.y / 16.0), floor(TIME * 5.0))));
-	float noise = (grain * 0.72 + scanline * 0.54 + broken_strip * 0.34) * peripheral;
-	vec3 blue_noise = vec3(0.05, 0.34, 1.0) * noise + vec3(0.25, 0.08, 0.72) * noise * grain;
+	vec3 scene = texture(screen_texture, SCREEN_UV).rgb;
+
+	// Continuous blue interference is composed of fine static and broken
+	// horizontal streaks, rather than a radial gradient around the player.
+	float noise_time = floor(TIME * 5.0);
+	vec2 static_cell = floor(SCREEN_UV * resolution / vec2(4.0, 2.0));
+	float grain = hash21(static_cell + vec2(noise_time * 7.0, noise_time * 13.0));
+	float row = floor(SCREEN_UV.y * resolution.y / 24.0);
+	float segment = floor(SCREEN_UV.x * resolution.x / 96.0);
+	// Every 24px row participates. Each row independently chooses which
+	// horizontal 96px segments become low-resolution on this time slice.
+	float streak_segment = step(0.40, hash21(vec2(segment, row + noise_time * 3.17)));
+	float streak = streak_segment;
+	// The blue streaks themselves are the only low-resolution regions.
+	float streak_block_size = 24.0;
+	vec2 streak_uv = (floor(SCREEN_UV * resolution / streak_block_size) + 0.5) * streak_block_size / resolution;
+	vec3 pixelated_streak_scene = texture(screen_texture, streak_uv).rgb;
+	scene = mix(scene, pixelated_streak_scene, streak * effect_strength);
+	// Keep the blue tint present, but make the resolution loss the dominant
+	// obstruction rather than an additive blue wash.
+	float noise = (grain * 0.045 + streak * (0.16 + 0.08 * grain)) * effect_strength;
+	vec3 blue_noise = vec3(0.05, 0.28, 0.82) * noise + vec3(0.15, 0.04, 0.46) * noise * grain;
 	COLOR = vec4(scene + blue_noise, 1.0);
 }

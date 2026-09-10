@@ -140,7 +140,7 @@ stretch_mode = 5
 [node name="P1PrevFrame" type="TextureRect" parent="." unique_id=1386390087]
 z_index = -1
 layout_mode = 0
-offset_left = 300.0
+offset_left = 470.0
 offset_top = 465.0
 offset_right = 390.0
 offset_bottom = 515.0
