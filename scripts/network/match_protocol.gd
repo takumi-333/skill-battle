@@ -68,10 +68,10 @@ const PLAYER_SNAPSHOT_KEYS := [
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
-	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "arithmetic_interference_multiplier", "hack_vision_time", "hack_vision_owner_id", "hack_vision_suppress_interference_points",
+	"big_skill_id", "skill3_id", "small_cooldown", "big_cooldown", "skill3_cooldown", "typing_zone_level", "typing_zone_time", "arithmetic_interference_multiplier", "hack_vision_time", "hack_vision_owner_id", "hack_vision_suppress_interference_points",
 ]
 const INTERPOLATED_VECTOR_KEYS := ["position", "velocity", "facing", "attack_facing", "origin", "center"]
-const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time", "wait_time"]
+const INTERPOLATED_NUMBER_KEYS := ["angle", "elapsed", "lifetime", "delay", "radius", "damage_flash", "pulse_time", "flash_time", "noise_time", "hit_timer", "keycap_timer", "homing_time", "next_damage_time", "wait_time", "typing_zone_time"]
 
 static func snapshot(room_id: String, state: Dictionary, phase: String, status: String, recipient_slot := 0, server_tick := 0, input_acknowledgements: Dictionary = {}) -> Dictionary:
 	var challenges: Dictionary = {}

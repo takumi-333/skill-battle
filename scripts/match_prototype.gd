@@ -1915,10 +1915,10 @@ func is_perfect_mapping_copyable(skill_id: String) -> bool:
 func spawn_perfect_mapping(owner_id: int, score: int) -> void:
 	var candidates := perfect_mapping_copy_candidates(owner_id)
 	if candidates.is_empty():
-		status_text = "%sの完全写像は写し取れる技を検出できなかった。" % players[owner_id]["name"]
+		perfect_mapping_effects.append({"owner_id": owner_id, "copied_skill": "", "tile_count": 0, "no_selection": true, "score": score, "elapsed": 0.0, "duration": 1.2})
 		return
 	var copied_skill: String = candidates[randi_range(0, candidates.size() - 1)]
-	perfect_mapping_effects.append({"owner_id": owner_id, "copied_skill": copied_skill, "tile_count": candidates.size(), "score": score, "elapsed": 0.0, "duration": 1.2})
+	perfect_mapping_effects.append({"owner_id": owner_id, "copied_skill": copied_skill, "tile_count": candidates.size(), "no_selection": false, "score": score, "elapsed": 0.0, "duration": 1.2})
 
 
 func spawn_copied_skill(owner_id: int, score: int, copied_skill: String) -> void:
@@ -2330,7 +2330,8 @@ func update_perfect_mapping_effects(delta: float) -> void:
 		var effect: Dictionary = perfect_mapping_effects[index]
 		effect["elapsed"] = float(effect.get("elapsed", 0.0)) + delta
 		if float(effect["elapsed"]) >= float(effect.get("duration", 1.2)):
-			spawn_copied_skill(int(effect["owner_id"]), int(effect.get("score", 0)), str(effect["copied_skill"]))
+			if not bool(effect.get("no_selection", false)):
+				spawn_copied_skill(int(effect["owner_id"]), int(effect.get("score", 0)), str(effect["copied_skill"]))
 			perfect_mapping_effects.remove_at(index)
 		else:
 			perfect_mapping_effects[index] = effect
@@ -2392,17 +2393,13 @@ func update_skill_projectiles(delta: float) -> void:
 				target["hack_vision_suppress_interference_points"] = bool(projectile.get("suppress_interference_points", false))
 				players[target_id] = target
 				status_text = "%sの視界にノイズが走った！" % target["name"]
-			else:
+			elif not bool(projectile.get("hit_target", false)):
 				apply_damage(target_id, int(projectile["damage"]), "ブレード弾")
 				status_text = "ブレード弾が%sに命中！" % target["name"]
-			if bool(projectile["piercing"]):
-				var projectile_velocity: Vector2 = projectile["velocity"]
-				var projectile_direction: Vector2 = projectile_velocity.normalized()
-				projectile["position"] = position_value + projectile_direction * 48.0
-				skill_projectiles[index] = projectile
+				projectile["hit_target"] = true
+			if not bool(projectile["piercing"]):
+				skill_projectiles.remove_at(index)
 				continue
-			skill_projectiles.remove_at(index)
-			continue
 		if float(projectile["lifetime"]) <= 0.0 or not ARENA.grow(40.0).has_point(position_value):
 			skill_projectiles.remove_at(index)
 		else:
@@ -2449,7 +2446,7 @@ func spawn_lunar_eclipse(owner_id: int, score: int) -> void:
 	var facing := Vector2(owner["facing"]).normalized()
 	if facing.length_squared() <= 0.0:
 		facing = Vector2.RIGHT
-	lunar_eclipses.append({"owner_id": owner_id, "origin": origin, "facing": facing, "center": lunar_eclipse_center(origin, facing), "elapsed": 0.0, "duration": LUNAR_ECLIPSE_DURATION, "score": score, "max_radius": 150.0 + floori(float(score) * 1.2), "pull_amount": 6.0 + floori(float(score) * 0.16), "next_pull_time": 0.0, "next_laser_hit_time": LUNAR_ECLIPSE_LASER_START_TIME, "damage": 4 + floori(float(score) * 0.13)})
+	lunar_eclipses.append({"owner_id": owner_id, "origin": origin, "facing": facing, "center": lunar_eclipse_center(origin, facing), "elapsed": 0.0, "duration": LUNAR_ECLIPSE_DURATION, "score": score, "visual_radius": 150.0 + floori(float(score) * 1.2), "pull_amount": 6.0 + floori(float(score) * 0.16), "next_pull_time": 0.0, "next_laser_hit_time": LUNAR_ECLIPSE_LASER_START_TIME, "damage": 4 + floori(float(score) * 0.13)})
 
 
 func update_lunar_eclipses(delta: float) -> void:
@@ -2459,9 +2456,8 @@ func update_lunar_eclipses(delta: float) -> void:
 		var owner_id := int(eclipse["owner_id"])
 		var target_id := 2 if owner_id == 1 else 1
 		var elapsed := float(eclipse["elapsed"])
-		var active_radius := float(eclipse["max_radius"]) * minf(1.0, elapsed / LUNAR_ECLIPSE_LASER_START_TIME)
 		while float(eclipse["next_pull_time"]) <= elapsed and float(eclipse["next_pull_time"]) <= LUNAR_ECLIPSE_DURATION:
-			pull_lunar_eclipse_target(target_id, Vector2(eclipse["center"]), active_radius, float(eclipse["pull_amount"]))
+			pull_lunar_eclipse_target(target_id, Vector2(eclipse["center"]), float(eclipse["pull_amount"]))
 			eclipse["next_pull_time"] = float(eclipse["next_pull_time"]) + LUNAR_ECLIPSE_PULL_INTERVAL
 		while float(eclipse["next_laser_hit_time"]) <= elapsed and float(eclipse["next_laser_hit_time"]) <= LUNAR_ECLIPSE_LASER_LAST_HIT_TIME:
 			if lunar_eclipse_laser_hits(target_id, Vector2(eclipse["origin"]), Vector2(eclipse["facing"])):
@@ -2473,16 +2469,25 @@ func update_lunar_eclipses(delta: float) -> void:
 			lunar_eclipses[index] = eclipse
 
 
-func pull_lunar_eclipse_target(target_id: int, center: Vector2, radius: float, pull_amount: float) -> void:
+func pull_lunar_eclipse_target(target_id: int, center: Vector2, pull_amount: float) -> void:
 	if not players.has(target_id):
 		return
 	var target: Dictionary = players[target_id]
 	var position := Vector2(target["position"])
 	var distance := position.distance_to(center)
-	if distance > radius or is_zero_approx(distance):
+	if is_zero_approx(distance):
 		return
-	target["position"] = clamp_to_arena(position.move_toward(center, pull_amount))
+	var max_distance := lunar_eclipse_farthest_arena_distance(center)
+	var distance_ratio := clampf(distance / max_distance, 0.0, 1.0)
+	var adjusted_pull_amount := maxf(1.0, ceilf(pull_amount * (1.0 - distance_ratio)))
+	target["position"] = clamp_to_arena(position.move_toward(center, adjusted_pull_amount))
 	players[target_id] = target
+
+func lunar_eclipse_farthest_arena_distance(center: Vector2) -> float:
+	var max_distance := 0.0
+	for corner in [ARENA.position, Vector2(ARENA.end.x, ARENA.position.y), Vector2(ARENA.position.x, ARENA.end.y), ARENA.end]:
+		max_distance = maxf(max_distance, center.distance_to(corner))
+	return max_distance
 
 
 func lunar_eclipse_center(origin: Vector2, facing: Vector2) -> Vector2:
@@ -5377,6 +5382,15 @@ func draw_perfect_mapping_effect(effect: Dictionary) -> void:
 	for grid in range(-2, 3):
 		draw_line(origin + Vector2(-52, grid * 20), origin + Vector2(52, grid * 20), Color(color.r, color.g, color.b, color.a * 0.45), 1.0)
 		draw_line(origin + Vector2(grid * 20, -52), origin + Vector2(grid * 20, 52), Color(color.r, color.g, color.b, color.a * 0.45), 1.0)
+	if bool(effect.get("no_selection", false)):
+		var collapse := clampf(elapsed / float(effect.get("duration", 1.2)), 0.0, 1.0)
+		var empty_color := Color(0.72, 0.64, 1.0, alpha * (1.0 - collapse * 0.35))
+		var empty_size := lerpf(24.0, 8.0, collapse)
+		draw_rect(Rect2(origin - Vector2.ONE * empty_size * 0.5, Vector2.ONE * empty_size), empty_color, false, 2.0)
+		draw_line(origin + Vector2(-empty_size, -empty_size), origin + Vector2(empty_size, empty_size), Color(empty_color.r, empty_color.g, empty_color.b, empty_color.a * 0.65), 1.5)
+		draw_line(origin + Vector2(-empty_size, empty_size), origin + Vector2(empty_size, -empty_size), Color(empty_color.r, empty_color.g, empty_color.b, empty_color.a * 0.65), 1.5)
+		draw_arc(origin, lerpf(42.0, 10.0, collapse), 0.0, TAU, 24, Color(empty_color.r, empty_color.g, empty_color.b, empty_color.a * 0.75), 2.0)
+		return
 	var tile_count := maxi(1, int(effect.get("tile_count", 1)))
 	var selected_tile := posmod(int(effect.get("copied_skill", "").hash()), tile_count)
 	for tile in range(tile_count):
@@ -5389,8 +5403,8 @@ func draw_perfect_mapping_effect(effect: Dictionary) -> void:
 
 func draw_lunar_eclipse_black_hole(eclipse: Dictionary) -> void:
 	var elapsed := float(eclipse.get("elapsed", 0.0))
-	var max_radius := float(eclipse.get("max_radius", 0.0))
-	var radius := max_radius * minf(1.0, elapsed / LUNAR_ECLIPSE_LASER_START_TIME)
+	var visual_radius := float(eclipse.get("visual_radius", 0.0))
+	var radius := visual_radius * minf(1.0, elapsed / LUNAR_ECLIPSE_LASER_START_TIME)
 	var center := Vector2(eclipse["center"])
 	var pulse := 1.0 + 0.07 * sin(elapsed * TAU * 3.0)
 	draw_circle(center, radius * 0.22 * pulse, Color(0.03, 0.01, 0.08, 0.90))
@@ -5717,7 +5731,7 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		draw_focus_particles(player)
 	var zone_level := typing_zone_level(player)
 	if zone_level > 0:
-		draw_typing_zone_aura(position_value, zone_level, float(player.get("typing_zone_time", 0.0)))
+		draw_typing_zone_aura(position_value, zone_level)
 	var is_moving: bool = bool(player.get("is_moving", false))
 	var character_texture: Texture2D = get_character_texture(str(player.get("visual_id", "typist")))
 	var sprite_column: int = get_sprite_direction_column(facing)
@@ -5739,12 +5753,11 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 			draw_debug_normal_attack_hit_area(position_value, facing)
 
 
-func draw_typing_zone_aura(position_value: Vector2, level: int, remaining: float) -> void:
+func draw_typing_zone_aura(position_value: Vector2, level: int) -> void:
 	var pulse := 1.0 + 0.06 * sin(character_animation_elapsed * TAU * 2.0)
 	var color := Color(0.26, 0.93, 0.56, 0.22 + 0.08 * float(level))
 	draw_circle(position_value + Vector2(0.0, -18.0), (34.0 + 5.0 * float(level)) * pulse, color, false, 2.0)
 	draw_arc(position_value + Vector2(0.0, -18.0), (42.0 + 5.0 * float(level)) * pulse, -PI * 0.78, PI * 0.54, 20, Color(0.54, 1.0, 0.66, 0.48), 2.0, true)
-	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-36.0, -108.0), "ZONE %d  %.0fs" % [level, ceilf(remaining)], HORIZONTAL_ALIGNMENT_CENTER, 72.0, 12, Color(0.70, 1.0, 0.78, 0.90))
 
 
 func draw_hack_vision_status_noise(position_value: Vector2, remaining: float) -> void:

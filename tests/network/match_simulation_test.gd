@@ -94,6 +94,13 @@ func _test_typist_skills() -> void:
 	_complete_typing(skill3_simulation, 1)
 	assert(not skill3_simulation.state["hammer_spins"].is_empty())
 	assert(int(skill3_simulation.state["hammer_spins"][0]["presentation_id"]) > 0)
+	var golden_time_simulation := MatchSimulation.new()
+	golden_time_simulation.configure_loadout(1, 0, "typist_trident", "", 1, 0)
+	assert(golden_time_simulation.handle_event(1, {"type": "small_skill"}))
+	_complete_typing(golden_time_simulation, 1)
+	var golden_time_snapshot := MatchProtocol.snapshot("golden-time-aura", golden_time_simulation.state, "match", "", 1)
+	assert(int(golden_time_snapshot["players"][1]["typing_zone_level"]) == 1)
+	assert(float(golden_time_snapshot["players"][1]["typing_zone_time"]) > 0.0)
 
 
 func _test_arithmetician_interference_points() -> void:
@@ -306,6 +313,26 @@ func _test_arithmetician_perfect_mapping() -> void:
 	simulation.step(1.21, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(simulation.state["perfect_mapping_effects"].is_empty())
 
+	var golden_time_target_simulation := MatchSimulation.new()
+	golden_time_target_simulation.configure_loadout(1, 1, "arithmetic_perfect_mapping")
+	golden_time_target_simulation.configure_loadout(2, 0, "typist_golden_time_ii", "", 1, 1)
+	assert(golden_time_target_simulation._perfect_mapping_copy_candidates(1).is_empty())
+	for golden_time_skill in ["typist_golden_time_i", "typist_golden_time_ii", "typist_golden_time_iii"]:
+		assert(not golden_time_target_simulation._is_perfect_mapping_copyable(golden_time_skill))
+	golden_time_target_simulation.state["status_text"] = "unchanged"
+	golden_time_target_simulation._spawn_perfect_mapping(1, 80)
+	assert(golden_time_target_simulation.state["perfect_mapping_effects"].size() == 1)
+	var no_selection_effect: Dictionary = golden_time_target_simulation.state["perfect_mapping_effects"][0]
+	assert(bool(no_selection_effect["no_selection"]))
+	assert(int(no_selection_effect["tile_count"]) == 0)
+	assert(str(golden_time_target_simulation.state["status_text"]) == "unchanged")
+	var no_selection_snapshot := MatchProtocol.snapshot("perfect-mapping-none", golden_time_target_simulation.state, "match", "", 1)
+	assert(bool(no_selection_snapshot["perfect_mapping_effects"][0]["no_selection"]))
+	golden_time_target_simulation._update_perfect_mapping_effects(1.21)
+	assert(golden_time_target_simulation.state["perfect_mapping_effects"].is_empty())
+	assert(golden_time_target_simulation.state["skill_projectiles"].is_empty())
+	assert(golden_time_target_simulation.state["magic_zones"].is_empty())
+
 	var no_point_simulation := MatchSimulation.new()
 	no_point_simulation.configure_loadout(1, 1, "arithmetic_perfect_mapping")
 	no_point_simulation._spawn_copied_skill(1, 80, "arithmetic_small_0")
@@ -405,6 +432,17 @@ func _test_chanter_skill1_candidate_and_skill3() -> void:
 	assert(is_equal_approx(float(top["delay"]), float(bottom["delay"])))
 	assert(is_equal_approx(float(top["delay"]), float(right["delay"])))
 	assert(is_equal_approx(float(top["delay"]), float(left["delay"])))
+	var piercing_simulation := MatchSimulation.new()
+	piercing_simulation.configure_loadout(1, 2, "typist_trident")
+	piercing_simulation.state["players"][1]["position"] = Vector2(100, 100)
+	piercing_simulation.state["players"][2]["position"] = Vector2(150, 100)
+	piercing_simulation.state["skill_projectiles"] = [{"projectile_id": 1, "owner_id": 1, "position": Vector2(150, 100), "velocity": Vector2.ZERO, "damage": 8, "lifetime": 1.0, "piercing": true, "delay": 0.0, "launched": true, "homing": false, "homing_time": 0.0}]
+	piercing_simulation._update_projectiles(0.1)
+	assert(int(piercing_simulation.state["players"][2]["hp"]) == 92)
+	assert(bool(piercing_simulation.state["skill_projectiles"][0]["hit_target"]))
+	piercing_simulation._update_projectiles(0.1)
+	assert(int(piercing_simulation.state["players"][2]["hp"]) == 92)
+	assert(piercing_simulation.state["skill_projectiles"].size() == 1)
 
 	var lunar_eclipse_simulation := MatchSimulation.new()
 	lunar_eclipse_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
@@ -455,9 +493,31 @@ func _test_lunar_eclipse_rules() -> void:
 	boundary_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
 	boundary_simulation.call("_spawn_lunar_eclipse", 1, 45)
 	var boundary_eclipse: Dictionary = boundary_simulation.state["lunar_eclipses"][0]
-	assert(is_equal_approx(float(boundary_eclipse["max_radius"]), 204.0))
+	assert(is_equal_approx(float(boundary_eclipse["visual_radius"]), 204.0))
 	assert(is_equal_approx(float(boundary_eclipse["pull_amount"]), 13.0))
 	assert(int(boundary_eclipse["damage"]) == 9)
+	var pull_center := Vector2(boundary_eclipse["center"])
+	var near_position := pull_center + Vector2(100, 0)
+	var boundary_target: Dictionary = boundary_simulation.state["players"][2]
+	boundary_target["position"] = near_position
+	boundary_simulation.state["players"][2] = boundary_target
+	boundary_simulation.call("_pull_lunar_eclipse_target", 2, pull_center, 13.0)
+	var near_pull_distance := near_position.distance_to(Vector2(boundary_simulation.state["players"][2]["position"]))
+	var far_position := Vector2(MatchSimulation.ARENA.end.x - MatchSimulation.PLAYER_RADIUS, MatchSimulation.ARENA.end.y - MatchSimulation.PLAYER_RADIUS)
+	boundary_target = boundary_simulation.state["players"][2]
+	boundary_target["position"] = far_position
+	boundary_simulation.state["players"][2] = boundary_target
+	boundary_simulation.call("_pull_lunar_eclipse_target", 2, pull_center, 13.0)
+	var far_pull_distance := far_position.distance_to(Vector2(boundary_simulation.state["players"][2]["position"]))
+	assert(far_position.distance_to(pull_center) > float(boundary_eclipse["visual_radius"]))
+	assert(far_pull_distance > 0.0 and far_pull_distance <= 1.01)
+	assert(near_pull_distance > far_pull_distance)
+	var maximum_pull_simulation := MatchSimulation.new()
+	maximum_pull_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
+	maximum_pull_simulation.call("_spawn_lunar_eclipse", 1, 100)
+	var maximum_pull_eclipse: Dictionary = maximum_pull_simulation.state["lunar_eclipses"][0]
+	assert(is_equal_approx(float(maximum_pull_eclipse["pull_amount"]), 22.0))
+	assert(float(maximum_pull_eclipse["pull_amount"]) * 10.0 < MatchSimulation.PLAYER_SPEED)
 	var snapshot := MatchProtocol.snapshot("lunar-eclipse", boundary_simulation.state, "match", "", 1)
 	assert(snapshot["lunar_eclipses"].size() == 1)
 	assert(int(snapshot["lunar_eclipses"][0]["presentation_id"]) > 0)

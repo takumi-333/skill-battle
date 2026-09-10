@@ -531,10 +531,10 @@ func _is_perfect_mapping_copyable(skill_id: String) -> bool:
 func _spawn_perfect_mapping(owner: int, score: int) -> void:
 	var candidates := _perfect_mapping_copy_candidates(owner)
 	if candidates.is_empty():
-		state["status_text"] = "%sの完全写像は写し取れる技を検出できなかった。" % str(state["players"][owner]["name"])
+		state["perfect_mapping_effects"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "copied_skill": "", "tile_count": 0, "no_selection": true, "score": score, "elapsed": 0.0, "duration": 1.2})
 		return
 	var copied_skill: String = candidates[randi_range(0, candidates.size() - 1)]
-	state["perfect_mapping_effects"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "copied_skill": copied_skill, "tile_count": candidates.size(), "score": score, "elapsed": 0.0, "duration": 1.2})
+	state["perfect_mapping_effects"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "copied_skill": copied_skill, "tile_count": candidates.size(), "no_selection": false, "score": score, "elapsed": 0.0, "duration": 1.2})
 
 func _spawn_copied_skill(owner: int, score: int, copied_skill: String) -> void:
 	var player: Dictionary = state["players"][owner]
@@ -716,8 +716,9 @@ func _update_projectiles(delta: float) -> void:
 				target_player["hack_vision_suppress_interference_points"] = bool(projectile.get("suppress_interference_points", false))
 				state["players"][target] = target_player
 				state["status_text"] = "%sの視界にノイズが走った！" % str(target_player["name"])
-			else:
+			elif not bool(projectile.get("hit_target", false)):
 				_apply_damage(target, int(projectile["damage"]), "スキル弾")
+				projectile["hit_target"] = true
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
 				continue
@@ -860,7 +861,8 @@ func _update_perfect_mapping_effects(delta: float) -> void:
 		var effect: Dictionary = state["perfect_mapping_effects"][index]
 		effect["elapsed"] = float(effect.get("elapsed", 0.0)) + delta
 		if float(effect["elapsed"]) >= float(effect.get("duration", 1.2)):
-			_spawn_copied_skill(int(effect["owner_id"]), int(effect.get("score", 0)), str(effect["copied_skill"]))
+			if not bool(effect.get("no_selection", false)):
+				_spawn_copied_skill(int(effect["owner_id"]), int(effect.get("score", 0)), str(effect["copied_skill"]))
 			state["perfect_mapping_effects"].remove_at(index)
 		else:
 			state["perfect_mapping_effects"][index] = effect
@@ -1007,7 +1009,7 @@ func _spawn_lunar_eclipse(owner: int, score: int) -> void:
 	var facing := Vector2(player["facing"]).normalized()
 	if facing.length_squared() <= 0.0:
 		facing = Vector2.RIGHT
-	state["lunar_eclipses"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "origin": origin, "facing": facing, "center": _lunar_eclipse_center(origin, facing), "elapsed": 0.0, "duration": LUNAR_ECLIPSE_DURATION, "score": score, "max_radius": 150.0 + floori(float(score) * 1.2), "pull_amount": 6.0 + floori(float(score) * 0.16), "next_pull_time": 0.0, "next_laser_hit_time": LUNAR_ECLIPSE_LASER_START_TIME, "damage": 4 + floori(float(score) * 0.13)})
+	state["lunar_eclipses"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "origin": origin, "facing": facing, "center": _lunar_eclipse_center(origin, facing), "elapsed": 0.0, "duration": LUNAR_ECLIPSE_DURATION, "score": score, "visual_radius": 150.0 + floori(float(score) * 1.2), "pull_amount": 6.0 + floori(float(score) * 0.16), "next_pull_time": 0.0, "next_laser_hit_time": LUNAR_ECLIPSE_LASER_START_TIME, "damage": 4 + floori(float(score) * 0.13)})
 
 func _update_lunar_eclipses(delta: float) -> void:
 	for index in range(state["lunar_eclipses"].size() - 1, -1, -1):
@@ -1016,10 +1018,8 @@ func _update_lunar_eclipses(delta: float) -> void:
 		var owner := int(eclipse["owner_id"])
 		var target := _other(owner)
 		var elapsed := float(eclipse["elapsed"])
-		var max_radius := float(eclipse["max_radius"])
-		var active_radius := max_radius * minf(1.0, elapsed / LUNAR_ECLIPSE_LASER_START_TIME)
 		while float(eclipse["next_pull_time"]) <= elapsed and float(eclipse["next_pull_time"]) <= LUNAR_ECLIPSE_DURATION:
-			_pull_lunar_eclipse_target(target, Vector2(eclipse["center"]), active_radius, float(eclipse["pull_amount"]))
+			_pull_lunar_eclipse_target(target, Vector2(eclipse["center"]), float(eclipse["pull_amount"]))
 			eclipse["next_pull_time"] = float(eclipse["next_pull_time"]) + LUNAR_ECLIPSE_PULL_INTERVAL
 		while float(eclipse["next_laser_hit_time"]) <= elapsed and float(eclipse["next_laser_hit_time"]) <= LUNAR_ECLIPSE_LASER_LAST_HIT_TIME:
 			if _lunar_eclipse_laser_hits(target, Vector2(eclipse["origin"]), Vector2(eclipse["facing"])):
@@ -1030,14 +1030,23 @@ func _update_lunar_eclipses(delta: float) -> void:
 		else:
 			state["lunar_eclipses"][index] = eclipse
 
-func _pull_lunar_eclipse_target(target: int, center: Vector2, radius: float, pull_amount: float) -> void:
+func _pull_lunar_eclipse_target(target: int, center: Vector2, pull_amount: float) -> void:
 	var player: Dictionary = state["players"][target]
 	var position := Vector2(player["position"])
 	var distance := position.distance_to(center)
-	if distance > radius or is_zero_approx(distance):
+	if is_zero_approx(distance):
 		return
-	player["position"] = _clamp_to_arena(position.move_toward(center, pull_amount))
+	var max_distance := _lunar_eclipse_farthest_arena_distance(center)
+	var distance_ratio := clampf(distance / max_distance, 0.0, 1.0)
+	var adjusted_pull_amount := maxf(1.0, ceilf(pull_amount * (1.0 - distance_ratio)))
+	player["position"] = _clamp_to_arena(position.move_toward(center, adjusted_pull_amount))
 	state["players"][target] = player
+
+func _lunar_eclipse_farthest_arena_distance(center: Vector2) -> float:
+	var max_distance := 0.0
+	for corner in [ARENA.position, Vector2(ARENA.end.x, ARENA.position.y), Vector2(ARENA.position.x, ARENA.end.y), ARENA.end]:
+		max_distance = maxf(max_distance, center.distance_to(corner))
+	return max_distance
 
 func _lunar_eclipse_center(origin: Vector2, facing: Vector2) -> Vector2:
 	return origin + facing * minf(300.0, _distance_to_arena_boundary(origin, facing))
