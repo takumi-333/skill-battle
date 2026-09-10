@@ -16,6 +16,7 @@ const INPUT_STALE_TICKS := 15
 const READY_DURATION := 1.0
 const FINISH_DURATION := 2.0
 var event_sequences := {1: -1, 2: -1}
+var round_id := 0
 var ready := {1: false, 2: false}
 var rematch_ready := {1: false, 2: false}
 var result_lobby_slots := {1: false, 2: false}
@@ -187,6 +188,7 @@ func make_snapshot(recipient_slot := 0, server_tick := 0) -> Dictionary:
 		recipient_phase = "lobby"
 	var value := MatchProtocol.snapshot(room_id, simulation.state, recipient_phase, status, recipient_slot, server_tick, input_sequences)
 	value["ready"] = ready.duplicate()
+	value["round_id"] = round_id
 	value["rematch_ready"] = rematch_ready.duplicate()
 	value["result_lobby_slots"] = result_lobby_slots.duplicate()
 	value["connected_slots"] = peers.keys()
@@ -201,11 +203,14 @@ func _is_knockout() -> bool:
 
 
 func _start_countdown() -> void:
+	round_id += 1
 	phase = "countdown"
 	countdown_remaining = READY_DURATION
 	finish_remaining = 0.0
 	status = "READY"
 	inputs = {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}}
+	input_sequences = {1: -1, 2: -1}
+	event_sequences = {1: -1, 2: -1}
 	input_received_ticks = {1: -999999, 2: -999999}
 
 func take_presentations() -> Array[Dictionary]:

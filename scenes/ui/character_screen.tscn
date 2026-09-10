@@ -4,6 +4,9 @@
 [ext_resource type="Texture2D" uid="uid://djx8gi728wxk6" path="res://assets/characters/portraits/typist_idle.png" id="4_portrait_typist"]
 [ext_resource type="Texture2D" uid="uid://cuc1pq4ke2ybj" path="res://assets/characters/portraits/arithmetician_idle.png" id="5_portrait_arith"]
 [ext_resource type="Texture2D" uid="uid://cgrnconuei12k" path="res://assets/characters/portraits/chanter_idle.png" id="6_portrait_chanter"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/sniper_idle.png" id="10_portrait_sniper"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/rhythmer_idle.png" id="11_portrait_rhythmer"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/engineer_idle.png" id="12_portrait_engineer"]
 [ext_resource type="Texture2D" uid="uid://bahovt536cmlo" path="res://assets/ui/skill_icons/skill_placeholder_square.png" id="7_skill"]
 [ext_resource type="Texture2D" uid="uid://cx41pj5uenrpu" path="res://assets/ui/character_room/typist_save_button.png" id="8_save_typist"]
 [ext_resource type="Texture2D" uid="uid://cdbd1bumm4dlg" path="res://assets/ui/character_room/typist_frame.png" id="9_frame_typist"]
@@ -188,58 +191,108 @@ custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 focus_mode = 0
 mouse_filter = 2
-text = "XXX"
-expand_icon = true
+disabled = true
 
-[node name="Silhouette" type="TextureRect" parent="Selector/Items/XXX" unique_id=1952130550]
-material = SubResource("ShaderMaterial_locked_silhouette")
+[node name="Content" type="HBoxContainer" parent="Selector/Items/XXX" unique_id=1952130550]
 layout_mode = 0
 offset_left = 12.0
 offset_top = 8.0
-offset_right = 92.0
-offset_bottom = 88.0
+offset_right = 188.0
+offset_bottom = 92.0
 mouse_filter = 2
-texture = SubResource("AtlasTexture_typist_face")
+theme_override_constants/separation = 8
+
+[node name="Silhouette" type="TextureRect" parent="Selector/Items/XXX/Content" unique_id=1952130551]
+material = SubResource("ShaderMaterial_locked_silhouette")
+custom_minimum_size = Vector2(80, 84)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("10_portrait_sniper")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="Name" type="Label" parent="Selector/Items/XXX/Content" unique_id=1952130552]
+custom_minimum_size = Vector2(88, 84)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.55, 0.55, 0.59, 1)
+theme_override_font_sizes/font_size = 16
+text = "？？？"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="YYY" type="Button" parent="Selector/Items" unique_id=1040629974]
 custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 focus_mode = 0
 mouse_filter = 2
-text = "YYY"
+disabled = true
 
-[node name="Silhouette" type="TextureRect" parent="Selector/Items/YYY" unique_id=2142553823]
-material = SubResource("ShaderMaterial_locked_silhouette")
+[node name="Content" type="HBoxContainer" parent="Selector/Items/YYY" unique_id=2142553823]
 layout_mode = 0
 offset_left = 12.0
 offset_top = 8.0
-offset_right = 92.0
-offset_bottom = 88.0
+offset_right = 188.0
+offset_bottom = 92.0
 mouse_filter = 2
-texture = SubResource("AtlasTexture_arith_face")
+theme_override_constants/separation = 8
+
+[node name="Silhouette" type="TextureRect" parent="Selector/Items/YYY/Content" unique_id=2142553824]
+material = SubResource("ShaderMaterial_locked_silhouette")
+custom_minimum_size = Vector2(80, 84)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("11_portrait_rhythmer")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="Name" type="Label" parent="Selector/Items/YYY/Content" unique_id=2142553825]
+custom_minimum_size = Vector2(88, 84)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.55, 0.55, 0.59, 1)
+theme_override_font_sizes/font_size = 16
+text = "？？？"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="ZZZ" type="Button" parent="Selector/Items" unique_id=1032099967]
 custom_minimum_size = Vector2(200, 100)
 layout_mode = 2
 focus_mode = 0
 mouse_filter = 2
-text = "ZZZ"
+disabled = true
 
-[node name="Silhouette" type="TextureRect" parent="Selector/Items/ZZZ" unique_id=1929984289]
-material = SubResource("ShaderMaterial_locked_silhouette")
+[node name="Content" type="HBoxContainer" parent="Selector/Items/ZZZ" unique_id=1929984289]
 layout_mode = 0
 offset_left = 12.0
 offset_top = 8.0
-offset_right = 92.0
-offset_bottom = 88.0
+offset_right = 188.0
+offset_bottom = 92.0
 mouse_filter = 2
-texture = SubResource("AtlasTexture_chanter_face")
+theme_override_constants/separation = 8
+
+[node name="Silhouette" type="TextureRect" parent="Selector/Items/ZZZ/Content" unique_id=1929984290]
+material = SubResource("ShaderMaterial_locked_silhouette")
+custom_minimum_size = Vector2(80, 84)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("12_portrait_engineer")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="Name" type="Label" parent="Selector/Items/ZZZ/Content" unique_id=1929984291]
+custom_minimum_size = Vector2(88, 84)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.55, 0.55, 0.59, 1)
+theme_override_font_sizes/font_size = 16
+text = "？？？"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="Description" type="Label" parent="." unique_id=1871179199]
 layout_mode = 0

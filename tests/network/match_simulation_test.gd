@@ -653,6 +653,9 @@ func _test_session_result_actions() -> void:
 	assert(session.join(11, 1) == 1)
 	assert(session.join(12, 2) == 2)
 	session.simulation.configure_loadout(1, 1, "typist_trident")
+	session.phase = "match"
+	assert(session.submit_input(11, MatchProtocol.make_input(100, Vector2.RIGHT)))
+	assert(session.submit_event(11, MatchProtocol.make_event(100, "attack")))
 	session.phase = "result"
 	session.simulation.state["match_over"] = true
 	assert(not session.request_result_action(999, "rematch"))
@@ -662,11 +665,17 @@ func _test_session_result_actions() -> void:
 	assert(not bool(session.make_snapshot()["rematch_ready"][2]))
 	assert(session.request_result_action(12, "rematch"))
 	assert(session.phase == "countdown")
+	assert(int(session.make_snapshot()["round_id"]) == 1)
 	assert(not session.submit_event(11, MatchProtocol.make_event(1, "small_skill")))
 	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
 	assert(not bool(session.simulation.state["match_over"]))
 	assert(str(session.simulation.state["players"][1]["character_id"]) == "arithmetic")
+	assert(session.submit_input(11, MatchProtocol.make_input(1, Vector2.RIGHT)))
+	assert(session.submit_event(11, MatchProtocol.make_event(1, "attack")))
+	var rematch_start_position := Vector2(session.simulation.state["players"][1]["position"])
+	session.step(0.3)
+	assert(Vector2(session.simulation.state["players"][1]["position"]).x > rematch_start_position.x)
 	session.phase = "result"
 	session.simulation.state["match_over"] = true
 	assert(session.request_result_action(12, "lobby"))

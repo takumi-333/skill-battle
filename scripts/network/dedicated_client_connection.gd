@@ -16,6 +16,10 @@ var _join_data: Dictionary = {}
 var sequence := 0
 var event_sequence := 0
 
+func reset_match_sequences() -> void:
+	sequence = 0
+	event_sequence = 0
+
 func has_pending_join() -> bool:
 	return not _join_data.is_empty()
 

@@ -537,6 +537,7 @@ var dedicated_challenge_type := ""
 var dedicated_challenge_limit := 0.0
 var dedicated_challenge_id := 0
 var dedicated_challenge_miss_sequence := 0
+var dedicated_round_id := -1
 var dedicated_trident_release_states: Dictionary = {}
 var dedicated_previous_snapshot: Dictionary = {}
 var dedicated_current_snapshot: Dictionary = {}
@@ -3404,6 +3405,11 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	match_state.winner_id = int(snapshot.get("winner_id", 0))
 	var previous_phase := phase
 	phase = str(snapshot.get("phase", "lobby"))
+	var incoming_round_id := int(snapshot.get("round_id", 0))
+	if phase in ["countdown", "match"] and incoming_round_id > dedicated_round_id:
+		dedicated_round_id = incoming_round_id
+		dedicated_connection.reset_match_sequences()
+		dedicated_action_down = {"attack": false, "small_skill": false, "big_skill": false, "skill3": false}
 	countdown_remaining = float(snapshot.get("countdown_remaining", 0.0))
 	finish_remaining = float(snapshot.get("finish_remaining", 0.0))
 	if phase == "finish" and previous_phase != "finish":
@@ -3531,6 +3537,7 @@ func _clear_dedicated_snapshot_buffer() -> void:
 	dedicated_snapshot_received_msec = 0
 	dedicated_last_server_tick = -1
 	dedicated_input_acknowledgements.clear()
+	dedicated_round_id = -1
 	finish_visual_snapshot_captured = false
 	dedicated_hammer_presentation_angles.clear()
 
