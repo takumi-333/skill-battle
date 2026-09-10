@@ -214,7 +214,7 @@ func take_presentations() -> Array[Dictionary]:
 	return value
 
 func _collect_presentations() -> void:
-	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins"]:
+	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins", "lunar_eclipses"]:
 		for entity in simulation.state.get(kind, []):
 			var item: Dictionary = entity
 			var presentation_id := int(item.get("presentation_id", 0))

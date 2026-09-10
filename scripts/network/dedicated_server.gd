@@ -82,6 +82,30 @@ func _process(delta: float) -> void:
 		_queue_heartbeat()
 	_flush_monitoring()
 
+@rpc("authority", "unreliable")
+func receive_shared_sound(_sound_kind: StringName) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func receive_challenge_miss_feedback(_duration: float) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func joined_room(_room_id: String, _slot: int) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func join_rejected(_message: String) -> void:
+	pass
+
+@rpc("authority", "unreliable_ordered")
+func receive_dedicated_snapshot(_snapshot: Dictionary) -> void:
+	pass
+
+@rpc("authority", "reliable")
+func receive_skill_presentation(_presentation: Dictionary) -> void:
+	pass
+
 @rpc("any_peer", "reliable")
 func join_room(room_id: String, requested_slot: int, token: String) -> void:
 	var peer_id := multiplayer.get_remote_sender_id()
@@ -152,29 +176,12 @@ func request_match_start() -> void:
 		_queue_monitoring_event("match_started", session.room_id, {"peer_id": multiplayer.get_remote_sender_id()})
 		_broadcast_session(session)
 
-
 @rpc("any_peer", "reliable")
 func request_result_action(action: String) -> void:
 	var session := _sender_session()
 	if session != null and session.request_result_action(multiplayer.get_remote_sender_id(), action):
 		_queue_monitoring_event("result_action", session.room_id, {"peer_id": multiplayer.get_remote_sender_id(), "action": action})
 		_broadcast_session(session)
-
-@rpc("authority", "reliable")
-func joined_room(_room_id: String, _slot: int) -> void:
-	pass
-
-@rpc("authority", "reliable")
-func join_rejected(_message: String) -> void:
-	pass
-
-@rpc("authority", "unreliable_ordered")
-func receive_dedicated_snapshot(_snapshot: Dictionary) -> void:
-	pass
-
-@rpc("authority", "reliable")
-func receive_skill_presentation(_presentation: Dictionary) -> void:
-	pass
 
 @rpc("authority", "unreliable")
 func receive_network_state(_state: Dictionary) -> void:

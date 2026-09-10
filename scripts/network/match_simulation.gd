@@ -18,6 +18,7 @@ const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
+const CHANTER_LUNAR_ECLIPSE_COOLDOWN := 10.0
 const SKILL3_COOLDOWN := 3.0
 const ARITHMETICIAN_HACK_VISION_COOLDOWN := 12.0
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
@@ -33,6 +34,13 @@ const CHANTER_ZONE_RADIUS := 80.0
 const CHANTER_TARGET_HITBOX_RADIUS_X := 20.0
 const CHANTER_TARGET_HITBOX_RADIUS_Y := 30.0
 const CHANTER_TARGET_HITBOX_OFFSET := Vector2(0.0, -12.0)
+const LUNAR_ECLIPSE_LASER_START_TIME := 2.0
+const LUNAR_ECLIPSE_LASER_DURATION := 2.5
+const LUNAR_ECLIPSE_DURATION := LUNAR_ECLIPSE_LASER_START_TIME + LUNAR_ECLIPSE_LASER_DURATION
+const LUNAR_ECLIPSE_LASER_DAMAGE_INTERVAL := 0.5
+const LUNAR_ECLIPSE_LASER_LAST_HIT_TIME := LUNAR_ECLIPSE_LASER_START_TIME + LUNAR_ECLIPSE_LASER_DAMAGE_INTERVAL * 2.0
+const LUNAR_ECLIPSE_PULL_INTERVAL := 0.1
+const LUNAR_ECLIPSE_LASER_HALF_WIDTH := 150.0
 const ARITHMETICIAN_DECOY_MIN_NOISE_INTERVAL := 5.0
 const ARITHMETICIAN_DECOY_MAX_NOISE_INTERVAL := 10.0
 const ARITHMETICIAN_DECOY_NOISE_DURATION := 0.12
@@ -79,6 +87,7 @@ func reset() -> void:
 		"arithmetic_flashes": [],
 		"arithmetic_point_collections": [],
 		"hammer_spins": [],
+		"lunar_eclipses": [],
 	}
 	configure_loadout(1, 0, "typist_trident")
 	configure_loadout(2, 1, "typist_trident")
@@ -103,7 +112,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["hack_vision_owner_id"] = 0
 	player["small_skill_id"] = "%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0]
 	player["big_skill_id"] = big_skill if character == 0 else "%s_big_0" % ids[character]
-	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ""))
+	player["skill3_id"] = "typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else "")))
 	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
 	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
 	player["attack_facing"] = player["facing"]
@@ -149,6 +158,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	_update_shockwaves(delta)
 	_update_trident_impacts(delta)
 	_update_hammer_spins(delta)
+	_update_lunar_eclipses(delta)
 	_update_decoys(delta)
 	_update_arithmetic_flashes(delta)
 	_update_arithmetic_point_collections(delta)
@@ -174,7 +184,7 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 		player["hack_vision_owner_id"] = 0
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	player["is_moving"] = false
-	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and move.length_squared() > 0.0:
+	if float(player["attack_time"]) <= 0.0 and not _is_trident_active(slot) and not _is_lunar_eclipse_active(slot) and move.length_squared() > 0.0:
 		var direction := move.normalized()
 		player["facing"] = direction
 		var focus_multiplier := FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0
@@ -187,7 +197,7 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 
 func _try_normal_attack(slot: int) -> bool:
 	var player: Dictionary = state["players"][slot]
-	if bool(player["focused"]) or float(player["attack_cooldown"]) > 0.0:
+	if bool(player["focused"]) or _is_lunar_eclipse_active(slot) or float(player["attack_cooldown"]) > 0.0:
 		return false
 	player["attack_cooldown"] = _normal_attack_cooldown(player)
 	player["attack_time"] = NORMAL_DURATION
@@ -232,7 +242,9 @@ func _start_challenge(slot: int, tier: String) -> bool:
 	if bool(player["focused"]):
 		return false
 	var character_id := str(player["character_id"])
-	if tier == "skill3" and character_id != "blade" and not (character_id == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision") and not (character_id == "chanter" and str(player.get("skill3_id", "")) == "chanter_skill3_0"):
+	if _is_lunar_eclipse_active(slot):
+		return false
+	if tier == "skill3" and character_id != "blade" and not (character_id == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision") and not (character_id == "chanter" and str(player.get("skill3_id", "")) in ["chanter_skill3_0", "chanter_lunar_eclipse"]):
 		return false
 	var cooldown_key := "skill3_cooldown" if tier == "skill3" else ("big_cooldown" if tier == "big" else "small_cooldown")
 	if float(player.get(cooldown_key, 0.0)) > 0.0:
@@ -278,7 +290,7 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 	else:
 		challenge_type = "tracing"
 		limit = 0.0
-		skill = "skill3_trace" if tier == "skill3" else ("big_trace" if tier == "big" else "small_trace")
+		skill = "skill3_trace_lunar_eclipse" if tier == "skill3" and str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else ("skill3_trace" if tier == "skill3" else ("big_trace" if tier == "big" else "small_trace"))
 	var prompt := ""
 	var answer := ""
 	var target := PackedVector2Array()
@@ -290,8 +302,9 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 		answer = str(_evaluate_arithmetic(prompt))
 		prompt += " = ?"
 	else:
-		prompt = "星形をなぞってください" if tier == "big" else ("渦巻きをなぞってください" if tier == "skill3" or str(player.get("small_skill_id", "")) == "chanter_small_1" else "円をなぞってください")
-		target = _make_trace_target(tier, str(player.get("small_skill_id", "")))
+		var lunar_eclipse := str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" and tier == "skill3"
+		prompt = "星形をなぞってください" if tier == "big" or lunar_eclipse else ("渦巻きをなぞってください" if tier == "skill3" or str(player.get("small_skill_id", "")) == "chanter_small_1" else "円をなぞってください")
+		target = _make_lunar_eclipse_trace_target() if lunar_eclipse else _make_trace_target(tier, str(player.get("small_skill_id", "")))
 	return {"id": _challenge_nonce, "owner": slot, "tier": tier, "skill": skill, "type": challenge_type, "prompt": prompt, "answer": answer, "elapsed": 0.0, "limit": limit, "typed": "", "target": target, "trace": PackedVector2Array(), "miss_sequence": 0}
 
 func _receive_challenge_character(slot: int, character: String) -> bool:
@@ -387,7 +400,7 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 	player["challenge_total_time"] = float(player.get("challenge_total_time", 0.0)) + float(challenge["elapsed"])
 	player["challenge_elapsed"] = 0.0
 	if tier == "skill3":
-		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN)
+		player["skill3_cooldown"] = ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else SKILL3_COOLDOWN))
 	elif tier == "big":
 		if str(player.get("character_id", "")) == "arithmetic":
 			player["big_cooldown"] = ARITHMETIC_BIG_COOLDOWN
@@ -446,7 +459,10 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 			state["players"][owner] = player
 	else:
 		if tier == "skill3":
-			_spawn_chanter_skill3_volley(owner, score)
+			if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse":
+				_spawn_lunar_eclipse(owner, score)
+			else:
+				_spawn_chanter_skill3_volley(owner, score)
 		elif tier == "small" and str(player.get("small_skill_id", "")) == "chanter_small_1":
 			_spawn_chanter_clockwise_volley(owner, score)
 		elif tier == "small":
@@ -813,6 +829,79 @@ func _update_hammer_spins(delta: float) -> void:
 		else:
 			state["hammer_spins"][index] = spin
 
+func _spawn_lunar_eclipse(owner: int, score: int) -> void:
+	var player: Dictionary = state["players"][owner]
+	var origin := Vector2(player["position"])
+	var facing := Vector2(player["facing"]).normalized()
+	if facing.length_squared() <= 0.0:
+		facing = Vector2.RIGHT
+	state["lunar_eclipses"].append({"presentation_id": _take_presentation_id(), "owner_id": owner, "origin": origin, "facing": facing, "center": _lunar_eclipse_center(origin, facing), "elapsed": 0.0, "duration": LUNAR_ECLIPSE_DURATION, "score": score, "max_radius": 150.0 + floori(float(score) * 1.2), "pull_amount": 6.0 + floori(float(score) * 0.16), "next_pull_time": 0.0, "next_laser_hit_time": LUNAR_ECLIPSE_LASER_START_TIME, "damage": 4 + floori(float(score) * 0.13)})
+
+func _update_lunar_eclipses(delta: float) -> void:
+	for index in range(state["lunar_eclipses"].size() - 1, -1, -1):
+		var eclipse: Dictionary = state["lunar_eclipses"][index]
+		eclipse["elapsed"] = float(eclipse["elapsed"]) + delta
+		var owner := int(eclipse["owner_id"])
+		var target := _other(owner)
+		var elapsed := float(eclipse["elapsed"])
+		var max_radius := float(eclipse["max_radius"])
+		var active_radius := max_radius * minf(1.0, elapsed / LUNAR_ECLIPSE_LASER_START_TIME)
+		while float(eclipse["next_pull_time"]) <= elapsed and float(eclipse["next_pull_time"]) <= LUNAR_ECLIPSE_DURATION:
+			_pull_lunar_eclipse_target(target, Vector2(eclipse["center"]), active_radius, float(eclipse["pull_amount"]))
+			eclipse["next_pull_time"] = float(eclipse["next_pull_time"]) + LUNAR_ECLIPSE_PULL_INTERVAL
+		while float(eclipse["next_laser_hit_time"]) <= elapsed and float(eclipse["next_laser_hit_time"]) <= LUNAR_ECLIPSE_LASER_LAST_HIT_TIME:
+			if _lunar_eclipse_laser_hits(target, Vector2(eclipse["origin"]), Vector2(eclipse["facing"])):
+				_apply_damage(target, int(eclipse["damage"]), "月蝕・潮汐")
+			eclipse["next_laser_hit_time"] = float(eclipse["next_laser_hit_time"]) + LUNAR_ECLIPSE_LASER_DAMAGE_INTERVAL
+		if elapsed >= float(eclipse["duration"]):
+			state["lunar_eclipses"].remove_at(index)
+		else:
+			state["lunar_eclipses"][index] = eclipse
+
+func _pull_lunar_eclipse_target(target: int, center: Vector2, radius: float, pull_amount: float) -> void:
+	var player: Dictionary = state["players"][target]
+	var position := Vector2(player["position"])
+	var distance := position.distance_to(center)
+	if distance > radius or is_zero_approx(distance):
+		return
+	player["position"] = _clamp_to_arena(position.move_toward(center, pull_amount))
+	state["players"][target] = player
+
+func _lunar_eclipse_center(origin: Vector2, facing: Vector2) -> Vector2:
+	return origin + facing * minf(300.0, _distance_to_arena_boundary(origin, facing))
+
+func _distance_to_arena_boundary(origin: Vector2, facing: Vector2) -> float:
+	var distances: Array[float] = []
+	if facing.x > 0.0:
+		distances.append((ARENA.end.x - origin.x) / facing.x)
+	elif facing.x < 0.0:
+		distances.append((ARENA.position.x - origin.x) / facing.x)
+	if facing.y > 0.0:
+		distances.append((ARENA.end.y - origin.y) / facing.y)
+	elif facing.y < 0.0:
+		distances.append((ARENA.position.y - origin.y) / facing.y)
+	var result := 1000000000.0
+	for distance in distances:
+		if distance >= 0.0:
+			result = minf(result, distance)
+	return result
+
+func _lunar_eclipse_laser_hits(target: int, origin: Vector2, facing: Vector2) -> bool:
+	var start := origin + facing * 30.0
+	var end := start + facing * _distance_to_arena_boundary(start, facing)
+	var target_center := Vector2(state["players"][target]["position"]) + CHANTER_TARGET_HITBOX_OFFSET
+	var offset := target_center - start
+	var along := offset.dot(facing)
+	if along < -CHANTER_TARGET_HITBOX_RADIUS_X or along > start.distance_to(end) + CHANTER_TARGET_HITBOX_RADIUS_X:
+		return false
+	return absf(offset.dot(facing.orthogonal())) <= LUNAR_ECLIPSE_LASER_HALF_WIDTH + CHANTER_TARGET_HITBOX_RADIUS_Y
+
+func _is_lunar_eclipse_active(slot: int) -> bool:
+	for eclipse in state["lunar_eclipses"]:
+		if int(eclipse["owner_id"]) == slot:
+			return true
+	return false
+
 func _apply_damage(target_slot: int, damage: int, _attack_name: String) -> void:
 	if bool(state["match_over"]):
 		return
@@ -861,6 +950,21 @@ func _make_trace_target(tier: String, small_skill_id: String = "") -> PackedVect
 		var angle := -PI / 2.0 + TAU * turn_count * progress
 		var radius := lerpf(10.0, 108.0, progress)
 		points.append(center + Vector2.from_angle(angle) * radius)
+	return points
+
+func _make_lunar_eclipse_trace_target() -> PackedVector2Array:
+	var center := Vector2(340, 118)
+	var vertices := PackedVector2Array()
+	for index in 5:
+		vertices.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 5.0) * 108.0)
+	var order := [0, 2, 4, 1, 3, 0]
+	var points := PackedVector2Array()
+	for segment_index in 5:
+		var start := vertices[order[segment_index]]
+		var end := vertices[order[segment_index + 1]]
+		for point_index in 24:
+			points.append(start.lerp(end, float(point_index) / 24.0))
+	points.append(vertices[order[-1]])
 	return points
 
 func _hammer_duration(score: int) -> float:

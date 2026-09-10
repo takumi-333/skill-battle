@@ -8,6 +8,7 @@ func _init() -> void:
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
 	_test_chanter_skill1_candidate_and_skill3()
+	_test_lunar_eclipse_rules()
 	_test_chanter_skill1_timeline()
 	_test_damage_does_not_interrupt_focus()
 	_test_damage_does_not_interrupt_simultaneous_challenges()
@@ -353,10 +354,61 @@ func _test_chanter_skill1_candidate_and_skill3() -> void:
 	assert(is_equal_approx(float(top["delay"]), float(right["delay"])))
 	assert(is_equal_approx(float(top["delay"]), float(left["delay"])))
 
-	var unavailable_candidate_simulation := MatchSimulation.new()
-	unavailable_candidate_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
-	assert(str(unavailable_candidate_simulation.state["players"][1]["skill3_id"]).is_empty())
-	assert(not unavailable_candidate_simulation.handle_event(1, {"type": "skill3"}))
+	var lunar_eclipse_simulation := MatchSimulation.new()
+	lunar_eclipse_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
+	assert(str(lunar_eclipse_simulation.state["players"][1]["skill3_id"]) == "chanter_lunar_eclipse")
+	assert(lunar_eclipse_simulation.handle_event(1, {"type": "skill3"}))
+	lunar_eclipse_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(str(lunar_eclipse_simulation.state["challenges"][1]["skill"]) == "skill3_trace_lunar_eclipse")
+	var lunar_target: PackedVector2Array = lunar_eclipse_simulation.state["challenges"][1]["target"]
+	assert(lunar_target.size() == 121)
+	assert(lunar_eclipse_simulation.handle_event(1, {"type": "challenge_trace", "payload": lunar_target}))
+	assert(lunar_eclipse_simulation.state["lunar_eclipses"].size() == 1)
+	assert(is_equal_approx(float(lunar_eclipse_simulation.state["players"][1]["skill3_cooldown"]), 10.0))
+
+
+func _test_lunar_eclipse_rules() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
+	simulation.state["players"][2]["position"] = Vector2(420, MatchSimulation.ARENA.get_center().y)
+	assert(simulation.handle_event(1, {"type": "skill3"}))
+	simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
+	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
+	var eclipse: Dictionary = simulation.state["lunar_eclipses"][0]
+	assert(Vector2(eclipse["origin"]).is_equal_approx(Vector2(200, MatchSimulation.ARENA.get_center().y)))
+	assert(Vector2(eclipse["center"]).is_equal_approx(Vector2(500, MatchSimulation.ARENA.get_center().y)))
+	assert(is_equal_approx(float(eclipse["duration"]), 4.5))
+	assert(is_equal_approx(float(eclipse["next_laser_hit_time"]), 2.0))
+	assert(Vector2(simulation.call("_lunar_eclipse_center", Vector2(1600, 400), Vector2.RIGHT)).is_equal_approx(Vector2(MatchSimulation.ARENA.end.x, 400)))
+	assert(is_equal_approx(float(simulation.call("_distance_to_arena_boundary", Vector2(230, MatchSimulation.ARENA.get_center().y), Vector2.RIGHT)), 1450.0))
+	var owner_position := Vector2(simulation.state["players"][1]["position"])
+	assert(not simulation.handle_event(1, {"type": "attack"}))
+	assert(not simulation.handle_event(1, {"type": "small_skill"}))
+	simulation.step(0.5, {1: {"move": Vector2.DOWN}, 2: {"move": Vector2.ZERO}})
+	assert(Vector2(simulation.state["players"][1]["position"]).is_equal_approx(owner_position))
+	assert(int(simulation.state["players"][2]["hp"]) == 100)
+	simulation.step(0.5, {1: {"move": Vector2.DOWN}, 2: {"move": Vector2.ZERO}})
+	assert(Vector2(simulation.state["players"][2]["position"]).is_equal_approx(Vector2(eclipse["center"])))
+	assert(int(simulation.state["players"][2]["hp"]) == 100)
+	var damage := 4 + floori(100.0 * 0.13)
+	simulation.step(1.0, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage)
+	simulation.step(2.0, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 100 - damage * 3)
+	simulation.step(0.5, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(simulation.state["lunar_eclipses"].is_empty())
+
+	var boundary_simulation := MatchSimulation.new()
+	boundary_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 1)
+	boundary_simulation.call("_spawn_lunar_eclipse", 1, 45)
+	var boundary_eclipse: Dictionary = boundary_simulation.state["lunar_eclipses"][0]
+	assert(is_equal_approx(float(boundary_eclipse["max_radius"]), 204.0))
+	assert(is_equal_approx(float(boundary_eclipse["pull_amount"]), 13.0))
+	assert(int(boundary_eclipse["damage"]) == 9)
+	var snapshot := MatchProtocol.snapshot("lunar-eclipse", boundary_simulation.state, "match", "", 1)
+	assert(snapshot["lunar_eclipses"].size() == 1)
+	assert(int(snapshot["lunar_eclipses"][0]["presentation_id"]) > 0)
 
 
 func _test_chanter_skill1_timeline() -> void:
