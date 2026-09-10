@@ -18,6 +18,9 @@ func _run() -> void:
 	assert(prototype.call("get_local_lobby_ready_button") == player_one_ready)
 	prototype.set("local_player_id", 2)
 	assert(prototype.call("get_local_lobby_ready_button") == player_two_ready)
+	_test_character_skill_persistence(prototype)
+	_test_online_focus_bgm_scope(prototype)
+	_test_p2p_result_challenge_cleanup(prototype)
 	_test_dedicated_snapshot_ui(prototype)
 	_test_dedicated_trace_persistence(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
@@ -36,6 +39,58 @@ func _has_ready_connection(button: Button) -> bool:
 		if callback.get_method() == "toggle_local_lobby_ready":
 			return true
 	return false
+
+
+func _test_character_skill_persistence(prototype: Node) -> void:
+	var path := "user://character_skills.cfg"
+	var had_file := FileAccess.file_exists(path)
+	var original_bytes := FileAccess.get_file_as_bytes(path) if had_file else PackedByteArray()
+	prototype.set("character_selection", 0)
+	prototype.set("character_skill_selection", {"typist": [1, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]})
+	prototype.call("save_character_skills")
+	if FileAccess.file_exists(path):
+		prototype.set("character_skill_selection", {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]})
+		prototype.call("load_character_skills")
+		var selections: Dictionary = prototype.get("character_skill_selection")
+		assert(selections["typist"] == [1, 0, 0])
+	else:
+		print("character skill persistence test skipped: user:// is not writable in this environment")
+	assert(prototype.call("normalize_character_skill_selection", "typist", [99, -1, 1]) == [0, 0, 1])
+	if had_file:
+		var restore_file := FileAccess.open(path, FileAccess.WRITE)
+		restore_file.store_buffer(original_bytes)
+	else:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _test_online_focus_bgm_scope(prototype: Node) -> void:
+	var players: Dictionary = prototype.get("players").duplicate(true)
+	players[1]["focused"] = false
+	players[2]["focused"] = true
+	prototype.set("players", players)
+	prototype.set("network_mode", "client")
+	prototype.set("local_player_id", 1)
+	assert(not bool(prototype.call("is_battle_focus_active")))
+	prototype.set("local_player_id", 2)
+	assert(bool(prototype.call("is_battle_focus_active")))
+
+
+func _test_p2p_result_challenge_cleanup(prototype: Node) -> void:
+	prototype.set("network_mode", "client")
+	prototype.set("phase", "match")
+	prototype.set("screen", "match")
+	prototype.set("challenge_owner", 1)
+	(prototype.get_node("ChallengeLayer/Challenge") as Control).visible = true
+	(prototype.get_node("ChallengeLayer/ChallengeDimmer") as Control).visible = true
+	(prototype.get_node("ChallengeLayer/Challenge/Content/Input") as LineEdit).visible = true
+	prototype.set("phase", "result")
+	var result_state: Dictionary = prototype.call("make_network_state")
+	prototype.set("phase", "match")
+	prototype.call("receive_network_state", result_state)
+	assert(str(prototype.get("phase")) == "result")
+	assert(not (prototype.get_node("ChallengeLayer/Challenge") as Control).visible)
+	assert(not (prototype.get_node("ChallengeLayer/Challenge/Content/Input") as LineEdit).visible)
+	assert(int(prototype.get("challenge_owner")) == 0)
 
 
 func _test_dedicated_snapshot_ui(prototype: Node) -> void:
@@ -140,11 +195,14 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	result_snapshot["phase"] = "result"
 	result_snapshot["match_over"] = true
 	result_snapshot["winner_id"] = 1
-	result_snapshot["challenges"] = {}
+	result_snapshot["challenges"] = typing_snapshot["challenges"]
 	result_snapshot["rematch_ready"] = {1: true, 2: false}
 	prototype.call("_on_dedicated_snapshot_received", result_snapshot)
 	var rematch_button := prototype.get_node("UIRoot/Result/RematchButton") as Button
 	assert(str(prototype.get("screen")) == "result")
+	assert(not (prototype.get_node("ChallengeLayer/Challenge") as Control).visible)
+	assert(not (prototype.get_node("ChallengeLayer/Challenge/Content/Input") as LineEdit).visible)
+	assert(int(prototype.get("challenge_owner")) == 0)
 	assert(rematch_button.disabled)
 	assert(rematch_button.text == "再戦を待機中")
 	var return_to_lobby_snapshot: Dictionary = result_snapshot.duplicate(true)

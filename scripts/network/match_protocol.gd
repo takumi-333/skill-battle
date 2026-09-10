@@ -43,7 +43,7 @@ static func valid_event(value: Variant, previous_sequence: int) -> bool:
 		"challenge_trace":
 			return payload is PackedVector2Array and (payload as PackedVector2Array).size() <= MAX_TRACE_POINTS
 		"loadout":
-			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii", "arithmetic_perfect_mapping"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
+			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii", "typist_golden_time_ii", "arithmetic_perfect_mapping"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
 		_:
 			return payload == null
 

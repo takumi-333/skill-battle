@@ -342,6 +342,8 @@ const TITLE_LOGO_ANIMATION_DURATION := 1.2
 const TITLE_PROMPT_BLINK_SPEED := 4.0
 const UI_CLICK_SOUND: AudioStream = preload("res://assets/audio/ui_click.wav")
 const BATTLE_BGM_SOUND: AudioStream = preload("res://assets/audio/battle_bgm_rising_tension.mp3")
+const CHARACTER_SKILLS_CONFIG_PATH := "user://character_skills.cfg"
+const CHARACTER_SKILL_VISUAL_IDS: Array[String] = ["typist", "arithmetician", "chanter"]
 const SKILL_PANEL_CLICK_SOUND: AudioStream = preload("res://assets/audio/skill_panel_click.wav")
 const TYPIST_TYPING_KEY_SOUND: AudioStream = preload("res://assets/audio/typing_key_mechanical.wav")
 const DAMAGE_HIT_SOUND: AudioStream = preload("res://assets/audio/damaged.mp3")
@@ -669,6 +671,7 @@ class NormalAttackHitArea:
 
 func _ready() -> void:
 	load_user_settings()
+	load_character_skills()
 	load_focus_particle_textures()
 	setup_writing_sound_player()
 	if menu_layout == null:
@@ -822,6 +825,10 @@ func update_battle_bgm_focus() -> void:
 
 
 func is_battle_focus_active() -> bool:
+	if network_mode in ["host", "client"]:
+		var local_audio_player_id := local_player_id if network_mode == "client" else 1
+		var local_player_value: Variant = players.get(local_audio_player_id, null)
+		return local_player_value is Dictionary and bool((local_player_value as Dictionary).get("focused", false))
 	for player_value in players.values():
 		var player: Dictionary = player_value
 		if bool(player.get("focused", false)):
@@ -2723,7 +2730,7 @@ func finish_match(winner_id: int, fade_out_bgm := false) -> void:
 	match_state.winner_id = winner_id
 	arithmetic_point_collections.clear()
 	stop_battle_bgm(fade_out_bgm)
-	set_challenge_overlay_visible(false)
+	clear_active_challenge_state()
 	status_text = "%sの勝利！ Rキーで再戦できます。" % players[winner_id]["name"]
 	show_result(winner_id)
 
@@ -2751,6 +2758,7 @@ func show_result(winner_id: int) -> void:
 	phase = "result"
 	finish_remaining = 0.0
 	finish_visual_snapshot_captured = false
+	clear_active_challenge_state()
 	if was_finish:
 		stop_battle_bgm()
 	var first: Dictionary = players[1]
@@ -2964,6 +2972,30 @@ func set_challenge_overlay_visible(is_visible: bool) -> void:
 		typing_input.release_focus()
 
 
+func clear_active_challenge_state() -> void:
+	challenge_owner = 0
+	challenge_skill = ""
+	challenge_prompt = ""
+	challenge_answer = ""
+	challenge_definition = null
+	challenge_typing_index = 0
+	challenge_typed_characters = ""
+	challenge_trace_points.clear()
+	challenge_trace_drawing = false
+	challenge_target_points.clear()
+	challenge_miss_flash = 0.0
+	challenge_shake = 0.0
+	if typing_input:
+		typing_input.text = ""
+		typing_input.visible = false
+		typing_input.release_focus()
+	if challenge_trace_canvas:
+		challenge_trace_canvas.visible = false
+	stop_writing_sound()
+	if challenge_panel and challenge_dimmer:
+		set_challenge_overlay_visible(false)
+
+
 func apply_screen_state(next_screen: String) -> void:
 	lobby_debug_log("apply_screen_state %s -> %s; mode=%s phase=%s" % [screen, next_screen, network_mode, phase])
 	screen = next_screen
@@ -3019,6 +3051,28 @@ func load_user_settings() -> void:
 	var saved_name := str(config.get_value("user", "display_name", "")).strip_edges()
 	if MatchProtocol.valid_display_name(saved_name):
 		user_display_name = saved_name
+
+
+func load_character_skills() -> void:
+	var config := ConfigFile.new()
+	if config.load(CHARACTER_SKILLS_CONFIG_PATH) != OK:
+		return
+	for visual_id in CHARACTER_SKILL_VISUAL_IDS:
+		var saved_value: Variant = config.get_value("loadout", visual_id, null)
+		if saved_value is Array:
+			character_skill_selection[visual_id] = normalize_character_skill_selection(visual_id, saved_value)
+
+
+func normalize_character_skill_selection(visual_id: String, saved_value: Variant) -> Array:
+	var normalized: Array = []
+	for skill_index in 3:
+		var selected_index := first_implemented_skill_candidate(visual_id, skill_index)
+		if saved_value is Array and skill_index < saved_value.size():
+			var candidate_value: Variant = saved_value[skill_index]
+			if candidate_value is int and is_skill_candidate_implemented(visual_id, skill_index, int(candidate_value)):
+				selected_index = int(candidate_value)
+		normalized.append(selected_index)
+	return normalized
 
 
 func save_user_settings() -> void:
@@ -3405,6 +3459,8 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	match_state.winner_id = int(snapshot.get("winner_id", 0))
 	var previous_phase := phase
 	phase = str(snapshot.get("phase", "lobby"))
+	if phase in ["finish", "result"]:
+		clear_active_challenge_state()
 	var incoming_round_id := int(snapshot.get("round_id", 0))
 	if phase in ["countdown", "match"] and incoming_round_id > dedicated_round_id:
 		dedicated_round_id = incoming_round_id
@@ -3557,6 +3613,13 @@ func _update_dedicated_trident_screen_shake() -> void:
 
 
 func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
+	if phase != "match":
+		clear_active_challenge_state()
+		dedicated_challenge_type = ""
+		dedicated_challenge_limit = 0.0
+		dedicated_challenge_id = 0
+		dedicated_challenge_miss_sequence = 0
+		return
 	var challenge: Dictionary = challenges.get(local_player_id, {})
 	if challenge.is_empty():
 		set_challenge_overlay_visible(false)
@@ -4264,6 +4327,14 @@ func style_character_detail_button(button: Button) -> void:
 
 func save_character_skills() -> void:
 	var visual_id := character_visual_id()
+	character_skill_selection[visual_id] = normalize_character_skill_selection(visual_id, character_skill_selection.get(visual_id, []))
+	var config := ConfigFile.new()
+	for saved_visual_id in CHARACTER_SKILL_VISUAL_IDS:
+		var saved_selection: Variant = character_skill_selection.get(saved_visual_id, [0, 0, 0])
+		config.set_value("loadout", saved_visual_id, normalize_character_skill_selection(saved_visual_id, saved_selection))
+	if config.save(CHARACTER_SKILLS_CONFIG_PATH) != OK:
+		character_saved_label.text = "Failed to save loadout"
+		return
 	character_saved_label.text = "Saved loadout: %s" % str(character_skill_selection[visual_id])
 	if dedicated_connection and dedicated_connection.has_pending_join():
 		_send_dedicated_loadout(p1_selection if local_player_id == 1 else p2_selection)
@@ -4476,6 +4547,8 @@ func receive_network_state(state: Dictionary) -> void:
 	match_state.winner_id = int(state["winner_id"])
 	var previous_phase := phase
 	phase = str(state["phase"])
+	if phase in ["finish", "result"]:
+		clear_active_challenge_state()
 	finish_remaining = float(state.get("finish_remaining", 0.0))
 	if phase == "finish" and previous_phase != "finish":
 		finish_visual_snapshot_captured = false

@@ -135,7 +135,7 @@ func _reset_simulation_preserving_loadouts() -> void:
 		loadouts[slot] = {
 			"character": _character_index(str(player.get("character_id", "blade"))),
 			"big_skill": str(player.get("big_skill_id", "typist_trident")),
-			"small_skill": 1 if str(player.get("small_skill_id", "")) == "chanter_small_1" else 0,
+			"small_skill": 1 if str(player.get("small_skill_id", "")) in ["chanter_small_1", "typist_golden_time_i"] else 0,
 			"skill3": 0 if str(player.get("skill3_id", "")) in ["typist_hammer_spin", "arithmetic_hack_vision", "chanter_skill3_0"] else 1,
 			"display_name": str(player.get("name", "")),
 		}

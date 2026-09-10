@@ -54,6 +54,13 @@ func _test_state_and_normal_attack() -> void:
 
 
 func _test_display_name_loadout_validation() -> void:
+	var golden_time_ii_session := MatchSession.new("golden-time-ii-loadout")
+	assert(golden_time_ii_session.join(11, 1) == 1)
+	var golden_time_ii_payload := {"character": 0, "big_skill": "typist_golden_time_ii", "display_name": "GoldenTimeII"}
+	assert(MatchProtocol.valid_event(MatchProtocol.make_event(1, "loadout", golden_time_ii_payload), -1))
+	assert(golden_time_ii_session.submit_event(11, MatchProtocol.make_event(1, "loadout", golden_time_ii_payload)))
+	assert(str(golden_time_ii_session.simulation.state["players"][1]["big_skill_id"]) == "typist_golden_time_ii")
+
 	assert(MatchProtocol.valid_display_name("プレイヤー01"))
 	assert(not MatchProtocol.valid_display_name("   "))
 	assert(not MatchProtocol.valid_display_name("a".repeat(MatchProtocol.MAX_DISPLAY_NAME_LENGTH + 1)))
@@ -649,6 +656,12 @@ func _test_session_knockout_finish_phase() -> void:
 
 
 func _test_session_result_actions() -> void:
+	var loadout_session := MatchSession.new("loadout-preservation-room")
+	loadout_session.simulation.configure_loadout(1, 0, "typist_trident", "Player", 1, 1)
+	loadout_session.call("_reset_simulation_preserving_loadouts")
+	assert(str(loadout_session.simulation.state["players"][1]["small_skill_id"]) == "typist_golden_time_i")
+	assert(str(loadout_session.simulation.state["players"][1]["skill3_id"]) == "typist_golden_time_iii")
+
 	var session := MatchSession.new("result-room")
 	assert(session.join(11, 1) == 1)
 	assert(session.join(12, 2) == 2)
