@@ -10,6 +10,7 @@ func _init() -> void:
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
 	_test_chanter_skill1_candidate_and_skill3()
+	_test_chanter_skill3_event_driven_presentation()
 	_test_lunar_eclipse_rules()
 	_test_chanter_skill1_timeline()
 	_test_damage_does_not_interrupt_focus()
@@ -694,6 +695,43 @@ func _test_snapshot_metadata_and_recipient_filtering() -> void:
 	assert(not (snapshot["players"][1] as Dictionary).has("attack_damage_buff"))
 	assert(not (snapshot["players"][1] as Dictionary).has("interrupt_gauge"))
 	assert(is_equal_approx(MatchProtocol.TICK_SECONDS, 1.0 / 60.0))
+
+
+func _test_chanter_skill3_event_driven_presentation() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 2, "typist_trident", "", 0, 0)
+	simulation.call("_spawn_chanter_skill3_volley", 1, 100)
+	var server_projectiles: Array = simulation.state["skill_projectiles"]
+	assert(server_projectiles.size() == 256)
+	for projectile in server_projectiles:
+		assert(bool(projectile.get("client_predicted", false)))
+		assert(int(projectile.get("presentation_id", -1)) == 0)
+	var visual_presentations := simulation.take_visual_presentations()
+	assert(visual_presentations.size() == 1)
+	assert(str(visual_presentations[0]["kind"]) == "chanter_skill3_volley")
+	assert(int(visual_presentations[0]["state"]["cycle_count"]) == 4)
+	assert(int(visual_presentations[0]["state"]["projectile_count"]) == 256)
+	assert((MatchProtocol.snapshot("event-driven-volley", simulation.state, "match", "", 1)["skill_projectiles"] as Array).is_empty())
+
+	var session := MatchSession.new("event-driven-volley")
+	session.simulation.configure_loadout(1, 2, "typist_trident", "", 0, 0)
+	session.simulation.call("_spawn_chanter_skill3_volley", 1, 75)
+	session.call("_collect_presentations")
+	var queued_presentations := session.take_presentations()
+	assert(queued_presentations.size() == 1)
+	assert(str(queued_presentations[0]["kind"]) == "chanter_skill3_volley")
+	assert(int(queued_presentations[0]["state"]["cycle_count"]) == 3)
+	assert(int(queued_presentations[0]["state"]["projectile_count"]) == 192)
+
+	var capped_simulation := MatchSimulation.new()
+	capped_simulation.configure_loadout(1, 2, "typist_trident", "", 0, 0)
+	for index in MatchSimulation.MAX_PROJECTILES - 20:
+		capped_simulation.state["skill_projectiles"].append({})
+	capped_simulation.call("_spawn_chanter_skill3_volley", 1, 100)
+	var capped_presentations := capped_simulation.take_visual_presentations()
+	assert(capped_simulation.state["skill_projectiles"].size() == MatchSimulation.MAX_PROJECTILES)
+	assert(capped_presentations.size() == 1)
+	assert(int(capped_presentations[0]["state"]["projectile_count"]) == 20)
 
 
 func _test_visual_snapshot_interpolation() -> void:

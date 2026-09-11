@@ -91,7 +91,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"winner_id": state["winner_id"],
 		"status_text": status,
 		"challenges": challenges,
-		"skill_projectiles": state.get("skill_projectiles", []).duplicate(true),
+		"skill_projectiles": snapshot_skill_projectiles(state.get("skill_projectiles", [])),
 		"magic_zones": state.get("magic_zones", []).duplicate(true),
 		"shockwaves": state.get("shockwaves", []).duplicate(true),
 		"trident_impacts": state.get("trident_impacts", []).duplicate(true),
@@ -102,6 +102,16 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"hammer_spins": state.get("hammer_spins", []).duplicate(true),
 		"lunar_eclipses": state.get("lunar_eclipses", []).duplicate(true),
 	}
+
+static func snapshot_skill_projectiles(source: Variant) -> Array:
+	var result: Array = []
+	if not source is Array:
+		return result
+	for entry in source:
+		if entry is Dictionary and bool((entry as Dictionary).get("client_predicted", false)):
+			continue
+		result.append((entry as Dictionary).duplicate(true) if entry is Dictionary else entry)
+	return result
 
 static func snapshot_players(source: Dictionary) -> Dictionary:
 	var result := {}

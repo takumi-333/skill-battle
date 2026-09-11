@@ -547,6 +547,8 @@ var dedicated_snapshot_received_msec := 0
 var dedicated_last_server_tick := -1
 var dedicated_input_acknowledgements: Dictionary = {}
 var dedicated_hammer_presentation_angles: Dictionary = {}
+var dedicated_chanter_skill3_visual_projectiles: Array[Dictionary] = []
+var dedicated_chanter_skill3_presentation_ids: Dictionary = {}
 const DEDICATED_INTERPOLATION_SECONDS := 1.0 / 20.0
 const LOCAL_DEVELOPMENT_CLIENT_CONFIG_PATH := "res://.local-server/local-client.env"
 const USER_SETTINGS_HOME_BUTTON_PATHS := [
@@ -1098,6 +1100,7 @@ func _process(delta: float) -> void:
 	if network_mode == "client":
 		process_client_network_input(delta)
 		interpolate_dedicated_snapshot(delta)
+		_advance_dedicated_chanter_skill3_visual_projectiles(delta)
 		interpolate_network_players(delta)
 		if challenge_owner == local_player_id:
 			var challenge_player: Dictionary = players[local_player_id]
@@ -3596,6 +3599,8 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	phase = str(snapshot.get("phase", "lobby"))
 	if phase in ["finish", "result"]:
 		clear_active_challenge_state()
+	if phase != "match":
+		_clear_dedicated_chanter_skill3_visual_projectiles()
 	var incoming_round_id := int(snapshot.get("round_id", 0))
 	if phase in ["countdown", "match"] and incoming_round_id > dedicated_round_id:
 		dedicated_round_id = incoming_round_id
@@ -3731,6 +3736,76 @@ func _clear_dedicated_snapshot_buffer() -> void:
 	dedicated_round_id = -1
 	finish_visual_snapshot_captured = false
 	dedicated_hammer_presentation_angles.clear()
+	_clear_dedicated_chanter_skill3_visual_projectiles()
+
+
+func _clear_dedicated_chanter_skill3_visual_projectiles() -> void:
+	dedicated_chanter_skill3_visual_projectiles.clear()
+	dedicated_chanter_skill3_presentation_ids.clear()
+
+
+func _start_dedicated_chanter_skill3_visual_volley(presentation: Dictionary) -> void:
+	var presentation_id := int(presentation.get("presentation_id", 0))
+	if presentation_id <= 0 or dedicated_chanter_skill3_presentation_ids.has(presentation_id):
+		return
+	var volley: Dictionary = presentation.get("state", {})
+	var owner_id := int(volley.get("owner_id", 0))
+	if not players.has(owner_id):
+		return
+	var facing := Vector2(volley.get("facing", Vector2.RIGHT)).normalized()
+	if facing.length_squared() <= 0.0001:
+		facing = Vector2.RIGHT
+	var cycle_count := clampi(int(volley.get("cycle_count", 1)), 1, 4)
+	var projectile_count := clampi(int(volley.get("projectile_count", 0)), 0, cycle_count * 64)
+	dedicated_chanter_skill3_presentation_ids[presentation_id] = true
+	var created_projectiles := 0
+	for cycle in cycle_count:
+		if created_projectiles >= projectile_count:
+			break
+		for shot in 16:
+			if created_projectiles >= projectile_count:
+				break
+			var delay := float(cycle * 16 + shot) * 0.08
+			var angle := TAU * float(shot) / 16.0
+			for angle_offset in [-PI / 2.0 + angle, PI / 2.0 + angle, -angle, PI - angle]:
+				if created_projectiles >= projectile_count:
+					break
+				var direction := facing.rotated(angle_offset)
+				dedicated_chanter_skill3_visual_projectiles.append({
+					"owner_id": owner_id,
+					"position": _dedicated_chanter_skill3_spawn_position(owner_id, direction),
+					"velocity": direction * 300.0,
+					"lifetime": 5.0,
+					"delay": delay,
+					"launched": false,
+					"key_cap": false,
+					"fixed_direction": true,
+				})
+				created_projectiles += 1
+
+
+func _advance_dedicated_chanter_skill3_visual_projectiles(delta: float) -> void:
+	for index in range(dedicated_chanter_skill3_visual_projectiles.size() - 1, -1, -1):
+		var projectile: Dictionary = dedicated_chanter_skill3_visual_projectiles[index]
+		projectile["delay"] = maxf(0.0, float(projectile["delay"]) - delta)
+		if float(projectile["delay"]) > 0.0:
+			dedicated_chanter_skill3_visual_projectiles[index] = projectile
+			continue
+		var direction := Vector2(projectile["velocity"]).normalized()
+		if not bool(projectile["launched"]):
+			projectile["position"] = _dedicated_chanter_skill3_spawn_position(int(projectile["owner_id"]), direction)
+			projectile["launched"] = true
+		projectile["position"] = Vector2(projectile["position"]) + Vector2(projectile["velocity"]) * delta
+		projectile["lifetime"] = float(projectile["lifetime"]) - delta
+		if float(projectile["lifetime"]) <= 0.0 or not ARENA.grow(40.0).has_point(Vector2(projectile["position"])):
+			dedicated_chanter_skill3_visual_projectiles.remove_at(index)
+		else:
+			dedicated_chanter_skill3_visual_projectiles[index] = projectile
+
+
+func _dedicated_chanter_skill3_spawn_position(owner_id: int, direction: Vector2) -> Vector2:
+	var owner: Dictionary = players.get(owner_id, {})
+	return Vector2(owner.get("position", Vector2.ZERO)) + direction * 40.0
 
 
 func _update_dedicated_trident_screen_shake() -> void:
@@ -3817,6 +3892,9 @@ func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
 @rpc("authority", "reliable")
 func receive_skill_presentation(presentation: Dictionary) -> void:
 	var kind := str(presentation.get("kind", ""))
+	if kind == "chanter_skill3_volley":
+		_start_dedicated_chanter_skill3_visual_volley(presentation)
+		return
 	if kind == "arithmetic_flashes":
 		var flash: Dictionary = presentation.get("state", {})
 		_apply_dedicated_arithmetic_flashes([flash])
@@ -5487,6 +5565,8 @@ func _draw() -> void:
 	for impact in trident_impacts:
 		draw_trident_impact(impact)
 	for projectile in skill_projectiles:
+		draw_skill_projectile(projectile)
+	for projectile in dedicated_chanter_skill3_visual_projectiles:
 		draw_skill_projectile(projectile)
 	for wave in shockwaves:
 		if float(wave.get("delay", 0.0)) > 0.0:

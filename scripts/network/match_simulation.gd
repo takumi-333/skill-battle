@@ -76,11 +76,13 @@ var _next_projectile_id := 1
 var _next_trident_impact_id := 1
 var _next_presentation_id := 1
 var _trace_evaluator := TraceEvaluator.new()
+var _pending_visual_presentations: Array[Dictionary] = []
 
 func _init() -> void:
 	reset()
 
 func reset() -> void:
+	_pending_visual_presentations.clear()
 	var initial := MatchState.new()
 	state = {
 		"players": initial.players.duplicate(true),
@@ -591,16 +593,33 @@ func _spawn_chanter_clockwise_volley(owner: int, score: int) -> void:
 			_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, float(cycle * 16 + shot) * 0.08, "", true)
 
 func _spawn_chanter_skill3_volley(owner: int, score: int) -> void:
-	for cycle in _chanter_skill2_cycle_count(score):
+	var player: Dictionary = state["players"][owner]
+	var cycle_count := _chanter_skill2_cycle_count(score)
+	var projectile_count_before: int = state["skill_projectiles"].size()
+	for cycle in cycle_count:
 		for shot in 16:
 			var shot_delay := float(cycle * 16 + shot) * 0.08
 			var angle := TAU * float(shot) / 16.0
-			_spawn_projectile(owner, score, true, -PI / 2.0 + angle, shot_delay, "", true)
-			_spawn_projectile(owner, score, true, PI / 2.0 + angle, shot_delay, "", true)
-			_spawn_projectile(owner, score, true, -angle, shot_delay, "", true)
-			_spawn_projectile(owner, score, true, PI - angle, shot_delay, "", true)
+			_spawn_projectile(owner, score, true, -PI / 2.0 + angle, shot_delay, "", true, true)
+			_spawn_projectile(owner, score, true, PI / 2.0 + angle, shot_delay, "", true, true)
+			_spawn_projectile(owner, score, true, -angle, shot_delay, "", true, true)
+			_spawn_projectile(owner, score, true, PI - angle, shot_delay, "", true, true)
+	var projectile_count: int = state["skill_projectiles"].size() - projectile_count_before
+	if projectile_count <= 0:
+		return
+	_pending_visual_presentations.append({
+		"presentation_id": _take_presentation_id(),
+		"kind": "chanter_skill3_volley",
+		"state": {
+			"owner_id": owner,
+			"score": score,
+			"cycle_count": cycle_count,
+			"projectile_count": projectile_count,
+			"facing": Vector2(player["facing"]),
+		},
+	})
 
-func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "", fixed_direction: bool = false) -> void:
+func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "", fixed_direction: bool = false, client_predicted: bool = false) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
 		return
 	var player: Dictionary = state["players"][owner]
@@ -608,8 +627,14 @@ func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, d
 	# Chanter's large-skill projectiles are radial shots. They must retain the
 	# direction assigned above instead of using the delayed, target-seeking
 	# launch path for typist projectiles.
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": 0 if client_predicted else _take_presentation_id(), "owner_id": owner, "position": Vector2(player["position"]) + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * (300.0 if big else 550.0), "damage": 3 + floori(float(score) * 0.05) if fixed_direction else ((50 if big else 5) + (roundi(float(score) * 0.2) if big else floori(float(score) * 0.1))), "lifetime": 5.0 if big else 2.0, "piercing": big, "delay": delay, "chip": chip, "launched": big and not fixed_direction, "homing": not big and score >= 80, "homing_time": 0.7 if not big and score >= 80 else 0.0, "initial_angle": facing.angle(), "key_cap": not big, "fixed_direction": fixed_direction, "client_predicted": client_predicted})
 	_next_projectile_id += 1
+
+
+func take_visual_presentations() -> Array[Dictionary]:
+	var presentations := _pending_visual_presentations.duplicate(true)
+	_pending_visual_presentations.clear()
+	return presentations
 
 
 func _typing_zone_level(player: Dictionary) -> int:

@@ -238,9 +238,13 @@ func take_presentations() -> Array[Dictionary]:
 	return value
 
 func _collect_presentations() -> void:
+	for presentation in simulation.take_visual_presentations():
+		pending_presentations.append(presentation)
 	for kind in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "hammer_spins", "lunar_eclipses"]:
 		for entity in simulation.state.get(kind, []):
 			var item: Dictionary = entity
+			if bool(item.get("client_predicted", false)):
+				continue
 			var presentation_id := int(item.get("presentation_id", 0))
 			if presentation_id <= 0 or known_presentation_ids.has(presentation_id):
 				continue

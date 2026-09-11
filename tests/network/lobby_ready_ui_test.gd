@@ -26,6 +26,7 @@ func _run() -> void:
 	_test_dedicated_snapshot_ui(prototype)
 	_test_dedicated_trace_persistence(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
+	_test_dedicated_chanter_skill3_presentation(prototype)
 	_test_sound_effect_setup(prototype)
 	# The test supplies a pending reservation to exercise dedicated-only UI.
 	# Clear it before the next frame so the scene never attempts a real RPC.
@@ -367,6 +368,36 @@ func _test_dedicated_trident_landing_shake(prototype: Node) -> void:
 	prototype.set("screen_shake_time", 0.0)
 	prototype.call("_on_dedicated_snapshot_received", landed_snapshot)
 	assert(is_zero_approx(float(prototype.get("screen_shake_time"))))
+
+
+func _test_dedicated_chanter_skill3_presentation(prototype: Node) -> void:
+	prototype.set("network_mode", "client")
+	prototype.set("phase", "match")
+	prototype.call("_clear_dedicated_chanter_skill3_visual_projectiles")
+	var presentation := {
+		"presentation_id": 321,
+		"kind": "chanter_skill3_volley",
+		"state": {"owner_id": 1, "cycle_count": 4, "projectile_count": 256, "facing": Vector2.RIGHT},
+	}
+	prototype.call("receive_skill_presentation", presentation)
+	var visual_projectiles: Array = prototype.get("dedicated_chanter_skill3_visual_projectiles")
+	assert(visual_projectiles.size() == 256)
+	assert(is_zero_approx(float(visual_projectiles[0]["delay"])))
+	assert(is_equal_approx(float(visual_projectiles[4]["delay"]), 0.08))
+	assert(bool(visual_projectiles[0]["fixed_direction"]))
+	prototype.call("receive_skill_presentation", presentation)
+	assert((prototype.get("dedicated_chanter_skill3_visual_projectiles") as Array).size() == 256)
+	prototype.call("_advance_dedicated_chanter_skill3_visual_projectiles", 0.1)
+	var advanced_projectiles: Array = prototype.get("dedicated_chanter_skill3_visual_projectiles")
+	assert(bool(advanced_projectiles[0]["launched"]))
+	prototype.call("_clear_dedicated_chanter_skill3_visual_projectiles")
+	assert((prototype.get("dedicated_chanter_skill3_visual_projectiles") as Array).is_empty())
+	var partial_presentation := presentation.duplicate(true)
+	partial_presentation["presentation_id"] = 322
+	partial_presentation["state"]["projectile_count"] = 3
+	prototype.call("receive_skill_presentation", partial_presentation)
+	assert((prototype.get("dedicated_chanter_skill3_visual_projectiles") as Array).size() == 3)
+	prototype.call("_clear_dedicated_chanter_skill3_visual_projectiles")
 
 
 func _test_sound_effect_setup(prototype: Node) -> void:
