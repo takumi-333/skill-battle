@@ -4,10 +4,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$StateDirectory = Join-Path $RepoRoot '.local-server'
-$ConfigPath = Join-Path $StateDirectory 'local.env'
-$ClientConfigPath = Join-Path $StateDirectory 'local-client.env'
+$null = . (Join-Path $PSScriptRoot 'local-common.ps1')
+$RepoRoot = $script:RepoRoot
+$StateDirectory = $script:StateDirectory
 $LobbyDirectory = Join-Path $RepoRoot 'server\lobby'
 $LobbyPidPath = Join-Path $StateDirectory 'lobby.pid.json'
 $DedicatedPidPath = Join-Path $StateDirectory 'dedicated.pid.json'
@@ -25,67 +24,6 @@ function Test-ProcessStartTimeMatch([DateTime]$ProcessStartTime, [object]$Record
     } catch {
         return $false
     }
-}
-
-function New-LocalSecret {
-    $bytes = New-Object byte[] 48
-    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
-    return [BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()
-}
-
-function Read-LocalConfig {
-    if (-not (Test-Path -LiteralPath $ConfigPath)) {
-        New-Item -ItemType Directory -Force -Path $StateDirectory | Out-Null
-        @(
-            "SKILL_BATTLE_TOKEN_SECRET=$(New-LocalSecret)"
-            "SKILL_BATTLE_ADMIN_TOKEN=$(New-LocalSecret)"
-            "SKILL_BATTLE_INTERNAL_API_TOKEN=$(New-LocalSecret)"
-            "SKILL_BATTLE_PUBLIC_ACCESS_TOKEN=$(New-LocalSecret)"
-            'SKILL_BATTLE_LOBBY_INTERNAL_URL=http://127.0.0.1:8000'
-            'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME=1'
-            'SKILL_BATTLE_UVICORN_WORKERS=1'
-            # 17000 avoids colliding with the usual production UDP 7000
-            # when a developer is also connected to a remote test server.
-            'SKILL_BATTLE_SERVER_PORT=17000'
-        ) | Set-Content -LiteralPath $ConfigPath -Encoding utf8
-        Write-Host "Created local secrets: $ConfigPath"
-    }
-
-    $config = @{}
-    foreach ($line in Get-Content -LiteralPath $ConfigPath) {
-        $line = $line.TrimStart([char]0xFEFF)
-        if ($line -match '^([A-Z0-9_]+)=(.*)$') { $config[$matches[1]] = $matches[2] }
-    }
-    $changed = $false
-    foreach ($secret in 'SKILL_BATTLE_PUBLIC_ACCESS_TOKEN') {
-        if (-not $config.ContainsKey($secret) -or [string]::IsNullOrWhiteSpace($config[$secret])) {
-            $config[$secret] = New-LocalSecret
-            $changed = $true
-        }
-    }
-    foreach ($setting in @{ 'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME' = '1'; 'SKILL_BATTLE_UVICORN_WORKERS' = '1' }.GetEnumerator()) {
-        if (-not $config.ContainsKey($setting.Key) -or [string]::IsNullOrWhiteSpace($config[$setting.Key])) {
-            $config[$setting.Key] = $setting.Value
-            $changed = $true
-        }
-    }
-    if ($changed) {
-        @($config.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) | Set-Content -LiteralPath $ConfigPath -Encoding utf8
-    }
-    foreach ($required in 'SKILL_BATTLE_TOKEN_SECRET', 'SKILL_BATTLE_ADMIN_TOKEN', 'SKILL_BATTLE_INTERNAL_API_TOKEN', 'SKILL_BATTLE_PUBLIC_ACCESS_TOKEN', 'SKILL_BATTLE_LOBBY_INTERNAL_URL', 'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME', 'SKILL_BATTLE_UVICORN_WORKERS', 'SKILL_BATTLE_SERVER_PORT') {
-        if (-not $config.ContainsKey($required) -or [string]::IsNullOrWhiteSpace($config[$required])) {
-            throw "Missing $required in $ConfigPath"
-        }
-    }
-    return $config
-}
-
-function Write-LocalClientConfig([hashtable]$Config) {
-    @(
-        "LOBBY_URL=$LobbyUrl"
-        "INVITE_TOKEN=$($Config['SKILL_BATTLE_PUBLIC_ACCESS_TOKEN'])"
-    ) | Set-Content -LiteralPath $ClientConfigPath -Encoding utf8
 }
 
 function Get-ManagedProcess([string]$Name, [string]$PidPath) {
@@ -160,7 +98,7 @@ function Wait-LobbyHealth {
     throw "Lobby did not become ready. See $(Join-Path $StateDirectory 'lobby.stderr.log')."
 }
 
-$config = Read-LocalConfig
+$config = Get-LocalConfig
 Write-LocalClientConfig $config
 foreach ($entry in $config.GetEnumerator()) { Set-Item -Path "Env:$($entry.Key)" -Value $entry.Value }
 
@@ -176,7 +114,7 @@ try {
         Write-Host "Lobby is already running (PID $($existingLobby.Id))."
     }
     if ($null -eq $existingDedicated) {
-        Assert-PortFree ([int]$config['SKILL_BATTLE_SERVER_PORT']) 'UDP'
+        Assert-PortFree ([int]$config['SKILL_BATTLE_SERVER_LISTEN_PORT']) 'UDP'
         $godot = Get-GodotConsole
         Start-ManagedProcess 'dedicated' $godot @('--headless', '--path', $RepoRoot, '--scene', 'res://scenes/server_main.tscn') $RepoRoot $DedicatedPidPath | Out-Null
         Start-Sleep -Seconds 2
