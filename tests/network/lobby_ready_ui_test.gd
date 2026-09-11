@@ -19,6 +19,8 @@ func _run() -> void:
 	prototype.set("local_player_id", 2)
 	assert(prototype.call("get_local_lobby_ready_button") == player_two_ready)
 	_test_character_skill_persistence(prototype)
+	_test_public_lobby_configuration(prototype)
+	_test_local_development_lobby_configuration(prototype)
 	_test_online_focus_bgm_scope(prototype)
 	_test_p2p_result_challenge_cleanup(prototype)
 	_test_dedicated_snapshot_ui(prototype)
@@ -46,19 +48,69 @@ func _test_character_skill_persistence(prototype: Node) -> void:
 	var had_file := FileAccess.file_exists(path)
 	var original_bytes := FileAccess.get_file_as_bytes(path) if had_file else PackedByteArray()
 	prototype.set("character_selection", 0)
-	prototype.set("character_skill_selection", {"typist": [1, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]})
+	prototype.set("character_skill_selection", {"typist": [0, 0, 1], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]})
 	prototype.call("save_character_skills")
-	if FileAccess.file_exists(path):
+	var save_status := prototype.get("character_saved_label") as Label
+	var persistence_writable := FileAccess.file_exists(path) and save_status != null and not save_status.text.begins_with("Failed")
+	if persistence_writable:
 		prototype.set("character_skill_selection", {"typist": [0, 0, 0], "arithmetician": [0, 0, 0], "chanter": [0, 0, 0]})
 		prototype.call("load_character_skills")
 		var selections: Dictionary = prototype.get("character_skill_selection")
-		assert(selections["typist"] == [1, 0, 0])
+		assert(selections["typist"] == [0, 0, 1])
 	else:
 		print("character skill persistence test skipped: user:// is not writable in this environment")
 	assert(prototype.call("normalize_character_skill_selection", "typist", [99, -1, 1]) == [0, 0, 1])
+	if had_file and persistence_writable:
+		var restore_file := FileAccess.open(path, FileAccess.WRITE)
+		if restore_file != null:
+			restore_file.store_buffer(original_bytes)
+	elif not had_file:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _test_public_lobby_configuration(prototype: Node) -> void:
+	var url_input := prototype.get_node("UIRoot/Home/UserSettingsModal/Panel/LobbyUrlInput") as LineEdit
+	var token_input := prototype.get_node("UIRoot/Home/UserSettingsModal/Panel/InviteTokenInput") as LineEdit
+	assert(url_input != null)
+	assert(token_input != null)
+	assert(token_input.secret)
+	assert(prototype.call("_lobby_configuration_error", "", "") != "")
+	assert(prototype.call("_lobby_configuration_error", "http://127.0.0.1:8000", "a".repeat(32)) != "")
+	assert(prototype.call("_lobby_configuration_error", "https://lobby.example.test", "a".repeat(32)).is_empty())
+	prototype.set("allow_insecure_lobby_url", true)
+	assert(prototype.call("_lobby_configuration_error", "http://127.0.0.1:8000", "a".repeat(32)).is_empty())
+	prototype.set("allow_insecure_lobby_url", false)
+
+
+func _test_local_development_lobby_configuration(prototype: Node) -> void:
+	if not OS.is_debug_build():
+		print("local development lobby configuration test skipped: release build")
+		return
+	var path := "res://.local-server/local-client.env"
+	var had_file := FileAccess.file_exists(path)
+	var original_bytes := FileAccess.get_file_as_bytes(path) if had_file else PackedByteArray()
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	assert(file != null)
+	file.store_string("LOBBY_URL=http://127.0.0.1:8000\nINVITE_TOKEN=" + "a".repeat(32) + "\n")
+	file.close()
+	var original_url := str(prototype.get("lobby_api_url"))
+	var original_token := str(prototype.get("lobby_access_token"))
+	var original_allow_http := bool(prototype.get("allow_insecure_lobby_url"))
+	prototype.set("lobby_api_url", "")
+	prototype.set("lobby_access_token", "")
+	prototype.set("allow_insecure_lobby_url", false)
+	prototype.call("_load_local_development_lobby_config")
+	assert(str(prototype.get("lobby_api_url")) == "http://127.0.0.1:8000")
+	assert(str(prototype.get("lobby_access_token")) == "a".repeat(32))
+	assert(bool(prototype.get("allow_insecure_lobby_url")))
+	prototype.set("lobby_api_url", original_url)
+	prototype.set("lobby_access_token", original_token)
+	prototype.set("allow_insecure_lobby_url", original_allow_http)
 	if had_file:
 		var restore_file := FileAccess.open(path, FileAccess.WRITE)
+		assert(restore_file != null)
 		restore_file.store_buffer(original_bytes)
+		restore_file.close()
 	else:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 

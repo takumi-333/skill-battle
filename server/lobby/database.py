@@ -1,77 +1,260 @@
-"""SQLite persistence. Every reservation update runs in one immediate transaction."""
+"""SQLite-backed public-room state machine.
+
+All state changes share one process lock and an explicit ``BEGIN IMMEDIATE``
+transaction. The public deployment intentionally uses one uvicorn worker;
+this class does not claim cross-process locking semantics.
+"""
+from __future__ import annotations
+
+from contextlib import contextmanager
+import hashlib
+import json
+import secrets
 import sqlite3
+import threading
 import time
 import uuid
-import json
+from typing import Iterator
+
+
+ROOM_STATES = ("AVAILABLE", "RESERVED", "CONNECTING", "CONNECTED", "RUNNING", "CLOSED")
+RESERVATION_STATES = ("RESERVED", "CONNECTING", "CONNECTED", "RUNNING", "CLOSED")
+
+
+class DatabaseBusy(RuntimeError):
+    """The SQLite writer lock could not be acquired safely."""
 
 
 class LobbyDatabase:
     def __init__(self, path: str) -> None:
-        self.connection = sqlite3.connect(path, check_same_thread=False)
+        self.connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None, timeout=1.0)
         self.connection.row_factory = sqlite3.Row
-        self.connection.execute("""CREATE TABLE IF NOT EXISTS rooms (
-            id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL,
-            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-            slot1_reserved_until INTEGER, slot2_reserved_until INTEGER
-        )""")
-        self.connection.execute("""CREATE TABLE IF NOT EXISTS server_heartbeats (
-            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-            received_at INTEGER NOT NULL,
-            payload TEXT NOT NULL
-        )""")
-        self.connection.execute("""CREATE TABLE IF NOT EXISTS server_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at INTEGER NOT NULL,
-            kind TEXT NOT NULL,
-            room_id TEXT,
-            payload TEXT NOT NULL
-        )""")
-        self.connection.commit()
+        self._lock = threading.RLock()
+        # journal_mode is a connection-wide operation and SQLite forbids it
+        # inside BEGIN; perform it before the first state transaction.
+        self.connection.execute("PRAGMA foreign_keys=ON")
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        with self._transaction():
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS rooms (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                slot1_reserved_until INTEGER, slot2_reserved_until INTEGER
+            )""")
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS reservations (
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK(slot IN (1,2)),
+                state TEXT NOT NULL CHECK(state IN ('RESERVED','CONNECTING','CONNECTED','RUNNING','CLOSED')),
+                reserved_until INTEGER,
+                connecting_lease_until INTEGER,
+                connected_at INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(room_id, slot)
+            )""")
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS nonces (
+                nonce_hash TEXT PRIMARY KEY,
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL CHECK(slot IN (1,2)),
+                expires_at INTEGER NOT NULL,
+                issued_at INTEGER NOT NULL,
+                used_at INTEGER
+            )""")
+            self.connection.execute("CREATE INDEX IF NOT EXISTS nonces_lookup ON nonces(room_id,slot,used_at,expires_at)")
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS server_heartbeats (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                received_at INTEGER NOT NULL, payload TEXT NOT NULL
+            )""")
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS server_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL,
+                kind TEXT NOT NULL, room_id TEXT, payload TEXT NOT NULL
+            )""")
+            # Upgrade databases created by the pre-state-machine implementation.
+            self.connection.execute("UPDATE rooms SET status='AVAILABLE' WHERE status='open'")
+            self.connection.execute("UPDATE rooms SET status='RUNNING' WHERE status='running'")
+            self.connection.execute("UPDATE rooms SET status='CLOSED' WHERE status='closed'")
 
-    def create_room(self, name: str) -> tuple[dict, int]:
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        with self._lock:
+            try:
+                self.connection.execute("BEGIN IMMEDIATE")
+                yield
+            except sqlite3.OperationalError as error:
+                self.connection.rollback()
+                if "locked" in str(error).lower() or "busy" in str(error).lower():
+                    raise DatabaseBusy("SQLite is busy") from error
+                raise
+            except Exception:
+                self.connection.rollback()
+                raise
+            else:
+                self.connection.commit()
+
+    @staticmethod
+    def _nonce_hash(nonce: str) -> str:
+        return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+
+    def create_room(self, name: str, reservation_seconds: int = 60, token_seconds: int = 60) -> dict:
+        """Create a room and slot-one reservation with one redeemable nonce."""
         now = int(time.time())
-        room = {"id": uuid.uuid4().hex, "name": name[:48], "status": "open", "created_at": now, "updated_at": now}
-        with self.connection:
-            self.connection.execute("INSERT INTO rooms(id,name,status,created_at,updated_at) VALUES(:id,:name,:status,:created_at,:updated_at)", room)
-            self.connection.execute("UPDATE rooms SET slot1_reserved_until=? WHERE id=?", (now + 60, room["id"]))
-        return room, 1
+        room = {"id": uuid.uuid4().hex, "name": name[:48], "status": "RESERVED", "created_at": now, "updated_at": now}
+        nonce = secrets.token_urlsafe(32)
+        with self._transaction():
+            self._recover_expired(now)
+            self.connection.execute(
+                "INSERT INTO rooms(id,name,status,created_at,updated_at) VALUES(:id,:name,:status,:created_at,:updated_at)", room
+            )
+            self._insert_reservation(room["id"], 1, nonce, now, reservation_seconds, token_seconds)
+        return {"room": room, "slot": 1, "nonce": nonce}
+
+    def reserve(self, room_id: str, reservation_seconds: int = 60, token_seconds: int = 60) -> dict | None:
+        """Atomically reserve exactly one currently-unassigned slot."""
+        now = int(time.time())
+        with self._transaction():
+            self._recover_expired(now)
+            room = self.connection.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone()
+            if room is None or room["status"] in {"RUNNING", "CLOSED"}:
+                return None
+            occupied = {
+                int(row["slot"])
+                for row in self.connection.execute(
+                    "SELECT slot FROM reservations WHERE room_id=? AND state != 'CLOSED'", (room_id,)
+                ).fetchall()
+            }
+            slot = next((candidate for candidate in (1, 2) if candidate not in occupied), 0)
+            if slot == 0:
+                return None
+            nonce = secrets.token_urlsafe(32)
+            self._insert_reservation(room_id, slot, nonce, now, reservation_seconds, token_seconds)
+            self._refresh_room_state(room_id, now)
+            return {"room": self._room_dict(room_id), "slot": slot, "nonce": nonce}
 
     def list_rooms(self) -> list[dict]:
-        with self.connection:
-            self._expire()
-        rows = self.connection.execute("SELECT id,name,status,slot1_reserved_until,slot2_reserved_until FROM rooms WHERE status != 'closed' ORDER BY created_at DESC").fetchall()
         now = int(time.time())
-        return [{"id": row["id"], "name": row["name"], "status": row["status"], "players": int((row["slot1_reserved_until"] or 0) > now) + int((row["slot2_reserved_until"] or 0) > now)} for row in rows]
+        with self._transaction():
+            self._recover_expired(now)
+            rows = self.connection.execute(
+                """SELECT r.id,r.name,r.status,COUNT(s.slot) AS players
+                   FROM rooms r JOIN reservations s ON s.room_id=r.id
+                   WHERE r.status IN ('AVAILABLE','RESERVED','CONNECTING','CONNECTED')
+                     AND s.state IN ('RESERVED','CONNECTING','CONNECTED')
+                   GROUP BY r.id ORDER BY r.created_at DESC"""
+            ).fetchall()
+            return [{"id": row["id"], "name": row["name"], "status": row["status"], "players": int(row["players"])} for row in rows]
 
-    def reserve(self, room_id: str) -> int | None:
-        now = int(time.time())
-        with self.connection:
-            self._expire()
-            room = self.connection.execute("SELECT * FROM rooms WHERE id=? AND status='open'", (room_id,)).fetchone()
-            if room is None:
-                return None
-            for slot in (1, 2):
-                column = f"slot{slot}_reserved_until"
-                if not room[column] or room[column] < now:
-                    self.connection.execute(f"UPDATE rooms SET {column}=?,updated_at=? WHERE id=?", (now + 60, now, room_id))
-                    return slot
-        return None
-
-    def update_status(self, room_id: str, status: str) -> bool:
-        if status not in {"open", "running", "closed"}:
+    def consume_nonce(self, room_id: str, slot: int, nonce: str, connecting_lease_seconds: int = 15) -> bool:
+        """One-way nonce consumption and RESERVED -> CONNECTING transition."""
+        if slot not in (1, 2) or not nonce:
             return False
-        with self.connection:
-            return self.connection.execute("UPDATE rooms SET status=?,updated_at=? WHERE id=?", (status, int(time.time()), room_id)).rowcount == 1
+        now = int(time.time())
+        with self._transaction():
+            self._recover_expired(now)
+            nonce_hash = self._nonce_hash(nonce)
+            nonce_row = self.connection.execute(
+                "SELECT room_id,slot FROM nonces WHERE nonce_hash=? AND used_at IS NULL AND expires_at>=?",
+                (nonce_hash, now),
+            ).fetchone()
+            if nonce_row is None or nonce_row["room_id"] != room_id or int(nonce_row["slot"]) != slot:
+                return False
+            updated = self.connection.execute(
+                """UPDATE reservations SET state='CONNECTING', connecting_lease_until=?, updated_at=?
+                   WHERE room_id=? AND slot=? AND state='RESERVED' AND reserved_until>=?""",
+                (now + connecting_lease_seconds, now, room_id, slot, now),
+            ).rowcount
+            if updated != 1:
+                return False
+            consumed = self.connection.execute(
+                "UPDATE nonces SET used_at=? WHERE nonce_hash=? AND used_at IS NULL", (now, nonce_hash)
+            ).rowcount
+            if consumed != 1:
+                raise RuntimeError("nonce state changed during serialized consume")
+            self._refresh_room_state(room_id, now)
+            return True
+
+    def notify_status(self, room_id: str, slot: int | None, status: str) -> bool:
+        """Apply only legal Dedicated Server notifications to the state machine."""
+        now = int(time.time())
+        with self._transaction():
+            self._recover_expired(now)
+            room = self.connection.execute("SELECT status FROM rooms WHERE id=?", (room_id,)).fetchone()
+            if room is None:
+                # A late disconnect after lease recovery is already safe and
+                # must not make the Dedicated Server retry forever.
+                return status in {"disconnected", "closed"}
+            if room["status"] == "CLOSED":
+                return status in {"disconnected", "closed"}
+            if status == "connected" and slot in (1, 2):
+                changed = self.connection.execute(
+                    """UPDATE reservations SET state='CONNECTED', connected_at=?, connecting_lease_until=NULL, updated_at=?
+                       WHERE room_id=? AND slot=? AND state='CONNECTING'""",
+                    (now, now, room_id, slot),
+                ).rowcount
+                if changed:
+                    self._refresh_room_state(room_id, now)
+                    return True
+                current = self.connection.execute(
+                    "SELECT state FROM reservations WHERE room_id=? AND slot=?", (room_id, slot)
+                ).fetchone()
+                return current is not None and current["state"] == "CONNECTED"
+            if status == "disconnected" and slot in (1, 2):
+                if room["status"] == "RUNNING":
+                    return self._close_room(room_id, now)
+                changed = self.connection.execute(
+                    "DELETE FROM reservations WHERE room_id=? AND slot=? AND state IN ('CONNECTING','CONNECTED')",
+                    (room_id, slot),
+                ).rowcount
+                if changed:
+                    self._refresh_room_state(room_id, now)
+                    self._remove_empty_nonterminal_rooms()
+                    return True
+                # A delayed duplicate disconnect must not retry forever.  It is
+                # also important not to delete a new RESERVED row that reused
+                # this slot after the original peer was already released.
+                return True
+            if status == "running":
+                if room["status"] == "RUNNING":
+                    return True
+                connected = self.connection.execute(
+                    "SELECT COUNT(*) FROM reservations WHERE room_id=? AND state='CONNECTED'", (room_id,)
+                ).fetchone()[0]
+                if connected != 2:
+                    return False
+                self.connection.execute("UPDATE reservations SET state='RUNNING',updated_at=? WHERE room_id=? AND state='CONNECTED'", (now, room_id))
+                self.connection.execute("UPDATE rooms SET status='RUNNING',updated_at=? WHERE id=?", (now, room_id))
+                return True
+            if status == "closed":
+                return self._close_room(room_id, now)
+            return False
 
     def release_reservation(self, room_id: str, slot: int) -> bool:
-        """Release a slot after the authoritative game server disconnects its peer."""
-        with self.connection:
-            return self._release_reservation(room_id, slot, int(time.time()))
+        """Compatibility wrapper for an authoritative pre-match disconnect."""
+        return self.notify_status(room_id, slot, "disconnected")
+
+    def reconcile_server_restart(self) -> int:
+        """Close state owned by a previous Dedicated Server process.
+
+        A restarted server has no in-memory sessions or authenticated peers, so
+        retaining CONNECTED/RUNNING reservations would publish unusable rooms.
+        They are closed rather than returned to AVAILABLE: their already-issued
+        tickets remain unusable and no slot can be assigned twice.
+        """
+        now = int(time.time())
+        with self._transaction():
+            room_ids = [row["id"] for row in self.connection.execute("SELECT id FROM rooms WHERE status != 'CLOSED'").fetchall()]
+            if room_ids:
+                self.connection.execute("UPDATE rooms SET status='CLOSED',updated_at=? WHERE status != 'CLOSED'", (now,))
+                self.connection.execute("UPDATE reservations SET state='CLOSED',updated_at=? WHERE state != 'CLOSED'", (now,))
+            return len(room_ids)
+
+    def get_room(self, room_id: str) -> dict | None:
+        with self._lock:
+            row = self.connection.execute("SELECT id,name,status,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
+            return None if row is None else dict(row)
 
     def record_server_update(self, kind: str, room_id: str | None, payload: dict) -> None:
         now = int(time.time())
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        with self.connection:
+        with self._transaction():
             if kind == "heartbeat":
                 self.connection.execute(
                     "INSERT INTO server_heartbeats(singleton,received_at,payload) VALUES(1,?,?) "
@@ -79,56 +262,71 @@ class LobbyDatabase:
                     (now, encoded),
                 )
             else:
-                # A public room reserves a slot before ENet connects. The
-                # authoritative disconnect event must release that same slot;
-                # otherwise the room remains falsely full until its timeout.
-                if kind == "peer_disconnected" and room_id is not None:
-                    slot = payload.get("slot")
-                    if isinstance(slot, int):
-                        self._release_reservation(room_id, slot, now)
-                self.connection.execute(
-                    "INSERT INTO server_events(created_at,kind,room_id,payload) VALUES(?,?,?,?)",
-                    (now, kind[:64], room_id, encoded),
-                )
-                self.connection.execute(
-                    "DELETE FROM server_events WHERE id NOT IN "
-                    "(SELECT id FROM server_events ORDER BY id DESC LIMIT 500)"
-                )
-
-    def _release_reservation(self, room_id: str, slot: int, now: int) -> bool:
-        if slot not in (1, 2):
-            return False
-        column = f"slot{slot}_reserved_until"
-        return self.connection.execute(
-            f"UPDATE rooms SET {column}=NULL,updated_at=? WHERE id=? AND status='open'",
-            (now, room_id),
-        ).rowcount == 1
+                self.connection.execute("INSERT INTO server_events(created_at,kind,room_id,payload) VALUES(?,?,?,?)", (now, kind[:64], room_id, encoded))
+                self.connection.execute("DELETE FROM server_events WHERE id NOT IN (SELECT id FROM server_events ORDER BY id DESC LIMIT 500)")
 
     def server_monitoring(self, event_limit: int = 50) -> dict:
-        heartbeat = self.connection.execute(
-            "SELECT received_at,payload FROM server_heartbeats WHERE singleton=1"
-        ).fetchone()
-        events = self.connection.execute(
-            "SELECT created_at,kind,room_id,payload FROM server_events ORDER BY id DESC LIMIT ?",
-            (max(1, min(event_limit, 100)),),
-        ).fetchall()
+        with self._lock:
+            heartbeat = self.connection.execute("SELECT received_at,payload FROM server_heartbeats WHERE singleton=1").fetchone()
+            events = self.connection.execute(
+                "SELECT created_at,kind,room_id,payload FROM server_events ORDER BY id DESC LIMIT ?", (max(1, min(event_limit, 100)),)
+            ).fetchall()
         return {
-            "heartbeat": None if heartbeat is None else {
-                "received_at": heartbeat["received_at"],
-                "details": json.loads(heartbeat["payload"]),
-            },
-            "events": [{
-                "created_at": row["created_at"],
-                "kind": row["kind"],
-                "room_id": row["room_id"],
-                "details": json.loads(row["payload"]),
-            } for row in events],
+            "heartbeat": None if heartbeat is None else {"received_at": heartbeat["received_at"], "details": json.loads(heartbeat["payload"])},
+            "events": [{"created_at": row["created_at"], "kind": row["kind"], "room_id": row["room_id"], "details": json.loads(row["payload"])} for row in events],
         }
 
-    def _expire(self) -> None:
-        now = int(time.time())
-        self.connection.execute("UPDATE rooms SET slot1_reserved_until=NULL WHERE slot1_reserved_until < ?", (now,))
-        self.connection.execute("UPDATE rooms SET slot2_reserved_until=NULL WHERE slot2_reserved_until < ?", (now,))
-        # A room whose creator never completed the ENet connection must not
-        # remain in the public list indefinitely after its reservation expires.
-        self.connection.execute("DELETE FROM rooms WHERE status='open' AND slot1_reserved_until IS NULL AND slot2_reserved_until IS NULL")
+    def _insert_reservation(self, room_id: str, slot: int, nonce: str, now: int, reservation_seconds: int, token_seconds: int) -> None:
+        self.connection.execute(
+            """INSERT INTO reservations(room_id,slot,state,reserved_until,connecting_lease_until,connected_at,created_at,updated_at)
+               VALUES(?,?,'RESERVED',?,NULL,NULL,?,?)""",
+            (room_id, slot, now + reservation_seconds, now, now),
+        )
+        self.connection.execute(
+            "INSERT INTO nonces(nonce_hash,room_id,slot,expires_at,issued_at,used_at) VALUES(?,?,?,?,?,NULL)",
+            (self._nonce_hash(nonce), room_id, slot, now + token_seconds, now),
+        )
+
+    def _room_dict(self, room_id: str) -> dict:
+        row = self.connection.execute("SELECT id,name,status,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
+        return dict(row) if row is not None else {}
+
+    def _refresh_room_state(self, room_id: str, now: int) -> None:
+        room = self.connection.execute("SELECT status FROM rooms WHERE id=?", (room_id,)).fetchone()
+        if room is None or room["status"] == "CLOSED":
+            return
+        states = {row["state"] for row in self.connection.execute("SELECT state FROM reservations WHERE room_id=?", (room_id,)).fetchall()}
+        if "RUNNING" in states:
+            status = "RUNNING"
+        elif "CONNECTED" in states:
+            status = "CONNECTED"
+        elif "CONNECTING" in states:
+            status = "CONNECTING"
+        elif "RESERVED" in states:
+            status = "RESERVED"
+        else:
+            status = "AVAILABLE"
+        self.connection.execute("UPDATE rooms SET status=?,updated_at=? WHERE id=?", (status, now, room_id))
+
+    def _close_room(self, room_id: str, now: int) -> bool:
+        changed = self.connection.execute("UPDATE rooms SET status='CLOSED',updated_at=? WHERE id=? AND status!='CLOSED'", (now, room_id)).rowcount
+        if changed:
+            self.connection.execute("UPDATE reservations SET state='CLOSED',updated_at=? WHERE room_id=? AND state!='CLOSED'", (now, room_id))
+        return changed == 1
+
+    def _recover_expired(self, now: int) -> None:
+        affected = self.connection.execute(
+            "SELECT DISTINCT room_id FROM reservations WHERE (state='RESERVED' AND reserved_until<?) OR (state='CONNECTING' AND connecting_lease_until<?)",
+            (now, now),
+        ).fetchall()
+        self.connection.execute("DELETE FROM reservations WHERE state='RESERVED' AND reserved_until<?", (now,))
+        self.connection.execute("DELETE FROM reservations WHERE state='CONNECTING' AND connecting_lease_until<?", (now,))
+        for row in affected:
+            self._refresh_room_state(row["room_id"], now)
+        self._remove_empty_nonterminal_rooms()
+
+    def _remove_empty_nonterminal_rooms(self) -> None:
+        self.connection.execute(
+            """DELETE FROM rooms WHERE status='AVAILABLE'
+               AND NOT EXISTS (SELECT 1 FROM reservations WHERE reservations.room_id=rooms.id)"""
+        )

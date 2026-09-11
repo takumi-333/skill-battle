@@ -1,0 +1,11 @@
+# 設計
+
+Lobbyの永続状態はSQLiteに集約する。状態変更は単一のプロセス内lockと `BEGIN IMMEDIATE` で直列化し、room／reservation／nonceの更新を1トランザクションで確定する。secret設定は起動時に検査する代わりに、未設定環境でもアプリ生成自体は可能にし、保護endpointを503でfail closedにする。これはテストおよびローカル起動の安全な失敗を両立するためである。
+
+Dedicated Serverは署名、room、slot、期限をローカルで検査した後、peerごとに独立した `HTTPRequest` で内部consume APIを呼ぶ。consume成功とMatchSessionへの登録の間だけを認証済みとして扱い、接続・試合状態の通知をLobbyへ送る。RPC契約のノードパス互換性を維持するため、既存のRPC定義は削除しない。
+
+Gatewayは独立FastAPIアプリとし、exact path、method、query、header、Content-Type、実測body byte数を検査してから固定loopback upstreamへ送る。転送headerは再構成し、upstream例外は汎用エラーに変換する。
+
+クライアントの固定入力欄は既存Homeシーンの設定モーダルへ配置し、スクリプトは検証・保存・DedicatedClientConnectionへの反映だけを行う。公開URLはHTTPS必須とし、HTTPは明示的な開発設定だけで許可する。
+
+Windows公開スクリプトは既存ローカル用とは分離し、`public.env`を親で読み込んで各子プロセス環境へ渡す。PID開始時刻照合、ACL、health check、Funnel target検査を行い、停止手順はingress停止を先に明記する。

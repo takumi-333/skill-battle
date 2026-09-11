@@ -5,6 +5,20 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $StateDirectory = Join-Path $RepoRoot '.local-server'
 
+function ConvertTo-UtcStartTimeTicks([object]$Value) {
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime.Ticks }
+    if ($Value -is [DateTime]) { return $Value.ToUniversalTime().Ticks }
+    return [DateTime]::Parse([string]$Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().Ticks
+}
+
+function Test-ProcessStartTimeMatch([DateTime]$ProcessStartTime, [object]$RecordedStartedAt) {
+    try {
+        return $ProcessStartTime.ToUniversalTime().Ticks -eq (ConvertTo-UtcStartTimeTicks $RecordedStartedAt)
+    } catch {
+        return $false
+    }
+}
+
 function Get-ManagedStatus([string]$Name, [string]$PidFile) {
     if (-not (Test-Path -LiteralPath $PidFile)) {
         return [pscustomobject]@{ name = $Name; state = 'stopped'; pid = $null }
@@ -15,7 +29,7 @@ function Get-ManagedStatus([string]$Name, [string]$PidFile) {
         if ($null -eq $process) {
             return [pscustomobject]@{ name = $Name; state = 'stopped'; pid = $record.id }
         }
-        if ($process.StartTime.ToUniversalTime().ToString('o') -ne $record.started_at) {
+        if (-not (Test-ProcessStartTimeMatch $process.StartTime $record.started_at)) {
             return [pscustomobject]@{ name = $Name; state = 'pid_reused'; pid = $record.id }
         }
         return [pscustomobject]@{ name = $Name; state = 'running'; pid = $record.id }

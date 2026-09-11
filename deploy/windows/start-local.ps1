@@ -7,10 +7,25 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $StateDirectory = Join-Path $RepoRoot '.local-server'
 $ConfigPath = Join-Path $StateDirectory 'local.env'
+$ClientConfigPath = Join-Path $StateDirectory 'local-client.env'
 $LobbyDirectory = Join-Path $RepoRoot 'server\lobby'
 $LobbyPidPath = Join-Path $StateDirectory 'lobby.pid.json'
 $DedicatedPidPath = Join-Path $StateDirectory 'dedicated.pid.json'
 $LobbyUrl = 'http://127.0.0.1:8000'
+
+function ConvertTo-UtcStartTimeTicks([object]$Value) {
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime.Ticks }
+    if ($Value -is [DateTime]) { return $Value.ToUniversalTime().Ticks }
+    return [DateTime]::Parse([string]$Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().Ticks
+}
+
+function Test-ProcessStartTimeMatch([DateTime]$ProcessStartTime, [object]$RecordedStartedAt) {
+    try {
+        return $ProcessStartTime.ToUniversalTime().Ticks -eq (ConvertTo-UtcStartTimeTicks $RecordedStartedAt)
+    } catch {
+        return $false
+    }
+}
 
 function New-LocalSecret {
     $bytes = New-Object byte[] 48
@@ -26,7 +41,10 @@ function Read-LocalConfig {
             "SKILL_BATTLE_TOKEN_SECRET=$(New-LocalSecret)"
             "SKILL_BATTLE_ADMIN_TOKEN=$(New-LocalSecret)"
             "SKILL_BATTLE_INTERNAL_API_TOKEN=$(New-LocalSecret)"
+            "SKILL_BATTLE_PUBLIC_ACCESS_TOKEN=$(New-LocalSecret)"
             'SKILL_BATTLE_LOBBY_INTERNAL_URL=http://127.0.0.1:8000'
+            'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME=1'
+            'SKILL_BATTLE_UVICORN_WORKERS=1'
             # 17000 avoids colliding with the usual production UDP 7000
             # when a developer is also connected to a remote test server.
             'SKILL_BATTLE_SERVER_PORT=17000'
@@ -39,12 +57,35 @@ function Read-LocalConfig {
         $line = $line.TrimStart([char]0xFEFF)
         if ($line -match '^([A-Z0-9_]+)=(.*)$') { $config[$matches[1]] = $matches[2] }
     }
-    foreach ($required in 'SKILL_BATTLE_TOKEN_SECRET', 'SKILL_BATTLE_ADMIN_TOKEN', 'SKILL_BATTLE_INTERNAL_API_TOKEN', 'SKILL_BATTLE_LOBBY_INTERNAL_URL', 'SKILL_BATTLE_SERVER_PORT') {
+    $changed = $false
+    foreach ($secret in 'SKILL_BATTLE_PUBLIC_ACCESS_TOKEN') {
+        if (-not $config.ContainsKey($secret) -or [string]::IsNullOrWhiteSpace($config[$secret])) {
+            $config[$secret] = New-LocalSecret
+            $changed = $true
+        }
+    }
+    foreach ($setting in @{ 'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME' = '1'; 'SKILL_BATTLE_UVICORN_WORKERS' = '1' }.GetEnumerator()) {
+        if (-not $config.ContainsKey($setting.Key) -or [string]::IsNullOrWhiteSpace($config[$setting.Key])) {
+            $config[$setting.Key] = $setting.Value
+            $changed = $true
+        }
+    }
+    if ($changed) {
+        @($config.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) | Set-Content -LiteralPath $ConfigPath -Encoding utf8
+    }
+    foreach ($required in 'SKILL_BATTLE_TOKEN_SECRET', 'SKILL_BATTLE_ADMIN_TOKEN', 'SKILL_BATTLE_INTERNAL_API_TOKEN', 'SKILL_BATTLE_PUBLIC_ACCESS_TOKEN', 'SKILL_BATTLE_LOBBY_INTERNAL_URL', 'SKILL_BATTLE_REQUIRE_LOBBY_CONSUME', 'SKILL_BATTLE_UVICORN_WORKERS', 'SKILL_BATTLE_SERVER_PORT') {
         if (-not $config.ContainsKey($required) -or [string]::IsNullOrWhiteSpace($config[$required])) {
             throw "Missing $required in $ConfigPath"
         }
     }
     return $config
+}
+
+function Write-LocalClientConfig([hashtable]$Config) {
+    @(
+        "LOBBY_URL=$LobbyUrl"
+        "INVITE_TOKEN=$($Config['SKILL_BATTLE_PUBLIC_ACCESS_TOKEN'])"
+    ) | Set-Content -LiteralPath $ClientConfigPath -Encoding utf8
 }
 
 function Get-ManagedProcess([string]$Name, [string]$PidPath) {
@@ -55,7 +96,7 @@ function Get-ManagedProcess([string]$Name, [string]$PidPath) {
         Remove-Item -LiteralPath $PidPath
         return $null
     }
-    if ($process.StartTime.ToUniversalTime().ToString('o') -ne $record.started_at) {
+    if (-not (Test-ProcessStartTimeMatch $process.StartTime $record.started_at)) {
         throw "$Name PID $($record.id) has been reused. It will not be stopped or replaced; inspect $PidPath."
     }
     return $process
@@ -120,6 +161,7 @@ function Wait-LobbyHealth {
 }
 
 $config = Read-LocalConfig
+Write-LocalClientConfig $config
 foreach ($entry in $config.GetEnumerator()) { Set-Item -Path "Env:$($entry.Key)" -Value $entry.Value }
 
 $existingLobby = Get-ManagedProcess 'Lobby' $LobbyPidPath
@@ -128,7 +170,7 @@ try {
     if ($null -eq $existingLobby) {
         Assert-PortFree 8000 'TCP'
         $python = Get-VenvPython
-        Start-ManagedProcess 'lobby' $python @('-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', '8000') $LobbyDirectory $LobbyPidPath | Out-Null
+        Start-ManagedProcess 'lobby' $python @('-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', '8000', '--workers', '1') $LobbyDirectory $LobbyPidPath | Out-Null
         Wait-LobbyHealth
     } else {
         Write-Host "Lobby is already running (PID $($existingLobby.Id))."

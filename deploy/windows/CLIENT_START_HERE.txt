@@ -1,0 +1,15 @@
+Skill Battle - Windows Client
+==============================
+
+1. Extract this ZIP completely, then start SkillBattle.exe.
+2. On the Home screen, select the gear icon (User Settings).
+3. Enter a display name, the Lobby HTTPS URL, and the shared invite access token
+   that the host sent to you. Select Save.
+4. Select Online Battle. Either create a room or select Join a Room and choose
+   the host's room from the list.
+
+No Godot, Tailscale, playit.gg, or other development tool is required.
+
+Keep the URL and invite token private. They permit access to the host's public
+game lobby. Do not share this folder, the URL, or the token onward. The host
+will rotate the invite token after a suspected leak.

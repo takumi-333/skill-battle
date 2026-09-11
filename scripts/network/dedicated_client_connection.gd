@@ -9,7 +9,9 @@ signal connection_error(message: String)
 signal joined(room_id: String, slot: int)
 signal snapshot_received(snapshot: Dictionary)
 
-@export var lobby_url := "http://127.0.0.1:8000"
+@export var lobby_url := ""
+@export var access_token := ""
+@export var allow_insecure_lobby_url := false
 var _http: HTTPRequest
 var _pending_action := ""
 var _join_data: Dictionary = {}
@@ -38,7 +40,42 @@ func create_room(name: String) -> void:
 	_request("POST", "/v1/rooms", "create", JSON.stringify({"name": name}))
 
 func join_room(room_id: String) -> void:
-	_request("POST", "/v1/rooms/%s/join" % room_id.uri_encode(), "join")
+	_request("POST", "/v1/rooms/%s/join" % room_id.uri_encode(), "join", "{}")
+
+
+func configure_lobby(url: String, token: String, allow_http: bool) -> void:
+	lobby_url = url.strip_edges().trim_suffix("/")
+	access_token = token.strip_edges()
+	allow_insecure_lobby_url = allow_http
+
+
+func configuration_error() -> String:
+	var normalized_url := lobby_url.strip_edges().trim_suffix("/")
+	if normalized_url.is_empty():
+		return "Lobby HTTPS URL を設定してください。"
+	if normalized_url.contains(" ") or not normalized_url.contains("://"):
+		return "Lobby URL の形式が正しくありません。"
+	if normalized_url.begins_with("https://"):
+		if normalized_url.trim_prefix("https://").split("/", false, 1)[0].is_empty():
+			return "Lobby URL のホスト名を設定してください。"
+	elif not (allow_insecure_lobby_url and _is_loopback_http_lobby_url(normalized_url)):
+		return "Lobby URL は HTTPS を使用してください。"
+	if access_token.length() < 32 or access_token.contains(" "):
+		return "招待アクセストークンを設定してください。"
+	return ""
+
+
+func _is_loopback_http_lobby_url(url: String) -> bool:
+	if not url.begins_with("http://"):
+		return false
+	var authority := url.trim_prefix("http://").split("/", false, 1)[0].to_lower()
+	if authority == "127.0.0.1" or authority == "localhost":
+		return true
+	var parts := authority.split(":", false, 1)
+	if parts.size() != 2 or parts[0] not in ["127.0.0.1", "localhost"] or not parts[1].is_valid_int():
+		return false
+	var port := parts[1].to_int()
+	return port >= 1 and port <= 65535
 
 func connect_reserved_room(connection: Dictionary) -> void:
 	_join_data = connection
@@ -80,8 +117,14 @@ func _on_connected() -> void:
 	get_parent().rpc_id(1, "join_room", str(_join_data["room"]["id"]), int(_join_data["slot"]), str(_join_data["token"]))
 
 func _request(method: String, path: String, action: String, body := "") -> void:
+	var invalid_reason := configuration_error()
+	if not invalid_reason.is_empty():
+		connection_error.emit(invalid_reason)
+		return
 	_pending_action = action
-	var headers := PackedStringArray(["Content-Type: application/json"])
+	var headers := PackedStringArray(["Accept: application/json", "X-Skill-Battle-Access-Token: %s" % access_token])
+	if method == "POST":
+		headers.append("Content-Type: application/json")
 	var error := _http.request(lobby_url.trim_suffix("/") + path, headers, HTTPClient.METHOD_GET if method == "GET" else HTTPClient.METHOD_POST, body)
 	if error != OK:
 		connection_error.emit("ロビー API へ接続できません: %s" % error_string(error))

@@ -24,12 +24,17 @@ var phase := "lobby"
 var status := "対戦相手を待っています。"
 var countdown_remaining := 0.0
 var finish_remaining := 0.0
+# Closed Lobby admission must not also discard the result screen state for the
+# peers that already belong to this session.
+var admission_closed := false
+var terminal_closed := false
 
 func _init(id: String) -> void:
 	room_id = id
 
 func join(peer_id: int, requested_slot: int) -> int:
-	if requested_slot < 1 or requested_slot > 2 or peers.has(requested_slot):
+	# A result or a closed room is never a new matchmaking lobby.
+	if terminal_closed or admission_closed or phase != "lobby" or requested_slot < 1 or requested_slot > 2 or peers.has(requested_slot):
 		return 0
 	peers[requested_slot] = peer_id
 	peer_slots[peer_id] = requested_slot
@@ -101,7 +106,7 @@ func start(requesting_peer_id: int) -> bool:
 
 
 func request_result_action(peer_id: int, action: String) -> bool:
-	if phase != "result" or not peer_slots.has(peer_id) or action not in ["rematch", "lobby"]:
+	if terminal_closed or phase != "result" or not peer_slots.has(peer_id) or action not in ["rematch", "lobby"]:
 		return false
 	if action == "rematch":
 		if bool(result_lobby_slots[1]) or bool(result_lobby_slots[2]):
@@ -143,6 +148,20 @@ func _reset_simulation_preserving_loadouts() -> void:
 	for slot in [1, 2]:
 		var loadout: Dictionary = loadouts[slot]
 		simulation.configure_loadout(slot, int(loadout["character"]), str(loadout["big_skill"]), str(loadout["display_name"]), int(loadout["small_skill"]), int(loadout["skill3"]))
+
+
+func close_terminal() -> void:
+	terminal_closed = true
+	admission_closed = true
+
+
+func close_admission() -> void:
+	"""Prevent a new Lobby reservation joining this session, but retain its peers.
+
+	The Lobby can therefore mark a completed room CLOSED while its two existing
+	clients still choose rematch or return to the in-session lobby.
+	"""
+	admission_closed = true
 
 
 func _character_index(character_id: String) -> int:

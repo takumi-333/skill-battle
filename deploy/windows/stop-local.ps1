@@ -5,6 +5,20 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $StateDirectory = Join-Path $RepoRoot '.local-server'
 
+function ConvertTo-UtcStartTimeTicks([object]$Value) {
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime.Ticks }
+    if ($Value -is [DateTime]) { return $Value.ToUniversalTime().Ticks }
+    return [DateTime]::Parse([string]$Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime().Ticks
+}
+
+function Test-ProcessStartTimeMatch([DateTime]$ProcessStartTime, [object]$RecordedStartedAt) {
+    try {
+        return $ProcessStartTime.ToUniversalTime().Ticks -eq (ConvertTo-UtcStartTimeTicks $RecordedStartedAt)
+    } catch {
+        return $false
+    }
+}
+
 function Stop-ManagedProcess([string]$Name, [string]$PidFile) {
     if (-not (Test-Path -LiteralPath $PidFile)) {
         if (-not $Quiet) { Write-Host "$Name is not managed by this launcher." }
@@ -17,7 +31,7 @@ function Stop-ManagedProcess([string]$Name, [string]$PidFile) {
         if (-not $Quiet) { Write-Host "$Name was already stopped." }
         return
     }
-    if ($process.StartTime.ToUniversalTime().ToString('o') -ne $record.started_at) {
+    if (-not (Test-ProcessStartTimeMatch $process.StartTime $record.started_at)) {
         Write-Warning "$Name PID $($record.id) has been reused. Refusing to stop it. Inspect $PidFile."
         return
     }

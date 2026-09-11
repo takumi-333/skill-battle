@@ -20,6 +20,9 @@ func _init() -> void:
 	_test_session_knockout_finish_phase()
 	_test_session_result_actions()
 	_test_session_disconnect_transitions()
+	_test_session_rejects_result_or_closed_room_joins()
+	_test_session_keeps_result_actions_after_admission_closes()
+	_test_dedicated_admission_timeout_and_status_retry_policy()
 	_test_snapshot_metadata_and_recipient_filtering()
 	_test_visual_snapshot_interpolation()
 	_test_delayed_keycap_targets_from_launch_position()
@@ -28,6 +31,73 @@ func _init() -> void:
 	_test_display_name_loadout_validation()
 	print("server-authoritative match simulation tests passed")
 	quit()
+
+func _test_session_rejects_result_or_closed_room_joins() -> void:
+	var session := MatchSession.new("terminal-room")
+	assert(session.join(11, 1) == 1)
+	session.phase = "result"
+	assert(session.join(22, 2) == 0)
+	session.close_terminal()
+	session.phase = "lobby"
+	assert(session.join(22, 2) == 0)
+	assert(not session.request_result_action(11, "rematch"))
+
+
+func _test_session_keeps_result_actions_after_admission_closes() -> void:
+	var session := MatchSession.new("closed-admission-room")
+	assert(session.join(11, 1) == 1)
+	assert(session.join(12, 2) == 2)
+	session.phase = "result"
+	session.close_admission()
+	assert(session.join(22, 1) == 0)
+	assert(session.request_result_action(11, "rematch"))
+	assert(session.request_result_action(12, "rematch"))
+	assert(session.phase == "countdown")
+
+
+func _test_dedicated_admission_timeout_and_status_retry_policy() -> void:
+	var server := DedicatedServer.new()
+	server.token_secret = "dedicated-server-test-secret"
+	assert(server._validated_ticket("", "room", 1).is_empty())
+	assert(server._validated_ticket("not-a-ticket", "room", 1).is_empty())
+	var ticket_payload := {
+		"room_id": "room",
+		"slot": 1,
+		"expires_at": Time.get_unix_time_from_system() + 60,
+		"nonce": "n".repeat(32),
+	}
+	var ticket_body := Marshalls.raw_to_base64(JSON.stringify(ticket_payload).to_utf8_buffer())
+	var hmac := HMACContext.new()
+	hmac.start(HashingContext.HASH_SHA256, server.token_secret.to_utf8_buffer())
+	hmac.update(ticket_body.to_utf8_buffer())
+	var valid_ticket := ticket_body + "." + hmac.finish().hex_encode()
+	assert(not server._validated_ticket(valid_ticket, "room", 1).is_empty())
+	assert(is_equal_approx(DedicatedServer.CONSUME_TIMEOUT_SECONDS, 5.0))
+	server.unauthenticated_peer_deadlines[91] = 1000
+	assert(not server._is_unauthenticated_peer_expired(91, 999))
+	assert(server._is_unauthenticated_peer_expired(91, 1000))
+	var before_extend := Time.get_ticks_msec()
+	server._extend_unauthenticated_peer_deadline(91)
+	assert(int(server.unauthenticated_peer_deadlines[91]) >= before_extend + 5000)
+	server._accept_consumed_join(92, "joined-room", 1)
+	assert(server.peer_rooms[92] == "joined-room")
+	assert((server.sessions["joined-room"] as MatchSession).peer_slots[92] == 1)
+	assert(server._room_status_retry_delay_msec(1) == 500)
+	assert(server._room_status_retry_delay_msec(2) == 1000)
+	assert(server._room_status_retry_delay_msec(6) == 10000)
+	assert(server._should_retry_room_status(-1, 0))
+	assert(server._should_retry_room_status(HTTPRequest.RESULT_SUCCESS, 503))
+	assert(server._should_retry_room_status(HTTPRequest.RESULT_SUCCESS, 429))
+	assert(not server._should_retry_room_status(HTTPRequest.RESULT_SUCCESS, 409))
+	server.room_status_queue = [
+		{"room_id": "delayed", "retry_after_msec": 1000},
+		{"room_id": "ready", "retry_after_msec": 0},
+		{"room_id": "delayed", "retry_after_msec": 0},
+	]
+	assert(server._next_ready_room_status_index(500) == 1)
+	assert(server._next_ready_room_status_index(1000) == 0)
+	server.free()
+
 
 func _test_state_and_normal_attack() -> void:
 	var simulation := MatchSimulation.new()
