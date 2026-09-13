@@ -45,3 +45,15 @@ Godot 実行時に `user://logs` へのログ出力失敗と Windows のルー�
 ## 追加タスク: 周囲波動の描画順
 
 - [x] 周囲波動をプレイヤーより後ろの地面レイヤーへ移動する。
+
+## 追加タスク: 周囲波動のスプライト化
+
+- [x] `typist_ground_ripple.png` を読み込み、周囲波動の円弧描画を同スプライトへ置き換える。
+
+## 追加タスク: 三叉震槌直撃時の黄色い円演出を削除
+
+- [x] 直撃時の黄色い円・円弧・放射線の描画を削除し、ダメージ判定と周囲波動は維持する。
+
+### 検証結果
+
+- 2026-09-13: `godot --headless --path . --script res://tests/network/match_simulation_test.gd` が `server-authoritative match simulation tests passed` で完了し、`godot --headless --path . --quit-after 3` と `git diff --check` も完了した。

@@ -435,6 +435,7 @@ const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chan
 const SHADOW_IDLE_TEXTURE: Texture2D = preload("res://assets/characters/portraits/shadow_idle.png")
 const TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_weapon.png")
 const TYPIST_HAMMER_SHOCKWAVE_TEXTURE: Texture2D = preload("res://assets/effects/typist_hammer_shockwave.png")
+const TYPIST_GROUND_RIPPLE_TEXTURE: Texture2D = preload("res://assets/effects/typist_ground_ripple.png")
 const ARITHMETICIAN_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_weapon.png")
 const CHANTER_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_weapon.png")
 const TYPIST_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_particle.png")
@@ -5687,7 +5688,9 @@ func _draw() -> void:
 		if float(wave.get("delay", 0.0)) > 0.0:
 			continue
 		var wave_alpha := 0.72 * (1.0 - clampf(float(wave.get("elapsed", 0.0)) / float(wave.get("duration", 1.0)), 0.0, 1.0))
-		draw_arc(wave["origin"], float(wave["radius"]), 0.0, TAU, 48, Color(1.0, 0.76, 0.42, wave_alpha), 7.0, true)
+		var ripple_diameter := float(wave["radius"]) * 2.0
+		var ripple_rect := Rect2(Vector2(wave["origin"]) - Vector2.ONE * ripple_diameter * 0.5, Vector2.ONE * ripple_diameter)
+		draw_texture_rect(TYPIST_GROUND_RIPPLE_TEXTURE, ripple_rect, false, Color(1.0, 1.0, 1.0, wave_alpha))
 	for meteor in meteor_impacts:
 		draw_meteor_shadow(meteor)
 	for eclipse in lunar_eclipses:
@@ -6224,11 +6227,7 @@ func draw_trident_impact(impact: Dictionary) -> void:
 	var strike_duration := float(impact.get("strike_duration", TRIDENT_STRIKE_DURATION))
 	var motion_duration := maxf(strike_duration - TRIDENT_POST_STRIKE_DELAY, 0.001)
 	var strike_progress := clampf(elapsed / motion_duration, 0.0, 1.0)
-	var ripple_progress := clampf((elapsed - strike_duration) / maxf(duration - strike_duration, 0.001), 0.0, 1.0)
-	var ripple_fade := 1.0 - ripple_progress if elapsed >= strike_duration else 0.0
 	var score := float(impact.get("score", 0))
-	var hammer_center := get_trident_hammer_tip(origin, facing, int(score))
-	var radius := lerpf(8.0, 116.0, ripple_progress)
 
 	# ハンマーは短い予備動作から正面へ振り下ろす。
 	var source_size := TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE.get_size()
@@ -6261,17 +6260,6 @@ func draw_trident_impact(impact: Dictionary) -> void:
 	draw_texture_rect(TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE, Rect2(-WEAPON_HANDLE_UV * weapon_size, weapon_size), false, Color.WHITE)
 	draw_set_transform(get_world_draw_offset())
 
-	# 地面の亀裂と衝撃リングはハンマーの前面に描き、着地点から連続して見せる。
-	draw_circle(hammer_center, lerpf(22.0, 8.0, ripple_progress), Color(1.0, 0.74, 0.30, 0.22 * ripple_fade), true)
-	draw_arc(hammer_center, radius, 0.0, TAU, 40, Color(1.0, 0.82, 0.40, 0.85 * ripple_fade), 5.0, true)
-	for crack_index in range(8):
-		var crack_angle := TAU * float(crack_index) / 8.0 + facing.angle() * 0.18
-		var crack_direction := Vector2.from_angle(crack_angle)
-		var crack_length := lerpf(20.0, 78.0 + score * 0.25, ripple_progress)
-		var crack_start := hammer_center + crack_direction * 12.0
-		var crack_end := hammer_center + crack_direction * crack_length
-		draw_line(crack_start, crack_end, Color(0.98, 0.68, 0.28, 0.72 * ripple_fade), 3.0, true)
-		draw_line(crack_end, crack_end + crack_direction.rotated(0.55) * 12.0, Color(1.0, 0.84, 0.48, 0.52 * ripple_fade), 2.0, true)
 
 
 func draw_meteor_shadow(impact: Dictionary) -> void:
