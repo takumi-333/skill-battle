@@ -1,7 +1,7 @@
 class_name MatchState
 extends RefCounted
 
-const MATCH_DURATION := 90.0
+const MATCH_DURATION := 150.0
 const ARENA_HEIGHT := 774.0
 const START_Y := ARENA_HEIGHT / 2.0
 

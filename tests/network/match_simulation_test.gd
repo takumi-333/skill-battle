@@ -916,7 +916,7 @@ func _test_session_ready_start() -> void:
 	assert(not session.submit_input(11, MatchProtocol.make_input(0, Vector2.RIGHT)))
 	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
-	assert(is_equal_approx(float(session.simulation.state["time_remaining"]), 90.0))
+	assert(is_equal_approx(float(session.simulation.state["time_remaining"]), 150.0))
 
 
 func _test_session_knockout_finish_phase() -> void:
