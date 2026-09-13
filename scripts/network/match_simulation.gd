@@ -3,6 +3,8 @@
 class_name MatchSimulation
 extends RefCounted
 
+const TypistHammerShockwaveHitboxData = preload("res://scripts/data/typist_hammer_shockwave_hitbox.gd")
+
 const ARENA := Rect2(0, 0, 1680, 774)
 const PLAYER_SPEED := 280.0
 const PLAYER_RADIUS := 30.0
@@ -768,11 +770,13 @@ func _update_projectiles(delta: float) -> void:
 			projectile["homing_time"] = maxf(0.0, float(projectile["homing_time"]) - delta)
 		projectile["position"] = Vector2(projectile["position"]) + Vector2(projectile["velocity"]) * delta
 		projectile["lifetime"] = float(projectile["lifetime"]) - delta
-		if not bool(projectile.get("hack_vision", false)) and _destroy_decoy_at_point(owner, Vector2(projectile["position"]), PROJECTILE_RADIUS):
+		var destroyed_decoy := _destroy_decoys_in_typist_hammer_shockwave_projectile(owner, projectile) if bool(projectile.get("typist_hammer_shockwave", false)) else _destroy_decoy_at_point(owner, Vector2(projectile["position"]), PROJECTILE_RADIUS)
+		if not bool(projectile.get("hack_vision", false)) and destroyed_decoy:
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
 				continue
-		if _point_hits_player(Vector2(projectile["position"]), target, PROJECTILE_RADIUS):
+		var hit_target := _typist_hammer_shockwave_projectile_hits_player(projectile, target) if bool(projectile.get("typist_hammer_shockwave", false)) else _point_hits_player(Vector2(projectile["position"]), target, PROJECTILE_RADIUS)
+		if hit_target:
 			if bool(projectile.get("hack_vision", false)):
 				var target_player: Dictionary = state["players"][target]
 				target_player["hack_vision_time"] = maxf(float(target_player.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
@@ -869,6 +873,16 @@ func _destroy_decoys_in_radius(attacker: int, center: Vector2, radius: float) ->
 		var decoy: Dictionary = state["decoys"][index]
 		if int(decoy.get("owner_id", 0)) != attacker and Vector2(decoy["position"]).distance_to(center) <= radius + ARITHMETICIAN_DECOY_HIT_RADIUS:
 			_destroy_decoy_at_index(index)
+
+func _destroy_decoys_in_typist_hammer_shockwave_projectile(attacker: int, projectile: Dictionary) -> bool:
+	var destroyed := false
+	for index in range(state["decoys"].size() - 1, -1, -1):
+		var decoy: Dictionary = state["decoys"][index]
+		if int(decoy.get("owner_id", 0)) != attacker and TypistHammerShockwaveHitboxData.intersects_circle(projectile, Vector2(decoy["position"]), ARITHMETICIAN_DECOY_HIT_RADIUS):
+			_destroy_decoy_at_index(index)
+			destroyed = true
+	return destroyed
+
 
 func _destroy_decoys_near_segment(attacker: int, start: Vector2, end: Vector2, padding: float) -> void:
 	for index in range(state["decoys"].size() - 1, -1, -1):
@@ -1032,7 +1046,7 @@ func _release_trident(impact: Dictionary) -> void:
 func _spawn_projectile_from(owner: int, score: int, position_value: Vector2, facing: Vector2, big: bool) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
 		return
-	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": position_value + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * 300.0, "damage": 50 + roundi(float(score) * 0.2), "lifetime": 5.0, "piercing": big, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": facing.angle(), "key_cap": false})
+	state["skill_projectiles"].append({"projectile_id": _next_projectile_id, "presentation_id": _take_presentation_id(), "owner_id": owner, "position": position_value + facing * (PLAYER_RADIUS + PROJECTILE_RADIUS), "velocity": facing * 300.0, "damage": 50 + roundi(float(score) * 0.2), "lifetime": 5.0, "piercing": big, "delay": 0.0, "chip": "", "launched": true, "homing": false, "homing_time": 0.0, "initial_angle": facing.angle(), "key_cap": false, "typist_hammer_shockwave": true})
 	_next_projectile_id += 1
 
 func _update_shockwaves(delta: float) -> void:
@@ -1290,6 +1304,11 @@ func _is_trident_active(slot: int) -> bool:
 
 func _point_hits_player(point: Vector2, slot: int, padding: float = 0.0) -> bool:
 	return point.distance_to(Vector2(state["players"][slot]["position"])) <= PLAYER_RADIUS + padding
+
+
+func _typist_hammer_shockwave_projectile_hits_player(projectile: Dictionary, slot: int) -> bool:
+	var player_center := Vector2(state["players"][slot]["position"]) + CHANTER_TARGET_HITBOX_OFFSET
+	return TypistHammerShockwaveHitboxData.intersects_ellipse(projectile, player_center, CHANTER_TARGET_HITBOX_RADIUS_X, CHANTER_TARGET_HITBOX_RADIUS_Y)
 
 
 func _point_hits_chanter_zone(point: Vector2, slot: int) -> bool:

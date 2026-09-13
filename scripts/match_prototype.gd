@@ -428,11 +428,13 @@ const MatchStateData = preload("res://scripts/match_state.gd")
 const TraceEvaluatorData = preload("res://scripts/trace_evaluator.gd")
 const KEY_CAP_PROJECTILE_SCENE: PackedScene = preload("res://scenes/effects/key_cap_projectile.tscn")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
+const TypistHammerShockwaveHitboxData = preload("res://scripts/data/typist_hammer_shockwave_hitbox.gd")
 const TYPIST_TEXTURE: Texture2D = preload("res://assets/characters/sprites/typist_pixel_8dir.png")
 const ARITHMETICIAN_TEXTURE: Texture2D = preload("res://assets/characters/sprites/arithmetician_pixel_8dir.png")
 const CHANTER_TEXTURE: Texture2D = preload("res://assets/characters/sprites/chanter_pixel_8dir.png")
 const SHADOW_IDLE_TEXTURE: Texture2D = preload("res://assets/characters/portraits/shadow_idle.png")
 const TYPIST_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_weapon.png")
+const TYPIST_HAMMER_SHOCKWAVE_TEXTURE: Texture2D = preload("res://assets/effects/typist_hammer_shockwave.png")
 const ARITHMETICIAN_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_arithmetician_weapon.png")
 const CHANTER_NORMAL_ATTACK_WEAPON_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_chanter_weapon.png")
 const TYPIST_NORMAL_ATTACK_PARTICLE_TEXTURE: Texture2D = preload("res://assets/effects/normal_attack_typist_particle.png")
@@ -2343,6 +2345,7 @@ func spawn_trident_projectile(owner_id: int, score: int, origin: Vector2, facing
 		"homing_time": 0.0,
 		"initial_angle": facing.angle(),
 		"key_cap": false,
+		"typist_hammer_shockwave": true,
 	})
 	next_projectile_id += 1
 
@@ -2497,11 +2500,13 @@ func update_skill_projectiles(delta: float) -> void:
 		var target_id: int = 2 if owner_id == 1 else 1
 		var target: Dictionary = players[target_id]
 		var target_position: Vector2 = target["position"]
-		if not bool(projectile.get("hack_vision", false)) and destroy_decoy_at_point(owner_id, position_value, SKILL_PROJECTILE_RADIUS):
+		var destroyed_decoy := destroy_decoy_in_typist_hammer_shockwave_projectile(owner_id, projectile) if bool(projectile.get("typist_hammer_shockwave", false)) else destroy_decoy_at_point(owner_id, position_value, SKILL_PROJECTILE_RADIUS)
+		if not bool(projectile.get("hack_vision", false)) and destroyed_decoy:
 			if not bool(projectile["piercing"]):
 				skill_projectiles.remove_at(index)
 				continue
-		if is_point_in_player_hitbox(position_value, target_position, SKILL_PROJECTILE_RADIUS):
+		var hit_target := is_typist_hammer_shockwave_projectile_hitting_player(projectile, target_position) if bool(projectile.get("typist_hammer_shockwave", false)) else is_point_in_player_hitbox(position_value, target_position, SKILL_PROJECTILE_RADIUS)
+		if hit_target:
 			if bool(projectile.get("hack_vision", false)):
 				target["hack_vision_time"] = maxf(float(target.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
 				target["hack_vision_owner_id"] = owner_id
@@ -2719,6 +2724,10 @@ func is_point_in_player_hitbox(point: Vector2, player_position: Vector2, padding
 	return (normalized_point.x * normalized_point.x) / (radius_x * radius_x) + (normalized_point.y * normalized_point.y) / (radius_y * radius_y) <= 1.0
 
 
+func is_typist_hammer_shockwave_projectile_hitting_player(projectile: Dictionary, player_position: Vector2) -> bool:
+	return TypistHammerShockwaveHitboxData.intersects_ellipse(projectile, get_player_hitbox_center(player_position), PLAYER_HITBOX_RADIUS_X, PLAYER_HITBOX_RADIUS_Y)
+
+
 func is_point_near_hammer_segment(point: Vector2, segment_start: Vector2, segment_end: Vector2, padding: float) -> bool:
 	var segment := segment_end - segment_start
 	var segment_length_squared := segment.length_squared()
@@ -2762,6 +2771,16 @@ func destroy_decoy_at_point(attacker_id: int, point: Vector2, padding: float = 0
 			destroy_decoy_at_index(index)
 			return true
 	return false
+
+
+func destroy_decoy_in_typist_hammer_shockwave_projectile(attacker_id: int, projectile: Dictionary) -> bool:
+	var destroyed := false
+	for index in range(decoys.size() - 1, -1, -1):
+		var decoy: Dictionary = decoys[index]
+		if int(decoy.get("owner_id", 0)) != attacker_id and TypistHammerShockwaveHitboxData.intersects_circle(projectile, Vector2(decoy["position"]), PLAYER_HITBOX_RADIUS_Y):
+			destroy_decoy_at_index(index)
+			destroyed = true
+	return destroyed
 
 
 func destroy_decoys_in_radius(attacker_id: int, center: Vector2, radius: float) -> void:
@@ -5663,6 +5682,12 @@ func _draw() -> void:
 	for zone in magic_zones:
 		if bool(zone.get("spawned", false)):
 			draw_chanter_zone_area(zone)
+	# 周囲波動は地面演出なので、必ずプレイヤーより後ろに描く。
+	for wave in shockwaves:
+		if float(wave.get("delay", 0.0)) > 0.0:
+			continue
+		var wave_alpha := 0.72 * (1.0 - clampf(float(wave.get("elapsed", 0.0)) / float(wave.get("duration", 1.0)), 0.0, 1.0))
+		draw_arc(wave["origin"], float(wave["radius"]), 0.0, TAU, 48, Color(1.0, 0.76, 0.42, wave_alpha), 7.0, true)
 	for meteor in meteor_impacts:
 		draw_meteor_shadow(meteor)
 	for eclipse in lunar_eclipses:
@@ -5681,11 +5706,6 @@ func _draw() -> void:
 		draw_skill_projectile(projectile)
 	for projectile in dedicated_chanter_skill3_visual_projectiles:
 		draw_skill_projectile(projectile)
-	for wave in shockwaves:
-		if float(wave.get("delay", 0.0)) > 0.0:
-			continue
-		var wave_alpha := 0.72 * (1.0 - clampf(float(wave.get("elapsed", 0.0)) / float(wave.get("duration", 1.0)), 0.0, 1.0))
-		draw_arc(wave["origin"], float(wave["radius"]), 0.0, TAU, 48, Color(1.0, 0.76, 0.42, wave_alpha), 7.0, true)
 	for decoy in decoys:
 		var decoy_owner_id := int(decoy["owner_id"])
 		var decoy_alpha := ARITHMETICIAN_DECOY_THIN_ALPHA if decoy_owner_id == local_player_id else ARITHMETICIAN_DECOY_NORMAL_ALPHA
@@ -6129,6 +6149,21 @@ func draw_player_silhouette(player: Dictionary) -> void:
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, Color("06040a"))
 
 
+func draw_typist_hammer_shockwave_projectile(projectile: Dictionary) -> void:
+	var direction: Vector2 = projectile.get("velocity", Vector2.LEFT)
+	if direction.length_squared() <= 0.0:
+		direction = Vector2.LEFT
+	else:
+		direction = direction.normalized()
+	var source_size := Vector2(TYPIST_HAMMER_SHOCKWAVE_TEXTURE.get_size())
+	var draw_size := source_size * TypistHammerShockwaveHitboxData.DRAW_SCALE
+	var draw_position: Vector2 = projectile["position"]
+	# 元素材は左向き。方向ベクトルに合わせて一枚の素材を回転して使う。
+	draw_set_transform(draw_position + get_world_draw_offset(), direction.angle() - PI, Vector2.ONE)
+	draw_texture_rect(TYPIST_HAMMER_SHOCKWAVE_TEXTURE, Rect2(-draw_size * 0.5, draw_size), false)
+	draw_set_transform(get_world_draw_offset())
+
+
 func draw_skill_projectile(projectile: Dictionary) -> void:
 	# 遅延発射弾は生成時のプレイヤー位置に置かれているため、
 	# 発射されるまで描画しない。これで発射前の玉が残って見えるのを防ぐ。
@@ -6145,6 +6180,8 @@ func draw_skill_projectile(projectile: Dictionary) -> void:
 		draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 8.0, Color("3d8fffa0"))
 		draw_circle(position_value, SKILL_PROJECTILE_RADIUS + 2.0, Color("b8e6ff"))
 		draw_line(position_value - direction * 16.0, position_value + direction * 9.0, Color("4367ff"), 4.0)
+	elif bool(projectile.get("typist_hammer_shockwave", false)):
+		draw_typist_hammer_shockwave_projectile(projectile)
 	elif bool(projectile.get("fixed_direction", false)):
 		var source_size := Vector2(CHANTER_BALL_TEXTURE.get_size())
 		var draw_size := source_size * (38.0 / maxf(source_size.x, source_size.y))

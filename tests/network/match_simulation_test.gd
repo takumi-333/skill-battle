@@ -1,8 +1,11 @@
 extends SceneTree
 
+const TypistHammerShockwaveHitboxData = preload("res://scripts/data/typist_hammer_shockwave_hitbox.gd")
+
 func _init() -> void:
 	_test_state_and_normal_attack()
 	_test_typist_skills()
+	_test_typist_hammer_shockwave_hitbox()
 	_test_arithmetician_skills()
 	_test_hack_vision_full_homing()
 	_test_arithmetician_perfect_mapping()
@@ -162,6 +165,11 @@ func _test_typist_skills() -> void:
 	big_simulation.step(1.1, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(bool(big_simulation.state["trident_impacts"][0]["released"]))
 	assert(not big_simulation.state["trident_impacts"].is_empty() or not big_simulation.state["skill_projectiles"].is_empty())
+	var trident_shockwave_projectiles := 0
+	for projectile in big_simulation.state["skill_projectiles"]:
+		if bool(projectile.get("typist_hammer_shockwave", false)):
+			trident_shockwave_projectiles += 1
+	assert(trident_shockwave_projectiles == 5)
 	var skill3_simulation := MatchSimulation.new()
 	assert(skill3_simulation.handle_event(1, {"type": "skill3"}))
 	_complete_typing(skill3_simulation, 1)
@@ -174,6 +182,25 @@ func _test_typist_skills() -> void:
 	var golden_time_snapshot := MatchProtocol.snapshot("golden-time-aura", golden_time_simulation.state, "match", "", 1)
 	assert(int(golden_time_snapshot["players"][1]["typing_zone_level"]) == 1)
 	assert(float(golden_time_snapshot["players"][1]["typing_zone_time"]) > 0.0)
+
+
+func _test_typist_hammer_shockwave_hitbox() -> void:
+	var opaque_pixels := TypistHammerShockwaveHitboxData.opaque_pixel_centers()
+	assert(not opaque_pixels.is_empty())
+	var projectile := {"position": Vector2(320.0, 240.0), "velocity": Vector2.LEFT * 300.0}
+	var opaque_world_position := TypistHammerShockwaveHitboxData.source_pixel_to_world_position(projectile, opaque_pixels[0])
+	assert(TypistHammerShockwaveHitboxData.intersects_ellipse(projectile, opaque_world_position, 0.2, 0.2))
+	var transparent_corner_position := TypistHammerShockwaveHitboxData.source_pixel_to_world_position(projectile, Vector2(0.5, 0.5))
+	assert(not TypistHammerShockwaveHitboxData.intersects_ellipse(projectile, transparent_corner_position, 0.2, 0.2))
+	var simulation := MatchSimulation.new()
+	simulation.state["players"][2]["position"] = opaque_world_position - Vector2(0.0, -12.0)
+	assert(simulation.call("_typist_hammer_shockwave_projectile_hits_player", projectile, 2))
+	simulation.state["players"][2]["position"] = transparent_corner_position - Vector2(0.0, -12.0)
+	assert(not simulation.call("_typist_hammer_shockwave_projectile_hits_player", projectile, 2))
+	var upward_projectile := projectile.duplicate()
+	upward_projectile["velocity"] = Vector2.UP * 300.0
+	var upward_opaque_world_position := TypistHammerShockwaveHitboxData.source_pixel_to_world_position(upward_projectile, opaque_pixels[0])
+	assert(TypistHammerShockwaveHitboxData.intersects_ellipse(upward_projectile, upward_opaque_world_position, 0.2, 0.2))
 
 
 func _test_arithmetician_interference_points() -> void:
