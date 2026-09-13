@@ -1300,26 +1300,26 @@ func _evaluate_arithmetic(expression: String) -> int:
 	return total
 
 func _make_trace_target(tier: String, small_skill_id: String = "") -> PackedVector2Array:
-	var center := Vector2(340, 118)
+	var center := Vector2(430, 172)
 	var points := PackedVector2Array()
 	if tier == "small" and small_skill_id != "chanter_small_1":
 		for index in 49:
-			points.append(center + Vector2.from_angle(float(index) * TAU / 48.0) * 92.0)
+			points.append(center + Vector2.from_angle(float(index) * TAU / 48.0) * 112.0)
 		return points
 	var turn_count := 3.5 if tier == "skill3" else (1.5 if tier == "small" else 2.5)
 	const POINT_COUNT := 121
 	for index in POINT_COUNT:
 		var progress := float(index) / float(POINT_COUNT - 1)
 		var angle := -PI / 2.0 + TAU * turn_count * progress
-		var radius := lerpf(10.0, 108.0, progress)
+		var radius := lerpf(12.0, 132.0, progress)
 		points.append(center + Vector2.from_angle(angle) * radius)
 	return points
 
 func _make_lunar_eclipse_trace_target() -> PackedVector2Array:
-	var center := Vector2(340, 118)
+	var center := Vector2(430, 172)
 	var vertices := PackedVector2Array()
 	for index in 5:
-		vertices.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 5.0) * 108.0)
+		vertices.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 5.0) * 132.0)
 	var order := [0, 2, 4, 1, 3, 0]
 	var points := PackedVector2Array()
 	for segment_index in 5:
@@ -1331,20 +1331,20 @@ func _make_lunar_eclipse_trace_target() -> PackedVector2Array:
 	return points
 
 func _make_meteor_trace_target() -> PackedVector2Array:
-	var center := Vector2(340, 118)
-	var top := center + Vector2(0, -108)
-	var right := center + Vector2(160, 0)
-	var bottom := center + Vector2(0, 108)
-	var left := center + Vector2(-160, 0)
+	var center := Vector2(430, 172)
+	var top := center + Vector2(0, -132)
+	var right := center + Vector2(195, 0)
+	var bottom := center + Vector2(0, 132)
+	var left := center + Vector2(-195, 0)
 	var points := PackedVector2Array()
 	_append_trace_segment(points, top, right, 24)
 	_append_trace_segment(points, right, left, 36)
 	_append_trace_segment(points, left, bottom, 24)
 	_append_trace_segment(points, bottom, top, 36)
-	var circle_start := center + Vector2(0, -72)
+	var circle_start := center + Vector2(0, -86)
 	_append_trace_segment(points, top, circle_start, 12)
 	for index in 49:
-		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 72.0)
+		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 86.0)
 	return points
 
 func _append_trace_segment(points: PackedVector2Array, start: Vector2, end: Vector2, point_count: int) -> void:

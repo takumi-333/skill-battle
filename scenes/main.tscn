@@ -135,10 +135,10 @@ color = Color(0.02, 0.04, 0.1, 0.58)
 [node name="Challenge" type="PanelContainer" parent="ChallengeLayer" unique_id=200160683]
 visible = false
 z_index = 10
-offset_left = 250.0
-offset_top = 185.0
-offset_right = 1030.0
-offset_bottom = 585.0
+offset_left = 210.0
+offset_top = 125.0
+offset_right = 1070.0
+offset_bottom = 595.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_jscy8")
 
 [node name="Content" type="VBoxContainer" parent="ChallengeLayer/Challenge" unique_id=1619514541]
@@ -166,7 +166,7 @@ theme_override_font_sizes/font_size = 20
 horizontal_alignment = 1
 
 [node name="TraceCanvas" type="Control" parent="ChallengeLayer/Challenge/Content" unique_id=687957559]
-custom_minimum_size = Vector2(0, 235)
+custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2

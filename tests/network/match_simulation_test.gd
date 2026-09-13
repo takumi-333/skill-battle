@@ -527,8 +527,8 @@ func _test_chanter_skill2_specification() -> void:
 
 	var trace_target := moving_simulation._make_trace_target("big")
 	assert(trace_target.size() == 121)
-	assert(is_equal_approx(trace_target[0].distance_to(Vector2(340, 118)), 10.0))
-	assert(is_equal_approx(trace_target[-1].distance_to(Vector2(340, 118)), 108.0))
+	assert(is_equal_approx(trace_target[0].distance_to(Vector2(430, 172)), 12.0))
+	assert(is_equal_approx(trace_target[-1].distance_to(Vector2(430, 172)), 132.0))
 
 
 func _test_chanter_meteor_shower() -> void:
@@ -543,7 +543,7 @@ func _test_chanter_meteor_shower() -> void:
 	simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
 	assert(target.size() > 121)
-	assert(target[0].is_equal_approx(Vector2(340, 10)))
+	assert(target[0].is_equal_approx(Vector2(430, 40)))
 	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
 	assert(simulation.state["meteor_impacts"].size() == 20)
 	assert(is_equal_approx(float(simulation.state["meteor_impacts"][0]["delay"]), 0.0))

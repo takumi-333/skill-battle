@@ -1571,40 +1571,44 @@ func apply_challenge_layout(character_id: String) -> void:
 		"blade":
 			challenge_base_position = Vector2(320.0, 465.0)
 			challenge_panel.size = Vector2(640.0, 240.0)
+			challenge_trace_canvas.custom_minimum_size = Vector2(0.0, 235.0)
 		"arithmetic":
 			challenge_base_position = Vector2(55.0, 410.0)
 			challenge_panel.size = Vector2(300.0, 290.0)
+			challenge_trace_canvas.custom_minimum_size = Vector2(0.0, 235.0)
 		_:
-			challenge_base_position = Vector2(250.0, 185.0)
-			challenge_panel.size = Vector2(780.0, 400.0)
+			# The larger tracing area is centered in the 1280x720 viewport.
+			challenge_base_position = Vector2(210.0, 125.0)
+			challenge_panel.size = Vector2(860.0, 470.0)
+			challenge_trace_canvas.custom_minimum_size = Vector2(0.0, 300.0)
 	challenge_panel.position = challenge_base_position
 
 
 func make_trace_target(is_big: bool, spiral_turns: float = 0.0) -> PackedVector2Array:
 	if not is_big and spiral_turns <= 0.0:
-		var circle_center := Vector2(340, 118)
+		var circle_center := Vector2(430, 172)
 		var circle_points := PackedVector2Array()
 		for index in range(49):
 			var angle := float(index) * TAU / 48.0
-			circle_points.append(circle_center + Vector2.from_angle(angle) * 92.0)
+			circle_points.append(circle_center + Vector2.from_angle(angle) * 112.0)
 		return circle_points
-	var center := Vector2(340, 118)
+	var center := Vector2(430, 172)
 	var points := PackedVector2Array()
 	var turn_count := spiral_turns if spiral_turns > 0.0 else 2.5
 	const POINT_COUNT := 121
 	for index in POINT_COUNT:
 		var progress := float(index) / float(POINT_COUNT - 1)
 		var angle := -PI / 2.0 + TAU * turn_count * progress
-		var radius := lerpf(10.0, 108.0, progress)
+		var radius := lerpf(12.0, 132.0, progress)
 		points.append(center + Vector2.from_angle(angle) * radius)
 	return points
 
 
 func make_lunar_eclipse_trace_target() -> PackedVector2Array:
-	var center := Vector2(340, 118)
+	var center := Vector2(430, 172)
 	var vertices := PackedVector2Array()
 	for index in 5:
-		vertices.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 5.0) * 108.0)
+		vertices.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 5.0) * 132.0)
 	var order := [0, 2, 4, 1, 3, 0]
 	var points := PackedVector2Array()
 	for segment_index in 5:
@@ -1617,20 +1621,20 @@ func make_lunar_eclipse_trace_target() -> PackedVector2Array:
 
 
 func make_meteor_trace_target() -> PackedVector2Array:
-	var center := Vector2(340, 118)
-	var top := center + Vector2(0, -108)
-	var right := center + Vector2(160, 0)
-	var bottom := center + Vector2(0, 108)
-	var left := center + Vector2(-160, 0)
+	var center := Vector2(430, 172)
+	var top := center + Vector2(0, -132)
+	var right := center + Vector2(195, 0)
+	var bottom := center + Vector2(0, 132)
+	var left := center + Vector2(-195, 0)
 	var points := PackedVector2Array()
 	append_trace_segment(points, top, right, 24)
 	append_trace_segment(points, right, left, 36)
 	append_trace_segment(points, left, bottom, 24)
 	append_trace_segment(points, bottom, top, 36)
-	var circle_start := center + Vector2(0, -72)
+	var circle_start := center + Vector2(0, -86)
 	append_trace_segment(points, top, circle_start, 12)
 	for index in 49:
-		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 72.0)
+		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 86.0)
 	return points
 
 
