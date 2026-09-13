@@ -9,6 +9,7 @@ func _init() -> void:
 	_test_arithmetician_interference_points()
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
+	_test_chanter_meteor_shower()
 	_test_chanter_skill1_candidate_and_skill3()
 	_test_chanter_skill3_event_driven_presentation()
 	_test_lunar_eclipse_rules()
@@ -143,6 +144,7 @@ func _test_display_name_loadout_validation() -> void:
 	assert(bool(simulation.state["players"][1]["has_display_name"]))
 	assert(not bool(simulation.state["players"][2]["has_display_name"]))
 	assert(MatchProtocol.valid_event(MatchProtocol.make_event(2, "loadout", {"character": 2, "big_skill": "typist_trident", "small_skill": 1, "skill3": 0, "display_name": "詠唱士"}), -1))
+	assert(MatchProtocol.valid_event(MatchProtocol.make_event(2, "loadout", {"character": 2, "big_skill": "chanter_meteor_shower", "small_skill": 0, "skill3": 0, "display_name": "流月雨"}), -1))
 	assert(simulation.handle_event(1, {"type": "loadout", "payload": {"character": 2, "big_skill": "typist_trident", "small_skill": 1, "skill3": 0, "display_name": "詠唱士"}}))
 	assert(str(simulation.state["players"][1]["small_skill_id"]) == "chanter_small_1")
 	assert(str(simulation.state["players"][1]["skill3_id"]) == "chanter_skill3_0")
@@ -467,6 +469,42 @@ func _test_chanter_skill2_specification() -> void:
 	assert(trace_target.size() == 121)
 	assert(is_equal_approx(trace_target[0].distance_to(Vector2(340, 118)), 10.0))
 	assert(is_equal_approx(trace_target[-1].distance_to(Vector2(340, 118)), 108.0))
+
+
+func _test_chanter_meteor_shower() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 2, "chanter_meteor_shower")
+	simulation.state["players"][1]["position"] = Vector2(200, 387)
+	simulation.state["players"][2]["position"] = Vector2(600, 387)
+	assert(str(simulation.state["players"][1]["big_skill_id"]) == "chanter_big_1")
+	assert(simulation.handle_event(1, {"type": "big_skill"}))
+	assert(str(simulation.state["challenges"][1]["skill"]) == "big_trace_meteor_shower")
+	assert(str(simulation.state["challenges"][1]["prompt"]) == "複合紋章をなぞってください")
+	simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var target: PackedVector2Array = simulation.state["challenges"][1]["target"]
+	assert(target.size() > 121)
+	assert(target[0].is_equal_approx(Vector2(340, 10)))
+	assert(simulation.handle_event(1, {"type": "challenge_trace", "payload": target}))
+	assert(simulation.state["meteor_impacts"].size() == 20)
+	assert(is_equal_approx(float(simulation.state["meteor_impacts"][0]["delay"]), 0.0))
+	assert(is_equal_approx(float(simulation.state["meteor_impacts"][1]["delay"]), 0.0))
+	assert(is_equal_approx(float(simulation.state["meteor_impacts"][2]["delay"]), 0.65))
+	assert(is_equal_approx(float(simulation.state["players"][1]["big_cooldown"]), 8.0))
+	for impact_index in simulation.state["meteor_impacts"].size():
+		assert(Vector2(simulation.state["meteor_impacts"][impact_index]["position"]).distance_to(Vector2(simulation.state["players"][1]["position"])) > 120.0)
+	var landing_impact: Dictionary = simulation.state["meteor_impacts"][0]
+	landing_impact["position"] = Vector2(simulation.state["players"][2]["position"])
+	simulation.state["meteor_impacts"][0] = landing_impact
+	var other_impact: Dictionary = simulation.state["meteor_impacts"][1]
+	other_impact["position"] = Vector2(100, 100)
+	simulation.state["meteor_impacts"][1] = other_impact
+	var snapshot := MatchProtocol.snapshot("meteor-shower", simulation.state, "match", "", 1)
+	assert(snapshot["meteor_impacts"].size() == 20)
+	simulation.step(1.99, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 100)
+	simulation.step(0.02, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(simulation.state["players"][2]["hp"]) == 88)
+	assert(int(simulation.state["players"][1]["hp"]) == 100)
 
 
 func _test_chanter_skill1_candidate_and_skill3() -> void:

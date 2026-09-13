@@ -43,7 +43,7 @@ static func valid_event(value: Variant, previous_sequence: int) -> bool:
 		"challenge_trace":
 			return payload is PackedVector2Array and (payload as PackedVector2Array).size() <= MAX_TRACE_POINTS
 		"loadout":
-			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii", "typist_golden_time_ii", "arithmetic_perfect_mapping"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
+			return payload is Dictionary and int(payload.get("character", -1)) in [0, 1, 2] and str(payload.get("big_skill", "")) in ["typist_trident", "typist_keycap_ii", "typist_golden_time_ii", "arithmetic_perfect_mapping", "chanter_meteor_shower"] and int(payload.get("small_skill", 0)) in [0, 1] and int(payload.get("skill3", 0)) in [0, 1] and valid_display_name(payload.get("display_name", ""))
 		_:
 			return payload == null
 
@@ -95,6 +95,7 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 		"magic_zones": state.get("magic_zones", []).duplicate(true),
 		"shockwaves": state.get("shockwaves", []).duplicate(true),
 		"trident_impacts": state.get("trident_impacts", []).duplicate(true),
+		"meteor_impacts": state.get("meteor_impacts", []).duplicate(true),
 		"decoys": state.get("decoys", []).duplicate(true),
 		"arithmetic_flashes": state.get("arithmetic_flashes", []).duplicate(true),
 		"arithmetic_point_collections": state.get("arithmetic_point_collections", []).duplicate(true),
@@ -128,7 +129,7 @@ static func interpolate_visual_state(previous: Dictionary, current: Dictionary, 
 	var value := current.duplicate(true)
 	var clamped_ratio := clampf(ratio, 0.0, 1.0)
 	value["players"] = _interpolate_players(previous.get("players", {}), current.get("players", {}), clamped_ratio)
-	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "perfect_mapping_effects", "hammer_spins", "lunar_eclipses"]:
+	for entity_key in ["skill_projectiles", "magic_zones", "shockwaves", "trident_impacts", "meteor_impacts", "decoys", "arithmetic_flashes", "arithmetic_point_collections", "perfect_mapping_effects", "hammer_spins", "lunar_eclipses"]:
 		value[entity_key] = _interpolate_entities(previous.get(entity_key, []), current.get(entity_key, []), clamped_ratio)
 	return value
 

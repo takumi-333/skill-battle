@@ -18,6 +18,7 @@ const ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN := 10.0
 const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
+const CHANTER_METEOR_SHOWER_COOLDOWN := 8.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const CHANTER_LUNAR_ECLIPSE_COOLDOWN := 10.0
 const SKILL3_COOLDOWN := 3.0
@@ -40,6 +41,15 @@ const CHANTER_ZONE_RADIUS := 80.0
 const CHANTER_TARGET_HITBOX_RADIUS_X := 20.0
 const CHANTER_TARGET_HITBOX_RADIUS_Y := 30.0
 const CHANTER_TARGET_HITBOX_OFFSET := Vector2(0.0, -12.0)
+const METEOR_PAIR_COUNT := 10
+const METEORS_PER_PAIR := 2
+const METEOR_PAIR_INTERVAL := 0.65
+const METEOR_FALL_DURATION := 2.0
+const METEOR_RIPPLE_DURATION := 0.75
+const METEOR_DAMAGE_RADIUS := 110.0
+const METEOR_OWNER_SAFE_RADIUS := 120.0
+const METEOR_TARGET_MIN_DISTANCE := 80.0
+const METEOR_TARGET_MAX_DISTANCE := 260.0
 const LUNAR_ECLIPSE_LASER_START_TIME := 2.0
 const LUNAR_ECLIPSE_LASER_DURATION := 2.5
 const LUNAR_ECLIPSE_DURATION := LUNAR_ECLIPSE_LASER_START_TIME + LUNAR_ECLIPSE_LASER_DURATION
@@ -74,6 +84,7 @@ var state: Dictionary
 var _challenge_nonce := 0
 var _next_projectile_id := 1
 var _next_trident_impact_id := 1
+var _next_meteor_impact_id := 1
 var _next_presentation_id := 1
 var _trace_evaluator := TraceEvaluator.new()
 var _pending_visual_presentations: Array[Dictionary] = []
@@ -95,6 +106,7 @@ func reset() -> void:
 		"magic_zones": [],
 		"shockwaves": [],
 		"trident_impacts": [],
+		"meteor_impacts": [],
 		"decoys": [],
 		"arithmetic_flashes": [],
 		"arithmetic_point_collections": [],
@@ -124,7 +136,7 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["hack_vision_time"] = 0.0
 	player["hack_vision_owner_id"] = 0
 	player["small_skill_id"] = "typist_golden_time_i" if character == 0 and small_skill_index == 1 else ("%s_small_%d" % [ids[character], small_skill_index if character == 2 and small_skill_index in [0, 1] else 0])
-	player["big_skill_id"] = big_skill if character == 0 or (character == 1 and big_skill == "arithmetic_perfect_mapping") else "%s_big_0" % ids[character]
+	player["big_skill_id"] = big_skill if character == 0 or (character == 1 and big_skill == "arithmetic_perfect_mapping") else ("chanter_big_1" if character == 2 and big_skill in ["chanter_meteor_shower", "chanter_big_1"] else "%s_big_0" % ids[character])
 	player["skill3_id"] = "typist_golden_time_iii" if character == 0 and skill3_index == 1 else ("typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else ""))))
 	player["typing_zone_time"] = 0.0
 	player["typing_zone_level"] = 0
@@ -172,6 +184,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	_update_zones(delta)
 	_update_shockwaves(delta)
 	_update_trident_impacts(delta)
+	_update_meteor_impacts(delta)
 	_update_hammer_spins(delta)
 	_update_lunar_eclipses(delta)
 	_update_decoys(delta)
@@ -324,7 +337,7 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 	else:
 		challenge_type = "tracing"
 		limit = 0.0
-		skill = "skill3_trace_lunar_eclipse" if tier == "skill3" and str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else ("skill3_trace" if tier == "skill3" else ("big_trace" if tier == "big" else "small_trace"))
+		skill = "skill3_trace_lunar_eclipse" if tier == "skill3" and str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else ("skill3_trace" if tier == "skill3" else ("big_trace_meteor_shower" if tier == "big" and str(player.get("big_skill_id", "")) == "chanter_big_1" else ("big_trace" if tier == "big" else "small_trace")))
 	if challenge_type == "typing" and _typing_zone_level(player) >= 2:
 		limit *= TYPIST_GOLDEN_TIME_SCORE_MULTIPLIER
 	var prompt := ""
@@ -339,8 +352,9 @@ func _make_challenge(slot: int, tier: String) -> Dictionary:
 		prompt += " = ?"
 	else:
 		var lunar_eclipse := str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" and tier == "skill3"
-		prompt = "星形をなぞってください" if tier == "big" or lunar_eclipse else ("渦巻きをなぞってください" if tier == "skill3" or str(player.get("small_skill_id", "")) == "chanter_small_1" else "円をなぞってください")
-		target = _make_lunar_eclipse_trace_target() if lunar_eclipse else _make_trace_target(tier, str(player.get("small_skill_id", "")))
+		var meteor_shower := tier == "big" and str(player.get("big_skill_id", "")) == "chanter_big_1"
+		prompt = "複合紋章をなぞってください" if meteor_shower else ("星形をなぞってください" if tier == "big" or lunar_eclipse else ("渦巻きをなぞってください" if tier == "skill3" or str(player.get("small_skill_id", "")) == "chanter_small_1" else "円をなぞってください"))
+		target = _make_meteor_trace_target() if meteor_shower else (_make_lunar_eclipse_trace_target() if lunar_eclipse else _make_trace_target(tier, str(player.get("small_skill_id", ""))))
 	return {"id": _challenge_nonce, "owner": slot, "tier": tier, "skill": skill, "type": challenge_type, "prompt": prompt, "answer": answer, "elapsed": 0.0, "limit": limit, "typed": "", "target": target, "trace": PackedVector2Array(), "miss_sequence": 0}
 
 func _receive_challenge_character(slot: int, character: String) -> bool:
@@ -442,7 +456,7 @@ func _end_challenge(owner: int, success: bool, score: int, message: String) -> v
 		if str(player.get("character_id", "")) == "arithmetic":
 			player["big_cooldown"] = ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else ARITHMETIC_BIG_COOLDOWN
 		else:
-			player["big_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "big_typing_golden_time_ii" else (7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN))
+			player["big_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "big_typing_golden_time_ii" else (7.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_COOLDOWN)))
 	else:
 		player["small_cooldown"] = _golden_time_cooldown(str(challenge.get("skill", ""))) if str(challenge.get("skill", "")) == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN)
 	if success:
@@ -509,6 +523,8 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 		elif tier == "small":
 			for index in 3:
 				_spawn_zone(owner, score, float(index) * 1.5, 2.0 if index < 2 else 2.5)
+		elif str(player.get("big_skill_id", "")) == "chanter_big_1":
+			_spawn_meteor_shower(owner, score)
 		else:
 			for cycle in _chanter_skill2_cycle_count(score):
 				for shot in 16:
@@ -528,7 +544,7 @@ func _perfect_mapping_copy_candidates(owner: int) -> Array[String]:
 	return candidates
 
 func _is_perfect_mapping_copyable(skill_id: String) -> bool:
-	return skill_id in ["blade_small_0", "typist_keycap_ii", "typist_trident", "typist_hammer_spin", "arithmetic_small_0", "arithmetic_big_0", "arithmetic_hack_vision", "chanter_small_0", "chanter_small_1", "chanter_big_0", "chanter_skill3_0", "chanter_lunar_eclipse"]
+	return skill_id in ["blade_small_0", "typist_keycap_ii", "typist_trident", "typist_hammer_spin", "arithmetic_small_0", "arithmetic_big_0", "arithmetic_hack_vision", "chanter_small_0", "chanter_small_1", "chanter_big_0", "chanter_big_1", "chanter_skill3_0", "chanter_lunar_eclipse"]
 
 func _spawn_perfect_mapping(owner: int, score: int) -> void:
 	var candidates := _perfect_mapping_copy_candidates(owner)
@@ -573,6 +589,8 @@ func _spawn_copied_skill(owner: int, score: int, copied_skill: String) -> void:
 				var shot_delay := float(cycle * 16 + shot) * 0.08
 				_spawn_projectile(owner, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
 				_spawn_projectile(owner, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
+	elif copied_skill == "chanter_big_1":
+		_spawn_meteor_shower(owner, score)
 	elif copied_skill == "chanter_skill3_0":
 		_spawn_chanter_skill3_volley(owner, score)
 	elif copied_skill == "chanter_lunar_eclipse":
@@ -618,6 +636,27 @@ func _spawn_chanter_skill3_volley(owner: int, score: int) -> void:
 			"facing": Vector2(player["facing"]),
 		},
 	})
+
+func _spawn_meteor_shower(owner: int, score: int) -> void:
+	var target := _other(owner)
+	if not state["players"].has(target):
+		return
+	for pair_index in METEOR_PAIR_COUNT:
+		for meteor_index in METEORS_PER_PAIR:
+			state["meteor_impacts"].append({"impact_id": _next_meteor_impact_id, "owner_id": owner, "position": _meteor_landing_position(owner, target), "delay": float(pair_index) * METEOR_PAIR_INTERVAL, "elapsed": 0.0, "fall_duration": METEOR_FALL_DURATION, "ripple_duration": METEOR_RIPPLE_DURATION, "damage": 4 + floori(float(score) * 0.08), "landed": false})
+			_next_meteor_impact_id += 1
+
+func _meteor_landing_position(owner: int, target: int) -> Vector2:
+	var target_position := Vector2(state["players"][target]["position"])
+	var owner_position := Vector2(state["players"][owner]["position"])
+	for _attempt in 12:
+		var candidate := _clamp_to_arena(target_position + Vector2.from_angle(randf() * TAU) * randf_range(METEOR_TARGET_MIN_DISTANCE, METEOR_TARGET_MAX_DISTANCE))
+		if candidate.distance_to(owner_position) > METEOR_OWNER_SAFE_RADIUS:
+			return candidate
+	var away_from_owner := (target_position - owner_position).normalized()
+	if away_from_owner.length_squared() <= 0.001:
+		away_from_owner = Vector2.RIGHT
+	return _clamp_to_arena(target_position + away_from_owner * METEOR_TARGET_MAX_DISTANCE)
 
 func _spawn_projectile(owner: int, score: int, big: bool, angle_offset: float, delay: float, chip: String = "", fixed_direction: bool = false, client_predicted: bool = false) -> void:
 	if state["skill_projectiles"].size() >= MAX_PROJECTILES:
@@ -958,6 +997,23 @@ func _update_trident_impacts(delta: float) -> void:
 		else:
 			state["trident_impacts"][index] = impact
 
+func _update_meteor_impacts(delta: float) -> void:
+	for index in range(state["meteor_impacts"].size() - 1, -1, -1):
+		var impact: Dictionary = state["meteor_impacts"][index]
+		var prior_delay := float(impact.get("delay", 0.0))
+		impact["delay"] = maxf(0.0, prior_delay - delta)
+		impact["elapsed"] = float(impact.get("elapsed", 0.0)) + (delta if prior_delay <= 0.0 else maxf(0.0, delta - prior_delay))
+		if not bool(impact.get("landed", false)) and float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)):
+			impact["landed"] = true
+			var owner := int(impact["owner_id"])
+			var target := _other(owner)
+			if state["players"].has(target) and _point_hits_player(Vector2(impact["position"]), target, METEOR_DAMAGE_RADIUS):
+				_apply_damage(target, int(impact["damage"]), "流月雨")
+		if float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)) + float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)):
+			state["meteor_impacts"].remove_at(index)
+		else:
+			state["meteor_impacts"][index] = impact
+
 func _release_trident(impact: Dictionary) -> void:
 	var owner := int(impact["owner_id"])
 	var score := int(impact["score"])
@@ -1176,6 +1232,28 @@ func _make_lunar_eclipse_trace_target() -> PackedVector2Array:
 			points.append(start.lerp(end, float(point_index) / 24.0))
 	points.append(vertices[order[-1]])
 	return points
+
+func _make_meteor_trace_target() -> PackedVector2Array:
+	var center := Vector2(340, 118)
+	var top := center + Vector2(0, -108)
+	var right := center + Vector2(160, 0)
+	var bottom := center + Vector2(0, 108)
+	var left := center + Vector2(-160, 0)
+	var points := PackedVector2Array()
+	_append_trace_segment(points, top, right, 24)
+	_append_trace_segment(points, right, left, 36)
+	_append_trace_segment(points, left, bottom, 24)
+	_append_trace_segment(points, bottom, top, 36)
+	var circle_start := center + Vector2(0, -72)
+	_append_trace_segment(points, top, circle_start, 12)
+	for index in 49:
+		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 72.0)
+	return points
+
+func _append_trace_segment(points: PackedVector2Array, start: Vector2, end: Vector2, point_count: int) -> void:
+	for index in point_count:
+		points.append(start.lerp(end, float(index) / float(point_count)))
+	points.append(end)
 
 func _hammer_duration(score: int) -> float:
 	if score <= 30:

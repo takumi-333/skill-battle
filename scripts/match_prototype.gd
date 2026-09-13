@@ -265,6 +265,7 @@ const TYPING_SKILL_COOLDOWN := 2.0
 const CHANTER_SKILL1B_COOLDOWN := 3.0
 const BIG_TYPING_SKILL_COOLDOWN := 5.0
 const CHANTER_SKILL2_COOLDOWN := 6.0
+const CHANTER_METEOR_SHOWER_COOLDOWN := 8.0
 const CHANTER_SKILL3_COOLDOWN := 8.0
 const CHANTER_LUNAR_ECLIPSE_COOLDOWN := 10.0
 const TYPIST_SKILL3_COOLDOWN := 3.0
@@ -326,6 +327,18 @@ const CHANTER_ZONE_RADIUS := 80.0
 const CHANTER_BEAM_VISIBLE_WIDTH_RATIO := 200.0 / 724.0
 const CHANTER_BEAM_FADE_DURATION := 0.28
 const CHANTER_TRACE_FAILURE_FEEDBACK_DURATION := 0.22
+const METEOR_PAIR_COUNT := 10
+const METEORS_PER_PAIR := 2
+const METEOR_PAIR_INTERVAL := 0.65
+const METEOR_FALL_DURATION := 2.0
+const METEOR_RIPPLE_DURATION := 0.75
+const METEOR_LANDING_DURATION := 0.16
+const METEOR_RADIUS := 48.0
+const METEOR_TEXTURE_DRAW_WIDTH := 128.0
+const METEOR_DAMAGE_RADIUS := 110.0
+const METEOR_OWNER_SAFE_RADIUS := 120.0
+const METEOR_TARGET_MIN_DISTANCE := 80.0
+const METEOR_TARGET_MAX_DISTANCE := 260.0
 const LUNAR_ECLIPSE_LASER_START_TIME := 2.0
 const LUNAR_ECLIPSE_LASER_DURATION := 2.5
 const LUNAR_ECLIPSE_DURATION := LUNAR_ECLIPSE_LASER_START_TIME + LUNAR_ECLIPSE_LASER_DURATION
@@ -381,6 +394,7 @@ const SKILL_ARITHMETICIAN_HACK_VISION: Texture2D = preload("res://assets/ui/skil
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
 const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_2.png")
 const SKILL_CHANTER_EVENING_MOON: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_1.png")
+const SKILL_CHANTER_METEOR_SHOWER: Texture2D = preload("res://assets/ui/skill_icons/chanter_meteor_shower.png")
 const SKILL_CHANTER_IZAYOI: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_3.png")
 const SKILL_CHANTER_LUNAR_ECLIPSE: Texture2D = preload("res://assets/ui/skill_icons/chanter_lunar_eclipse_tide.png")
 const SKILL_TYPIST_LOCK: Texture2D = preload("res://assets/ui/skill_icons/typist_lock.png")
@@ -394,6 +408,7 @@ const TYPIST_KEY_CAP_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects
 const CHANTER_AREA_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_area.png")
 const CHANTER_BEAM_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_beam.png")
 const CHANTER_BALL_TEXTURE: Texture2D = preload("res://assets/ui/skill_effects/chanter_ball.png")
+const FALLING_METEOR_TEXTURE: Texture2D = preload("res://assets/effects/falling_meteor.png")
 const TYPIST_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/typist_background.png")
 const ARITHMETICIAN_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/arithmetician_background.png")
 const CHANTER_ROOM_BACKGROUND: Texture2D = preload("res://assets/ui/character_room/chanter_background.png")
@@ -432,9 +447,11 @@ var skill_projectiles: Array[Dictionary] = []
 var key_cap_projectile_nodes: Dictionary = {}
 var next_projectile_id: int = 1
 var next_trident_impact_id: int = 1
+var next_meteor_impact_id: int = 1
 var magic_zones: Array[Dictionary] = []
 var shockwaves: Array[Dictionary] = []
 var trident_impacts: Array[Dictionary] = []
+var meteor_impacts: Array[Dictionary] = []
 var hammer_spins: Array[Dictionary] = []
 var lunar_eclipses: Array[Dictionary] = []
 var decoys: Array[Dictionary] = []
@@ -1150,6 +1167,7 @@ func _process(delta: float) -> void:
 	update_magic_zones(delta)
 	update_shockwaves(delta)
 	update_trident_impacts(delta)
+	update_meteor_impacts(delta)
 	update_decoys(delta)
 	update_arithmetic_point_collections(delta)
 	update_perfect_mapping_effects(delta)
@@ -1454,10 +1472,11 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 		challenge_definition = ChallengeDefinition.new()
 		challenge_definition.challenge_type = "tracing"
 		challenge_definition.no_time_limit = true
-		challenge_prompt = "星形をなぞってください" if is_big else ("渦巻きをなぞってください" if str(player.get("small_skill_id", "")) == "chanter_small_1" else "右向きの線をなぞってください")
+		var meteor_shower := is_big and selected_big_skill == "chanter_big_1"
+		challenge_prompt = "複合紋章をなぞってください" if meteor_shower else ("星形をなぞってください" if is_big else ("渦巻きをなぞってください" if str(player.get("small_skill_id", "")) == "chanter_small_1" else "右向きの線をなぞってください"))
 		challenge_answer = ""
-		challenge_skill = "big_trace" if is_big else "small_trace"
-		challenge_target_points = make_trace_target(is_big, 1.5 if not is_big and str(player.get("small_skill_id", "")) == "chanter_small_1" else 0.0)
+		challenge_skill = "big_trace_meteor_shower" if meteor_shower else ("big_trace" if is_big else "small_trace")
+		challenge_target_points = make_meteor_trace_target() if meteor_shower else make_trace_target(is_big, 1.5 if not is_big and str(player.get("small_skill_id", "")) == "chanter_small_1" else 0.0)
 	player["focused"] = true
 	player["challenge_elapsed"] = 0.0
 	players[owner_id] = player
@@ -1559,6 +1578,30 @@ func make_lunar_eclipse_trace_target() -> PackedVector2Array:
 			points.append(start.lerp(end, float(point_index) / 24.0))
 	points.append(vertices[order[-1]])
 	return points
+
+
+func make_meteor_trace_target() -> PackedVector2Array:
+	var center := Vector2(340, 118)
+	var top := center + Vector2(0, -108)
+	var right := center + Vector2(160, 0)
+	var bottom := center + Vector2(0, 108)
+	var left := center + Vector2(-160, 0)
+	var points := PackedVector2Array()
+	append_trace_segment(points, top, right, 24)
+	append_trace_segment(points, right, left, 36)
+	append_trace_segment(points, left, bottom, 24)
+	append_trace_segment(points, bottom, top, 36)
+	var circle_start := center + Vector2(0, -72)
+	append_trace_segment(points, top, circle_start, 12)
+	for index in 49:
+		points.append(center + Vector2.from_angle(-PI / 2.0 + TAU * float(index) / 48.0) * 72.0)
+	return points
+
+
+func append_trace_segment(points: PackedVector2Array, start: Vector2, end: Vector2, point_count: int) -> void:
+	for index in point_count:
+		points.append(start.lerp(end, float(index) / float(point_count)))
+	points.append(end)
 
 
 func update_trace_canvas() -> void:
@@ -1768,7 +1811,7 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	if is_skill3:
 		player["skill3_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
 	elif is_big:
-		player["big_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "big_typing_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)))
+		player["big_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "big_typing_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
 	else:
 		player["small_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
 	if success:
@@ -1899,6 +1942,8 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			spawn_lunar_eclipse(owner_id, score)
 		elif challenge_skill == "skill3_trace":
 			spawn_chanter_skill3_volley(owner_id, score)
+		elif is_big and str(owner.get("big_skill_id", "")) == "chanter_big_1":
+			spawn_meteor_shower(owner_id, score)
 		elif not is_big and str(owner.get("small_skill_id", "")) == "chanter_small_1":
 			spawn_chanter_clockwise_volley(owner_id, score)
 		elif not is_big:
@@ -1926,7 +1971,7 @@ func perfect_mapping_copy_candidates(owner_id: int) -> Array[String]:
 
 
 func is_perfect_mapping_copyable(skill_id: String) -> bool:
-	return skill_id in ["blade_small_0", "typist_keycap_ii", "typist_trident", "typist_hammer_spin", "arithmetic_small_0", "arithmetic_big_0", "arithmetic_hack_vision", "chanter_small_0", "chanter_small_1", "chanter_big_0", "chanter_skill3_0", "chanter_lunar_eclipse"]
+	return skill_id in ["blade_small_0", "typist_keycap_ii", "typist_trident", "typist_hammer_spin", "arithmetic_small_0", "arithmetic_big_0", "arithmetic_hack_vision", "chanter_small_0", "chanter_small_1", "chanter_big_0", "chanter_big_1", "chanter_skill3_0", "chanter_lunar_eclipse"]
 
 
 func spawn_perfect_mapping(owner_id: int, score: int) -> void:
@@ -1985,6 +2030,8 @@ func spawn_copied_skill(owner_id: int, score: int, copied_skill: String) -> void
 				var shot_delay := float(cycle * 16 + shot) * 0.08
 				spawn_projectile(owner_id, score, true, -PI / 2.0 + TAU * float(shot) / 16.0, shot_delay, "", true)
 				spawn_projectile(owner_id, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
+	elif copied_skill == "chanter_big_1":
+		spawn_meteor_shower(owner_id, score)
 	elif copied_skill == "chanter_skill3_0":
 		spawn_chanter_skill3_volley(owner_id, score)
 	elif copied_skill == "chanter_lunar_eclipse":
@@ -2016,6 +2063,39 @@ func spawn_chanter_skill3_volley(owner_id: int, score: int) -> void:
 			spawn_projectile(owner_id, score, true, PI / 2.0 + angle, shot_delay, "", true)
 			spawn_projectile(owner_id, score, true, -angle, shot_delay, "", true)
 			spawn_projectile(owner_id, score, true, PI - angle, shot_delay, "", true)
+
+
+func spawn_meteor_shower(owner_id: int, score: int) -> void:
+	var target_id := 2 if owner_id == 1 else 1
+	if not players.has(target_id):
+		return
+	for pair_index in range(METEOR_PAIR_COUNT):
+		for _meteor_index in range(METEORS_PER_PAIR):
+			meteor_impacts.append({
+				"impact_id": next_meteor_impact_id,
+				"owner_id": owner_id,
+				"position": meteor_landing_position(owner_id, target_id),
+				"delay": float(pair_index) * METEOR_PAIR_INTERVAL,
+				"elapsed": 0.0,
+				"fall_duration": METEOR_FALL_DURATION,
+				"ripple_duration": METEOR_RIPPLE_DURATION,
+				"damage": 4 + floori(float(score) * 0.08),
+				"landed": false,
+			})
+			next_meteor_impact_id += 1
+
+
+func meteor_landing_position(owner_id: int, target_id: int) -> Vector2:
+	var target_position := Vector2(players[target_id]["position"])
+	var owner_position := Vector2(players[owner_id]["position"])
+	for _attempt in range(12):
+		var candidate := clamp_to_arena(target_position + Vector2.from_angle(randf() * TAU) * randf_range(METEOR_TARGET_MIN_DISTANCE, METEOR_TARGET_MAX_DISTANCE))
+		if candidate.distance_to(owner_position) > METEOR_OWNER_SAFE_RADIUS:
+			return candidate
+	var away_from_owner := (target_position - owner_position).normalized()
+	if away_from_owner.length_squared() <= 0.001:
+		away_from_owner = Vector2.RIGHT
+	return clamp_to_arena(target_position + away_from_owner * METEOR_TARGET_MAX_DISTANCE)
 
 
 func arithmetic_decoy_count(score: int) -> int:
@@ -2198,6 +2278,24 @@ func update_trident_impacts(delta: float) -> void:
 			trident_impacts.remove_at(index)
 		else:
 			trident_impacts[index] = impact
+
+
+func update_meteor_impacts(delta: float) -> void:
+	for index in range(meteor_impacts.size() - 1, -1, -1):
+		var impact: Dictionary = meteor_impacts[index]
+		var prior_delay := float(impact.get("delay", 0.0))
+		impact["delay"] = maxf(0.0, prior_delay - delta)
+		impact["elapsed"] = float(impact.get("elapsed", 0.0)) + (delta if prior_delay <= 0.0 else maxf(0.0, delta - prior_delay))
+		if not bool(impact.get("landed", false)) and float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)):
+			impact["landed"] = true
+			var owner_id := int(impact["owner_id"])
+			var target_id := 2 if owner_id == 1 else 1
+			if players.has(target_id) and is_point_in_player_hitbox(Vector2(impact["position"]), Vector2(players[target_id]["position"]), METEOR_DAMAGE_RADIUS):
+				apply_damage(target_id, int(impact["damage"]), "流月雨")
+		if float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)) + float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)):
+			meteor_impacts.remove_at(index)
+		else:
+			meteor_impacts[index] = impact
 
 
 func spawn_trident_attack(impact: Dictionary) -> void:
@@ -3359,6 +3457,8 @@ func _send_dedicated_loadout(selection: int) -> void:
 		big_skill = "typist_golden_time_ii"
 	elif selection == 1 and int(character_skill_selection.get("arithmetician", [0, 0, 0])[1]) == 1:
 		big_skill = "arithmetic_perfect_mapping"
+	elif selection == 2 and int(character_skill_selection.get("chanter", [0, 0, 0])[1]) == 1:
+		big_skill = "chanter_meteor_shower"
 	var visual_id: String = ["typist", "arithmetician", "chanter"][selection]
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	dedicated_connection.send_event("loadout", {"character": selection, "big_skill": big_skill, "small_skill": int(selected_skills[0]), "skill3": int(selected_skills[2]), "display_name": user_display_name})
@@ -3632,6 +3732,7 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 		if slot in [1, 2]:
 			dedicated_connected_slots.append(slot)
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
+	meteor_impacts = MatchProtocol.dictionary_array(snapshot.get("meteor_impacts", []))
 	_update_dedicated_trident_screen_shake()
 	_apply_dedicated_challenges_snapshot(snapshot.get("challenges", {}))
 	if phase == "finish":
@@ -3693,6 +3794,7 @@ func _apply_dedicated_visual_snapshot(snapshot: Dictionary) -> void:
 	lunar_eclipses = MatchProtocol.dictionary_array(snapshot.get("lunar_eclipses", []))
 	shockwaves = MatchProtocol.dictionary_array(snapshot.get("shockwaves", []))
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
+	meteor_impacts = MatchProtocol.dictionary_array(snapshot.get("meteor_impacts", []))
 	decoys = MatchProtocol.dictionary_array(snapshot.get("decoys", []))
 	_apply_dedicated_arithmetic_flashes(MatchProtocol.dictionary_array(snapshot.get("arithmetic_flashes", [])))
 	arithmetic_point_collections = MatchProtocol.dictionary_array(snapshot.get("arithmetic_point_collections", []))
@@ -4190,7 +4292,9 @@ func return_to_home() -> void:
 	lunar_eclipses.clear()
 	shockwaves.clear()
 	trident_impacts.clear()
+	meteor_impacts.clear()
 	next_trident_impact_id = 1
+	next_meteor_impact_id = 1
 	dedicated_trident_release_states.clear()
 	screen_shake_time = 0.0
 	screen_shake_strength = 0.0
@@ -4389,7 +4493,7 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 		if skill_index == 0:
 			return ["月柱（げっちゅう）・昇華（しょうか）", "宵月（よいづき）", "未実装", "未実装", "未実装"]
 		if skill_index == 1:
-			return ["望月（もちづき）", "未実装", "未実装", "未実装", "未実装"]
+			return ["望月（もちづき）", "流月雨（りゅうげつう）", "未実装", "未実装", "未実装"]
 	return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 
 
@@ -4737,6 +4841,7 @@ func make_network_state(recipient_slot := 0) -> Dictionary:
 		"lunar_eclipses": lunar_eclipses,
 		"shockwaves": shockwaves,
 		"trident_impacts": trident_impacts,
+		"meteor_impacts": meteor_impacts,
 		"hammer_spins": hammer_spins,
 		"decoys": decoys,
 		"arithmetic_point_collections": arithmetic_point_collections,
@@ -4803,6 +4908,7 @@ func receive_network_state(state: Dictionary) -> void:
 		lunar_eclipses = MatchProtocol.dictionary_array(state.get("lunar_eclipses", []))
 		shockwaves = MatchProtocol.dictionary_array(state.get("shockwaves", []))
 		trident_impacts = MatchProtocol.dictionary_array(state.get("trident_impacts", []))
+		meteor_impacts = MatchProtocol.dictionary_array(state.get("meteor_impacts", []))
 		hammer_spins = MatchProtocol.dictionary_array(state.get("hammer_spins", []))
 		decoys = MatchProtocol.dictionary_array(state.get("decoys", []))
 		arithmetic_point_collections = MatchProtocol.dictionary_array(state.get("arithmetic_point_collections", []))
@@ -4822,7 +4928,7 @@ func receive_network_state(state: Dictionary) -> void:
 	challenge_answer = challenge_prompt if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ""
 	if challenge_skill.begins_with("skill3_typing"):
 		challenge_answer = challenge_prompt
-	challenge_target_points = make_lunar_eclipse_trace_target() if challenge_skill == "skill3_trace_lunar_eclipse" else (make_trace_target(challenge_skill.begins_with("big"), 3.5 if challenge_skill == "skill3_trace" else 0.0) if _is_trace_challenge() else PackedVector2Array())
+	challenge_target_points = make_meteor_trace_target() if challenge_skill == "big_trace_meteor_shower" else (make_lunar_eclipse_trace_target() if challenge_skill == "skill3_trace_lunar_eclipse" else (make_trace_target(challenge_skill.begins_with("big"), 3.5 if challenge_skill == "skill3_trace" else 0.0) if _is_trace_challenge() else PackedVector2Array()))
 	if phase == "finish":
 		finish_visual_snapshot_captured = true
 	update_client_ui_from_state()
@@ -4990,6 +5096,7 @@ func show_lobby() -> void:
 	magic_zones.clear()
 	shockwaves.clear()
 	trident_impacts.clear()
+	meteor_impacts.clear()
 	hammer_spins.clear()
 	lobby_home_button.visible = network_mode in ["host", "client"]
 	status_text = "キャラクターを選択してください。"
@@ -5200,7 +5307,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var visual_id: String = visual_ids[selection]
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
-	player["big_skill_id"] = "arithmetic_perfect_mapping" if visual_id == "arithmetician" and int(selected_skills[1]) == 1 else ("typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else ("typist_trident" if visual_id == "typist" else "%s_big_0" % ids[selection]))
+	player["big_skill_id"] = "arithmetic_perfect_mapping" if visual_id == "arithmetician" and int(selected_skills[1]) == 1 else ("typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else ("typist_trident" if visual_id == "typist" else ("chanter_big_1" if visual_id == "chanter" and int(selected_skills[1]) == 1 else "%s_big_0" % ids[selection])))
 	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("arithmetic_hack_vision" if visual_id == "arithmetician" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else ("chanter_lunar_eclipse" if visual_id == "chanter" and int(selected_skills[2]) == 1 else "")))
 	if visual_id == "typist":
 		player["small_skill_id"] = "typist_golden_time_i" if int(selected_skills[0]) == 1 else "blade_small_0"
@@ -5302,6 +5409,8 @@ func update_challenge_ui(elapsed: float) -> void:
 	var skill_name := get_typist_skill_display_name() if challenge_skill.begins_with("small_typing") or challenge_skill.begins_with("big_typing") else ("スキル２" if challenge_skill.begins_with("big") else "スキル１")
 	if challenge_skill == "skill3_typing":
 		skill_name = "黄金大旋槌（スキル3）"
+	elif challenge_skill == "big_trace_meteor_shower":
+		skill_name = "流月雨（りゅうげつう）"
 	elif challenge_skill == "skill3_arithmetic_hack_vision":
 		skill_name = "視覚妨害（ハックビジョン）"
 	elif challenge_skill == "skill3_trace_lunar_eclipse":
@@ -5395,7 +5504,7 @@ func update_hud() -> void:
 		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused or typing_zone_level(own_player) > 0)
 		var small_cooldown_duration := TYPIST_GOLDEN_TIME_I_COOLDOWN if str(own_player.get("small_skill_id", "")) == "typist_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
 		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
-		var big_cooldown_duration := TYPIST_GOLDEN_TIME_II_COOLDOWN if str(own_player.get("big_skill_id", "")) == "typist_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN)))
+		var big_cooldown_duration := TYPIST_GOLDEN_TIME_II_COOLDOWN if str(own_player.get("big_skill_id", "")) == "typist_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(own_player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
 		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
 		var skill3_cooldown_duration := TYPIST_GOLDEN_TIME_III_COOLDOWN if str(own_player.get("skill3_id", "")) == "typist_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(own_player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
 		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused)
@@ -5448,7 +5557,7 @@ func is_skill_candidate_implemented(visual_id: String, skill_index: int, candida
 	if visual_id == "typist":
 		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index < 3) or (skill_index == 2 and candidate_index < 2)
 	if visual_id == "chanter":
-		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index == 0) or (skill_index == 2 and candidate_index < 2)
+		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index < 2)
 	if visual_id == "arithmetician":
 		return (skill_index == 1 and candidate_index < 2) or (skill_index != 1 and candidate_index == 0)
 	return skill_index < 3 and candidate_index == 0
@@ -5490,7 +5599,7 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 		if skill_index == 0:
 			return SKILL_CHANTER_EVENING_MOON if selected_index == 1 else SKILL_CHANTER_CIRCLE_DESCENT
 		if skill_index == 1:
-			return SKILL_CHANTER_STELLAR_BARRAGE
+			return SKILL_CHANTER_METEOR_SHOWER if selected_index == 1 else SKILL_CHANTER_STELLAR_BARRAGE
 		return SKILL_CHANTER_IZAYOI if selected_index == 0 else (SKILL_CHANTER_LUNAR_ECLIPSE if selected_index == 1 else SKILL_CHANTER_LOCK)
 	return SKILL_EMPTY_ICON
 
@@ -5554,6 +5663,8 @@ func _draw() -> void:
 	for zone in magic_zones:
 		if bool(zone.get("spawned", false)):
 			draw_chanter_zone_area(zone)
+	for meteor in meteor_impacts:
+		draw_meteor_shadow(meteor)
 	for eclipse in lunar_eclipses:
 		draw_lunar_eclipse_black_hole(eclipse)
 	for spin in hammer_spins:
@@ -5564,6 +5675,8 @@ func _draw() -> void:
 		draw_perfect_mapping_effect(effect)
 	for impact in trident_impacts:
 		draw_trident_impact(impact)
+	for meteor in meteor_impacts:
+		draw_meteor_impact(meteor)
 	for projectile in skill_projectiles:
 		draw_skill_projectile(projectile)
 	for projectile in dedicated_chanter_skill3_visual_projectiles:
@@ -6124,6 +6237,44 @@ func draw_trident_impact(impact: Dictionary) -> void:
 		draw_line(crack_end, crack_end + crack_direction.rotated(0.55) * 12.0, Color(1.0, 0.84, 0.48, 0.52 * ripple_fade), 2.0, true)
 
 
+func draw_meteor_shadow(impact: Dictionary) -> void:
+	if float(impact.get("delay", 0.0)) > 0.0 or bool(impact.get("landed", false)):
+		return
+	var progress := clampf(float(impact.get("elapsed", 0.0)) / float(impact.get("fall_duration", METEOR_FALL_DURATION)), 0.0, 1.0)
+	var center := Vector2(impact.get("position", Vector2.ZERO))
+	var radius := lerpf(12.0, METEOR_RADIUS, progress)
+	draw_circle(center, radius, Color(0.01, 0.005, 0.02, lerpf(0.16, 0.48, progress)))
+	draw_arc(center, radius, 0.0, TAU, 36, Color(0.45, 0.20, 0.72, 0.24 * progress), 2.0, true)
+
+
+func draw_meteor_impact(impact: Dictionary) -> void:
+	if float(impact.get("delay", 0.0)) > 0.0:
+		return
+	var center := Vector2(impact.get("position", Vector2.ZERO))
+	var elapsed := float(impact.get("elapsed", 0.0))
+	var fall_duration := float(impact.get("fall_duration", METEOR_FALL_DURATION))
+	if elapsed < fall_duration:
+		var fall_progress := clampf(elapsed / fall_duration, 0.0, 1.0)
+		var fall_ease := fall_progress * fall_progress * (3.0 - 2.0 * fall_progress)
+		var size_scale := lerpf(0.72, 1.0, fall_ease)
+		var source_size := Vector2(FALLING_METEOR_TEXTURE.get_size())
+		var draw_size := source_size * (METEOR_TEXTURE_DRAW_WIDTH * size_scale / maxf(source_size.x, 1.0))
+		var meteor_position := center + Vector2(0.0, -lerpf(440.0, 0.0, fall_ease))
+		draw_texture_rect(FALLING_METEOR_TEXTURE, Rect2(meteor_position - draw_size * 0.5, draw_size), false)
+		return
+	var ripple_progress := clampf((elapsed - fall_duration) / float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)), 0.0, 1.0)
+	var ripple_alpha := 1.0 - ripple_progress
+	var ripple_radius := lerpf(20.0, 150.0, ripple_progress)
+	if elapsed - fall_duration <= METEOR_LANDING_DURATION:
+		var source_size := Vector2(FALLING_METEOR_TEXTURE.get_size())
+		var draw_size := source_size * (METEOR_TEXTURE_DRAW_WIDTH / maxf(source_size.x, 1.0))
+		var meteor_alpha := 1.0 - (elapsed - fall_duration) / METEOR_LANDING_DURATION
+		draw_texture_rect(FALLING_METEOR_TEXTURE, Rect2(center - draw_size * 0.5, draw_size), false, Color(1.0, 1.0, 1.0, meteor_alpha))
+	draw_circle(center, lerpf(28.0, 8.0, ripple_progress), Color(0.55, 0.18, 0.82, 0.24 * ripple_alpha))
+	draw_arc(center, ripple_radius, 0.0, TAU, 48, Color(0.86, 0.56, 1.0, 0.90 * ripple_alpha), 5.0, true)
+	draw_arc(center, ripple_radius * 0.58, 0.0, TAU, 40, Color(0.52, 0.20, 0.82, 0.56 * ripple_alpha), 3.0, true)
+
+
 func draw_decoy(decoy: Dictionary, alpha: float) -> void:
 	var visual_id := str(decoy.get("visual_id", "arithmetician"))
 	var facing: Vector2 = decoy.get("facing", Vector2.DOWN)
@@ -6340,7 +6491,7 @@ func evaluate_trace_result() -> Dictionary:
 func _trace_result_passes(result: Dictionary) -> bool:
 	if bool(result.get("ng", true)):
 		return false
-	return int(result.get("score", 0)) >= (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45)
+	return int(result.get("score", 0)) >= (45 if challenge_skill == "big_trace_meteor_shower" else (BIG_PASSING_SCORE if challenge_skill.begins_with("big") else 45))
 
 
 func distance_to_trace_target(point: Vector2) -> float:
