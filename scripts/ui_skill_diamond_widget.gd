@@ -12,6 +12,11 @@ const SPACE_KEY_TEXTURE: Texture2D = preload("res://assets/ui/skill_icons/skill_
 @export var preview_theme_color := Color("121F18")
 @export var preview_key := "1"
 @export_range(0.1, 1.0, 0.05) var icon_scale := 0.6
+@export var preview_equation_lock := false:
+	set(value):
+		preview_equation_lock = value
+		if Engine.is_editor_hint() and equation_lock_overlay != null:
+			equation_lock_overlay.visible = value
 
 var frame_texture: Texture2D
 var icon_rect: TextureRect
@@ -21,6 +26,7 @@ var key_label: Label
 var icon_material: ShaderMaterial
 var background_material: ShaderMaterial
 var badge_disc: BadgeDisc
+var equation_lock_overlay: TextureRect
 
 class BadgeDisc extends Control:
 	var center_ratio := Vector2(0.5, 0.78)
@@ -37,6 +43,7 @@ func _ready() -> void:
 
 func _apply_preview() -> void:
 	configure(preview_frame, preview_key, size, preview_icon, preview_hole_mask, Vector2(0.5, 0.401), Vector2(0.5, 0.775), 0.081, preview_theme_color)
+	set_equation_lock(preview_equation_lock)
 
 func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_texture: Texture2D, hole_mask: Texture2D, hole_center: Vector2, badge_center: Vector2, badge_radius: float, theme_color: Color) -> void:
 	frame_texture = texture
@@ -65,6 +72,13 @@ func set_cooldown(remaining: float, duration: float, is_unavailable: bool = fals
 	background_material.set_shader_parameter("progress", 0.0 if is_unavailable else progress)
 	background_material.set_shader_parameter("unavailable", is_unavailable)
 
+func set_equation_lock(locked: bool) -> void:
+	_build_layers()
+	if equation_lock_overlay == null:
+		push_warning("EquationDominationLockOverlay must be authored in the skill diamond scene.")
+		return
+	equation_lock_overlay.visible = locked
+
 func _build_layers() -> void:
 	if icon_rect != null:
 		return
@@ -74,6 +88,7 @@ func _build_layers() -> void:
 	background_rect = get_node_or_null("Background") as TextureRect
 	frame_rect = get_node_or_null("Frame") as TextureRect
 	key_label = get_node_or_null("KeyLabel") as Label
+	equation_lock_overlay = get_node_or_null("EquationDominationLockOverlay") as TextureRect
 	if icon_rect != null and background_rect != null and frame_rect != null and key_label != null:
 		background_material = _make_material(true, false)
 		background_rect.material = background_material

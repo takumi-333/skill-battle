@@ -271,6 +271,10 @@ const CHANTER_LUNAR_ECLIPSE_COOLDOWN := 10.0
 const TYPIST_SKILL3_COOLDOWN := 3.0
 const ARITHMETICIAN_HACK_VISION_COOLDOWN := 12.0
 const ARITHMETICIAN_HACK_VISION_CHALLENGE_LIMIT := 15.0
+const ARITHMETICIAN_EQUATION_DOMINATION_COOLDOWN := 18.0
+const ARITHMETICIAN_EQUATION_DOMINATION_CHALLENGE_LIMIT := 12.0
+const EQUATION_DOMINATION_FORCED_CHALLENGE_LIMIT := 8.0
+const EQUATION_DOMINATION_LOCK_DURATION := 5.0
 const TYPIST_SKILL3_CHALLENGE_LIMIT := 20.0
 const TYPIST_SKILL3_HAMMER_SPEED := TAU * 1.35
 const TYPIST_SKILL3_HAMMER_HIT_INTERVAL := 0.28
@@ -329,16 +333,19 @@ const CHANTER_BEAM_FADE_DURATION := 0.28
 const CHANTER_TRACE_FAILURE_FEEDBACK_DURATION := 0.22
 const METEOR_PAIR_COUNT := 10
 const METEORS_PER_PAIR := 2
-const METEOR_PAIR_INTERVAL := 0.65
-const METEOR_FALL_DURATION := 2.0
-const METEOR_RIPPLE_DURATION := 0.75
+const METEOR_PAIR_INTERVAL := 1.25
+const METEOR_FALL_DURATION := 3.5
+const METEOR_RIPPLE_DURATION := 1.5
 const METEOR_LANDING_DURATION := 0.16
 const METEOR_RADIUS := 48.0
+const METEOR_SHADOW_START_RADIUS := 0.0
+const METEOR_RIPPLE_START_RADIUS := 10.0
+const METEOR_RIPPLE_END_RADIUS := 100.0
 const METEOR_TEXTURE_DRAW_WIDTH := 128.0
-const METEOR_DAMAGE_RADIUS := 110.0
-const METEOR_OWNER_SAFE_RADIUS := 120.0
+const METEOR_TEXTURE_VISIBLE_BOTTOM_RATIO := 85.0 / 96.0
+const METEOR_DAMAGE_RADIUS := METEOR_RADIUS
 const METEOR_TARGET_MIN_DISTANCE := 80.0
-const METEOR_TARGET_MAX_DISTANCE := 260.0
+const METEOR_TARGET_MAX_DISTANCE := 640.0
 const LUNAR_ECLIPSE_LASER_START_TIME := 2.0
 const LUNAR_ECLIPSE_LASER_DURATION := 2.5
 const LUNAR_ECLIPSE_DURATION := LUNAR_ECLIPSE_LASER_START_TIME + LUNAR_ECLIPSE_LASER_DURATION
@@ -391,6 +398,8 @@ const SKILL_ARITHMETICIAN_INFINITE_SERIES: Texture2D = preload("res://assets/ui/
 const SKILL_ARITHMETICIAN_CONVERGENCE: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_convergence.png")
 const SKILL_ARITHMETICIAN_PERFECT_MAPPING: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_supreme_mapping.png")
 const SKILL_ARITHMETICIAN_HACK_VISION: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_hack_vision.png")
+const SKILL_ARITHMETICIAN_EQUATION_DOMINATION: Texture2D = preload("res://assets/ui/skill_icons/arithmetician_equation_domination.png")
+const EQUATION_DOMINATION_HEAD_LOCK: Texture2D = preload("res://assets/ui/status_icons/arithmetic_equation_domination_lock.png")
 const SKILL_CHANTER_CIRCLE_DESCENT: Texture2D = preload("res://assets/ui/skill_icons/chanter_circle_descent.png")
 const SKILL_CHANTER_STELLAR_BARRAGE: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_2.png")
 const SKILL_CHANTER_EVENING_MOON: Texture2D = preload("res://assets/ui/skill_icons/chanter_evening_moon_stage_1.png")
@@ -475,6 +484,7 @@ var p1_ready: bool = false
 var p2_ready: bool = false
 var challenge_owner: int = 0
 var challenge_skill: String = ""
+var equation_forced_source_id: int = 0
 var challenge_prompt: String = ""
 var challenge_answer: String = ""
 var challenge_definition: ChallengeDefinition
@@ -1077,6 +1087,12 @@ func create_challenge_definitions() -> void:
 	hack_vision_arithmetic.time_limit_seconds = ARITHMETICIAN_HACK_VISION_CHALLENGE_LIMIT
 	hack_vision_arithmetic.passing_score = BIG_PASSING_SCORE
 	challenge_definitions["arithmetic_skill3"] = hack_vision_arithmetic
+	var equation_domination_arithmetic: ChallengeDefinition = ChallengeDefinition.new()
+	equation_domination_arithmetic.challenge_type = "arithmetic"
+	equation_domination_arithmetic.candidates = arithmetic_equation_domination_candidates()
+	equation_domination_arithmetic.time_limit_seconds = ARITHMETICIAN_EQUATION_DOMINATION_CHALLENGE_LIMIT
+	equation_domination_arithmetic.passing_score = BIG_PASSING_SCORE
+	challenge_definitions["arithmetic_equation_domination"] = equation_domination_arithmetic
 
 
 func arithmetic_skill1_candidates() -> PackedStringArray:
@@ -1093,6 +1109,12 @@ func arithmetic_perfect_mapping_candidates() -> PackedStringArray:
 
 func arithmetic_skill3_candidates() -> PackedStringArray:
 	return PackedStringArray(["33 * 44 + 16 * 6 + 29", "28 * 47 + 15 * 7 + 34", "36 * 42 + 18 * 5 + 27", "31 * 46 + 14 * 8 + 25", "27 * 53 + 17 * 6 + 32", "34 * 41 + 19 * 5 + 28", "29 * 48 + 16 * 7 + 31", "37 * 39 + 13 * 8 + 26", "32 * 45 + 17 * 6 + 35"])
+
+func arithmetic_equation_domination_candidates() -> PackedStringArray:
+	return PackedStringArray(["27 + 6 * 18", "14 + 9 * 13 + 21", "29 + 30 + 31 + 32", "238 + 176", "26 + 6 * 19", "11 + 14 * 9 + 17", "18 + 20 + 22 + 24", "257 + 168"])
+
+func forced_arithmetic_candidates() -> PackedStringArray:
+	return PackedStringArray(["8 * 7 + 12", "9 * 6 + 17", "72 + 18 * 3", "11 * 8 - 9", "96 / 3 + 14", "15 * 5 + 16"])
 
 
 func _process(delta: float) -> void:
@@ -1242,7 +1264,8 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		direction = direction.normalized()
 		player["facing"] = direction
 		var skill3_speed_multiplier := typist_skill3_movement_multiplier(player_id)
-		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * skill3_speed_multiplier * arithmetic_movement_multiplier(player) * (float(player.get("buff_speed_multiplier", 1.0)) if float(player["buff_time"]) > 0.0 else 1.0)
+		var equation_lock_multiplier := 0.75 if float(player.get("equation_lock_time", 0.0)) > 0.0 else 1.0
+		var speed_multiplier: float = (FOCUS_SPEED_MULTIPLIER if bool(player["focused"]) else 1.0) * equation_lock_multiplier * skill3_speed_multiplier * arithmetic_movement_multiplier(player) * (float(player.get("buff_speed_multiplier", 1.0)) if float(player["buff_time"]) > 0.0 else 1.0)
 		var next_position := clamp_to_arena(player["position"] + direction * PLAYER_SPEED * speed_multiplier * delta)
 		if can_move_player_to(player_id, next_position):
 			player["position"] = next_position
@@ -1261,6 +1284,9 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 	if float(player["hack_vision_time"]) <= 0.0:
 		player["hack_vision_owner_id"] = 0
 		player["hack_vision_suppress_interference_points"] = false
+	player["equation_lock_time"] = maxf(0.0, float(player.get("equation_lock_time", 0.0)) - delta)
+	if float(player.get("equation_lock_time", 0.0)) <= 0.0:
+		player["equation_lock_owner_id"] = 0
 	player["buff_time"] = maxf(0.0, float(player["buff_time"]) - delta)
 	if float(player["buff_time"]) <= 0.0:
 		player["attack_damage_buff"] = 0
@@ -1274,7 +1300,7 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 
 func try_attack(player_id: int) -> void:
 	var player: Dictionary = players[player_id]
-	if bool(player["focused"]) or is_lunar_eclipse_active(player_id) or typing_zone_level(player) > 0:
+	if bool(player["focused"]) or (challenge_skill == "forced_arithmetic_equation_domination" and challenge_owner == player_id) or float(player.get("equation_lock_time", 0.0)) > 0.0 or is_lunar_eclipse_active(player_id) or typing_zone_level(player) > 0:
 		if player_id == 1:
 			status_text = "集中中は通常攻撃を使えない。Escで課題を中止できる。"
 		return
@@ -1339,10 +1365,11 @@ func start_skill3(owner_id: int) -> void:
 	if str(player.get("skill3_id", "")) == "typist_golden_time_iii":
 		start_typist_golden_time_challenge(owner_id, "blade_golden_time_iii", "skill3_typing_golden_time_iii")
 		return
-	if str(player.get("character_id", "")) == "arithmetic" and str(player.get("skill3_id", "")) == "arithmetic_hack_vision":
-		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_skill3"]
+	if str(player.get("character_id", "")) == "arithmetic" and str(player.get("skill3_id", "")) in ["arithmetic_hack_vision", "arithmetic_equation_domination"]:
+		var equation_domination := str(player.get("skill3_id", "")) == "arithmetic_equation_domination"
+		var arithmetic_definition: ChallengeDefinition = challenge_definitions["arithmetic_equation_domination" if equation_domination else "arithmetic_skill3"]
 		challenge_owner = owner_id
-		challenge_skill = "skill3_arithmetic_hack_vision"
+		challenge_skill = "skill3_arithmetic_equation_domination" if equation_domination else "skill3_arithmetic_hack_vision"
 		challenge_definition = arithmetic_definition
 		challenge_prompt = arithmetic_definition.candidates[randi_range(0, arithmetic_definition.candidates.size() - 1)] + " = ?"
 		challenge_answer = str(evaluate_arithmetic(challenge_prompt.trim_suffix(" = ?")))
@@ -1433,7 +1460,7 @@ func start_skill_challenge(owner_id: int, is_big: bool) -> void:
 	if challenge_owner != 0:
 		return
 	var player: Dictionary = players[owner_id]
-	if bool(player["focused"]) or is_lunar_eclipse_active(owner_id):
+	if bool(player["focused"]) or float(player.get("equation_lock_time", 0.0)) > 0.0 or is_lunar_eclipse_active(owner_id):
 		return
 	var cooldown_key: String = "big_cooldown" if is_big else "small_cooldown"
 	if float(player[cooldown_key]) > 0.0:
@@ -1525,10 +1552,16 @@ func start_typist_golden_time_challenge(owner_id: int, definition_key: String, s
 
 func evaluate_arithmetic(expression: String) -> int:
 	var total := 0
-	for add_term in expression.split("+"):
+	var normalized := expression.replace(" ", "").replace("-", "+-")
+	for add_term in normalized.split("+"):
 		var product := 1
-		for factor in add_term.strip_edges().split("*"):
-			product *= int(factor.strip_edges())
+		var operation := "*"
+		for factor in add_term.strip_edges().replace("/", " / ").replace("*", " * ").split(" ", false):
+			if factor in ["*", "/"]:
+				operation = factor
+			else:
+				var value := int(factor)
+				product = product * value if operation == "*" else product / value
 		total += product
 	return total
 
@@ -1625,7 +1658,7 @@ func update_typing_challenge(delta: float) -> void:
 	if challenge_owner == 0:
 		return
 	var player: Dictionary = players[challenge_owner]
-	if not bool(player["focused"]):
+	if not bool(player["focused"]) and challenge_skill != "forced_arithmetic_equation_domination":
 		return
 	var elapsed: float = float(player["challenge_elapsed"]) + delta
 	player["challenge_elapsed"] = elapsed
@@ -1684,7 +1717,7 @@ func _process_arithmetic_character(character: String) -> void:
 			rpc_id(1, "receive_remote_challenge_input", character)
 		return
 	var player: Dictionary = players[challenge_owner]
-	if not bool(player["focused"]):
+	if not bool(player["focused"]) and challenge_skill != "forced_arithmetic_equation_domination":
 		return
 	challenge_typed_characters += character
 	if challenge_owner == local_player_id:
@@ -1706,7 +1739,7 @@ func _submit_arithmetic_answer(submitted_text: String) -> void:
 			typing_input.text = ""
 		return
 	var player: Dictionary = players[challenge_owner]
-	if not bool(player["focused"]):
+	if not bool(player["focused"]) and challenge_skill != "forced_arithmetic_equation_domination":
 		return
 	if submitted_text.strip_edges() == challenge_answer:
 		var elapsed: float = float(player["challenge_elapsed"])
@@ -1803,16 +1836,19 @@ func get_challenge_time_limit() -> float:
 func end_active_challenge(success: bool, score: int, failure_message: String) -> void:
 	if challenge_owner == 0:
 		return
+	if challenge_skill == "forced_arithmetic_equation_domination":
+		finish_forced_equation_challenge(success, failure_message)
+		return
 	var owner_id: int = challenge_owner
 	var player: Dictionary = players[owner_id]
 	var is_big: bool = challenge_skill.begins_with("big")
-	var is_skill3: bool = challenge_skill.begins_with("skill3_typing") or challenge_skill == "skill3_trace" or challenge_skill == "skill3_trace_lunar_eclipse" or challenge_skill == "skill3_arithmetic_hack_vision"
+	var is_skill3: bool = challenge_skill.begins_with("skill3_typing") or challenge_skill == "skill3_trace" or challenge_skill == "skill3_trace_lunar_eclipse" or challenge_skill in ["skill3_arithmetic_hack_vision", "skill3_arithmetic_equation_domination"]
 	var challenge_time: float = float(player["challenge_elapsed"])
 	player["focused"] = false
 	player["challenge_elapsed"] = 0.0
 	player["challenge_total_time"] = float(player["challenge_total_time"]) + challenge_time
 	if is_skill3:
-		player["skill3_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
+		player["skill3_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_EQUATION_DOMINATION_COOLDOWN if challenge_skill == "skill3_arithmetic_equation_domination" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN))))
 	elif is_big:
 		player["big_cooldown"] = golden_time_cooldown(challenge_skill) if challenge_skill == "big_typing_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
 	else:
@@ -1842,6 +1878,51 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	challenge_target_points.clear()
 	update_trace_canvas()
 
+
+func start_forced_equation_challenge(source_id: int) -> void:
+	if challenge_owner != 0:
+		return
+	var target_id := 2 if source_id == 1 else 1
+	var target: Dictionary = players[target_id]
+	if float(target.get("equation_lock_time", 0.0)) > 0.0:
+		return
+	equation_forced_source_id = source_id
+	challenge_owner = target_id
+	challenge_skill = "forced_arithmetic_equation_domination"
+	challenge_definition = ChallengeDefinition.new()
+	challenge_definition.challenge_type = "arithmetic"
+	challenge_definition.time_limit_seconds = EQUATION_DOMINATION_FORCED_CHALLENGE_LIMIT
+	challenge_prompt = forced_arithmetic_candidates()[randi_range(0, forced_arithmetic_candidates().size() - 1)] + " = ?"
+	challenge_answer = str(evaluate_arithmetic(challenge_prompt.trim_suffix(" = ?")))
+	challenge_typed_characters = ""
+	challenge_trace_points.clear()
+	target["focused"] = false
+	target["challenge_elapsed"] = 0.0
+	players[target_id] = target
+	set_challenge_overlay_visible(network_mode != "host" or target_id == 1)
+	typing_input.visible = true
+	challenge_trace_canvas.visible = false
+	typing_input.text = ""
+	if network_mode != "host" or target_id == 1:
+		typing_input.grab_focus()
+	apply_challenge_layout("arithmetic")
+	status_text = "%sへ方程式支配を仕掛けた。" % target["name"]
+	update_challenge_ui(0.0)
+
+func finish_forced_equation_challenge(success: bool, failure_message: String) -> void:
+	var target_id := challenge_owner
+	var target: Dictionary = players[target_id]
+	if success:
+		status_text = "%sは方程式支配を解いた。" % target["name"]
+	else:
+		target["equation_lock_time"] = EQUATION_DOMINATION_LOCK_DURATION
+		target["equation_lock_owner_id"] = equation_forced_source_id
+		players[target_id] = target
+		if players.has(equation_forced_source_id):
+			arithmetic_point_collections.append({"owner_id": equation_forced_source_id, "position": Vector2(target["position"]), "amount": 0.5, "wait_time": 0.0})
+		status_text = failure_message if not failure_message.is_empty() else "%sは方程式支配に失敗し、行動を封鎖された。" % target["name"]
+	equation_forced_source_id = 0
+	clear_active_challenge_state()
 
 func append_trace_result_to_status() -> void:
 	if last_trace_result.is_empty():
@@ -1909,7 +1990,9 @@ func spawn_character_skill(owner_id: int, score: int, is_big: bool) -> void:
 			})
 			next_trident_impact_id += 1
 	elif character_id == "arithmetic":
-		if challenge_skill == "skill3_arithmetic_hack_vision":
+		if challenge_skill == "skill3_arithmetic_equation_domination":
+			call_deferred("start_forced_equation_challenge", owner_id)
+		elif challenge_skill == "skill3_arithmetic_hack_vision":
 			spawn_hack_vision_projectile(owner_id, score)
 		elif challenge_skill == "big_arithmetic_perfect_mapping":
 			spawn_perfect_mapping(owner_id, score)
@@ -2090,15 +2173,19 @@ func spawn_meteor_shower(owner_id: int, score: int) -> void:
 
 func meteor_landing_position(owner_id: int, target_id: int) -> Vector2:
 	var target_position := Vector2(players[target_id]["position"])
-	var owner_position := Vector2(players[owner_id]["position"])
-	for _attempt in range(12):
-		var candidate := clamp_to_arena(target_position + Vector2.from_angle(randf() * TAU) * randf_range(METEOR_TARGET_MIN_DISTANCE, METEOR_TARGET_MAX_DISTANCE))
-		if candidate.distance_to(owner_position) > METEOR_OWNER_SAFE_RADIUS:
+	for _attempt in range(48):
+		var candidate := target_position + Vector2.from_angle(randf() * TAU) * randf_range(METEOR_TARGET_MIN_DISTANCE, METEOR_TARGET_MAX_DISTANCE)
+		if is_meteor_landing_position_valid(candidate, target_position):
 			return candidate
-	var away_from_owner := (target_position - owner_position).normalized()
-	if away_from_owner.length_squared() <= 0.001:
-		away_from_owner = Vector2.RIGHT
-	return clamp_to_arena(target_position + away_from_owner * METEOR_TARGET_MAX_DISTANCE)
+	var toward_arena_center := (ARENA.get_center() - target_position).normalized()
+	if toward_arena_center.length_squared() <= 0.001:
+		toward_arena_center = Vector2.RIGHT
+	return target_position + toward_arena_center * METEOR_TARGET_MIN_DISTANCE
+
+
+func is_meteor_landing_position_valid(candidate: Vector2, target_position: Vector2) -> bool:
+	var target_distance := candidate.distance_to(target_position)
+	return ARENA.has_point(candidate) and target_distance >= METEOR_TARGET_MIN_DISTANCE and target_distance <= METEOR_TARGET_MAX_DISTANCE
 
 
 func arithmetic_decoy_count(score: int) -> int:
@@ -2293,7 +2380,7 @@ func update_meteor_impacts(delta: float) -> void:
 			impact["landed"] = true
 			var owner_id := int(impact["owner_id"])
 			var target_id := 2 if owner_id == 1 else 1
-			if players.has(target_id) and is_point_in_player_hitbox(Vector2(impact["position"]), Vector2(players[target_id]["position"]), METEOR_DAMAGE_RADIUS):
+			if players.has(target_id) and is_player_in_meteor_shadow(Vector2(impact["position"]), Vector2(players[target_id]["position"])):
 				apply_damage(target_id, int(impact["damage"]), "流月雨")
 		if float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)) + float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)):
 			meteor_impacts.remove_at(index)
@@ -2723,6 +2810,10 @@ func is_point_in_player_hitbox(point: Vector2, player_position: Vector2, padding
 	var radius_y: float = PLAYER_HITBOX_RADIUS_Y + padding
 	var normalized_point := point - center
 	return (normalized_point.x * normalized_point.x) / (radius_x * radius_x) + (normalized_point.y * normalized_point.y) / (radius_y * radius_y) <= 1.0
+
+
+func is_player_in_meteor_shadow(shadow_center: Vector2, player_position: Vector2) -> bool:
+	return shadow_center.distance_to(player_position) <= METEOR_DAMAGE_RADIUS
 
 
 func is_typist_hammer_shockwave_projectile_hitting_player(projectile: Dictionary, player_position: Vector2) -> bool:
@@ -3987,7 +4078,7 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 	set_challenge_overlay_visible(true)
 	typing_input.visible = dedicated_challenge_type != "tracing"
 	challenge_trace_canvas.visible = dedicated_challenge_type == "tracing"
-	apply_challenge_layout(str(players[local_player_id].get("character_id", "blade")))
+	apply_challenge_layout("arithmetic" if challenge_skill == "forced_arithmetic_equation_domination" else str(players[local_player_id].get("character_id", "blade")))
 	if dedicated_challenge_type == "typing":
 		typing_input.text = challenge_typed_characters
 		typing_input.caret_column = typing_input.text.length()
@@ -4503,12 +4594,12 @@ func skill_candidate_names(visual_id: String, skill_index: int) -> Array:
 		if visual_id == "typist":
 			return ["黄金大旋槌（おうごんだいせんつい）", "黄金時間III（おうごんじかん）", "未実装", "未実装", "未実装"]
 		if visual_id == "arithmetician":
-			return ["視覚妨害（ハックビジョン）", "未実装", "未実装", "未実装", "未実装"]
+			return ["視覚妨害（ハックビジョン）", "方程式支配（エクエーション・ドミニオン）", "未実装", "未実装", "未実装"]
 		if visual_id == "chanter":
 			return ["十六夜（いざよい）", "月蝕（げっしょく）:潮汐（ちょうせき）", "未実装", "未実装", "未実装"]
 		return ["未実装", "未実装", "未実装", "未実装", "未実装"]
 	if visual_id == "arithmetician":
-		return ["無限級数（インフィニティ・フラクタル）", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else (["最適解への収束", "完全写像（パーフェクト・マッピング）", "未実装", "未実装", "未実装"] if skill_index == 1 else ["視覚妨害（ハックビジョン）", "未実装", "未実装", "未実装", "未実装"])
+		return ["無限級数（インフィニティ・フラクタル）", "未実装", "未実装", "未実装", "未実装"] if skill_index == 0 else (["最適解への収束", "完全写像（パーフェクト・マッピング）", "未実装", "未実装", "未実装"] if skill_index == 1 else ["視覚妨害（ハックビジョン）", "方程式支配（エクエーション・ドミニオン）", "未実装", "未実装", "未実装"])
 	if visual_id == "chanter":
 		if skill_index == 0:
 			return ["月柱（げっちゅう）・昇華（しょうか）", "宵月（よいづき）", "未実装", "未実装", "未実装"]
@@ -5328,7 +5419,7 @@ func configure_player(player_id: int, selection: int) -> void:
 	var selected_skills: Array = character_skill_selection.get(visual_id, [0, 0, 0])
 	player["small_skill_id"] = "%s_small_%d" % [ids[selection], int(selected_skills[0])]
 	player["big_skill_id"] = "arithmetic_perfect_mapping" if visual_id == "arithmetician" and int(selected_skills[1]) == 1 else ("typist_keycap_ii" if visual_id == "typist" and int(selected_skills[1]) == 1 else ("typist_trident" if visual_id == "typist" else ("chanter_big_1" if visual_id == "chanter" and int(selected_skills[1]) == 1 else "%s_big_0" % ids[selection])))
-	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("arithmetic_hack_vision" if visual_id == "arithmetician" and int(selected_skills[2]) == 0 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else ("chanter_lunar_eclipse" if visual_id == "chanter" and int(selected_skills[2]) == 1 else "")))
+	player["skill3_id"] = "typist_hammer_spin" if visual_id == "typist" and int(selected_skills[2]) == 0 else ("arithmetic_hack_vision" if visual_id == "arithmetician" and int(selected_skills[2]) == 0 else ("arithmetic_equation_domination" if visual_id == "arithmetician" and int(selected_skills[2]) == 1 else ("chanter_skill3_0" if visual_id == "chanter" and int(selected_skills[2]) == 0 else ("chanter_lunar_eclipse" if visual_id == "chanter" and int(selected_skills[2]) == 1 else ""))))
 	if visual_id == "typist":
 		player["small_skill_id"] = "typist_golden_time_i" if int(selected_skills[0]) == 1 else "blade_small_0"
 		player["big_skill_id"] = "typist_golden_time_ii" if int(selected_skills[1]) == 2 else ("typist_keycap_ii" if int(selected_skills[1]) == 1 else "typist_trident")
@@ -5353,6 +5444,8 @@ func configure_player(player_id: int, selection: int) -> void:
 	player["hack_vision_time"] = 0.0
 	player["hack_vision_owner_id"] = 0
 	player["hack_vision_suppress_interference_points"] = false
+	player["equation_lock_time"] = 0.0
+	player["equation_lock_owner_id"] = 0
 	player["small_cooldown"] = 0.0
 	player["big_cooldown"] = 0.0
 	player["skill3_cooldown"] = 0.0
@@ -5433,6 +5526,10 @@ func update_challenge_ui(elapsed: float) -> void:
 		skill_name = "流月雨（りゅうげつう）"
 	elif challenge_skill == "skill3_arithmetic_hack_vision":
 		skill_name = "視覚妨害（ハックビジョン）"
+	elif challenge_skill == "skill3_arithmetic_equation_domination":
+		skill_name = "方程式支配（エクエーション・ドミニオン）"
+	elif challenge_skill == "forced_arithmetic_equation_domination":
+		skill_name = "強制計算課題"
 	elif challenge_skill == "skill3_trace_lunar_eclipse":
 		skill_name = "月蝕（げっしょく）:潮汐（ちょうせき）"
 	elif challenge_skill == "skill3_trace":
@@ -5521,13 +5618,16 @@ func update_hud() -> void:
 		opponent_arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(opponent_multiplier, 1.0) else "f(x) = %.1fx" % opponent_multiplier
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
-		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused or typing_zone_level(own_player) > 0)
+		var equation_locked := float(own_player.get("equation_lock_time", 0.0)) > 0.0
+		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused or equation_locked or typing_zone_level(own_player) > 0)
 		var small_cooldown_duration := TYPIST_GOLDEN_TIME_I_COOLDOWN if str(own_player.get("small_skill_id", "")) == "typist_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
-		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused)
+		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused or equation_locked)
 		var big_cooldown_duration := TYPIST_GOLDEN_TIME_II_COOLDOWN if str(own_player.get("big_skill_id", "")) == "typist_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(own_player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
-		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused)
+		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused or equation_locked)
 		var skill3_cooldown_duration := TYPIST_GOLDEN_TIME_III_COOLDOWN if str(own_player.get("skill3_id", "")) == "typist_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(own_player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
-		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused)
+		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused or equation_locked)
+		for widget in skill_widgets:
+			widget.call("set_equation_lock", equation_locked)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
 	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
 
@@ -5579,7 +5679,7 @@ func is_skill_candidate_implemented(visual_id: String, skill_index: int, candida
 	if visual_id == "chanter":
 		return (skill_index == 0 and candidate_index < 2) or (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index < 2)
 	if visual_id == "arithmetician":
-		return (skill_index == 1 and candidate_index < 2) or (skill_index != 1 and candidate_index == 0)
+		return (skill_index == 1 and candidate_index < 2) or (skill_index == 2 and candidate_index < 2) or (skill_index == 0 and candidate_index == 0)
 	return skill_index < 3 and candidate_index == 0
 
 
@@ -5614,7 +5714,7 @@ func get_skill_icon(visual_id: String, skill_index: int, selected_index: int) ->
 			return SKILL_ARITHMETICIAN_INFINITE_SERIES
 		if skill_index == 1:
 			return SKILL_ARITHMETICIAN_PERFECT_MAPPING if selected_index == 1 else SKILL_ARITHMETICIAN_CONVERGENCE
-		return SKILL_ARITHMETICIAN_HACK_VISION
+		return SKILL_ARITHMETICIAN_EQUATION_DOMINATION if selected_index == 1 else SKILL_ARITHMETICIAN_HACK_VISION
 	if visual_id == "chanter":
 		if skill_index == 0:
 			return SKILL_CHANTER_EVENING_MOON if selected_index == 1 else SKILL_CHANTER_CIRCLE_DESCENT
@@ -6103,6 +6203,8 @@ func draw_player(player_id: int, player: Dictionary) -> void:
 		sprite_tint.a = 0.35
 	draw_texture_rect_region(character_texture, sprite_rect, source_rect, sprite_tint)
 	draw_hack_vision_status_noise(position_value, float(player.get("hack_vision_time", 0.0)))
+	if float(player.get("equation_lock_time", 0.0)) > 0.0:
+		draw_texture_rect(EQUATION_DOMINATION_HEAD_LOCK, Rect2(position_value + Vector2(-18.0, -122.0), Vector2(36.0, 36.0)), false)
 	var player_name := "あなた" if player_id == get_hud_player_id() else match_player_display_name(player_id)
 	draw_string(DOT_GOTHIC_FONT, position_value + Vector2(-58.0, -91.0), player_name, HORIZONTAL_ALIGNMENT_CENTER, 116.0, 18, Color("f1f5ff"))
 	if player["attack_time"] > 0.0:
@@ -6267,7 +6369,7 @@ func draw_meteor_shadow(impact: Dictionary) -> void:
 		return
 	var progress := clampf(float(impact.get("elapsed", 0.0)) / float(impact.get("fall_duration", METEOR_FALL_DURATION)), 0.0, 1.0)
 	var center := Vector2(impact.get("position", Vector2.ZERO))
-	var radius := lerpf(12.0, METEOR_RADIUS, progress)
+	var radius := lerpf(METEOR_SHADOW_START_RADIUS, METEOR_RADIUS, progress)
 	draw_circle(center, radius, Color(0.01, 0.005, 0.02, lerpf(0.16, 0.48, progress)))
 	draw_arc(center, radius, 0.0, TAU, 36, Color(0.45, 0.20, 0.72, 0.24 * progress), 2.0, true)
 
@@ -6284,20 +6386,24 @@ func draw_meteor_impact(impact: Dictionary) -> void:
 		var size_scale := lerpf(0.72, 1.0, fall_ease)
 		var source_size := Vector2(FALLING_METEOR_TEXTURE.get_size())
 		var draw_size := source_size * (METEOR_TEXTURE_DRAW_WIDTH * size_scale / maxf(source_size.x, 1.0))
-		var meteor_position := center + Vector2(0.0, -lerpf(440.0, 0.0, fall_ease))
-		draw_texture_rect(FALLING_METEOR_TEXTURE, Rect2(meteor_position - draw_size * 0.5, draw_size), false)
+		var meteor_landing_point := center + Vector2(0.0, -lerpf(440.0, 0.0, fall_ease))
+		draw_texture_rect(FALLING_METEOR_TEXTURE, meteor_texture_rect(meteor_landing_point, draw_size), false)
 		return
 	var ripple_progress := clampf((elapsed - fall_duration) / float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)), 0.0, 1.0)
 	var ripple_alpha := 1.0 - ripple_progress
-	var ripple_radius := lerpf(20.0, 150.0, ripple_progress)
+	var ripple_radius := lerpf(METEOR_RIPPLE_START_RADIUS, METEOR_RIPPLE_END_RADIUS, ripple_progress)
 	if elapsed - fall_duration <= METEOR_LANDING_DURATION:
 		var source_size := Vector2(FALLING_METEOR_TEXTURE.get_size())
 		var draw_size := source_size * (METEOR_TEXTURE_DRAW_WIDTH / maxf(source_size.x, 1.0))
 		var meteor_alpha := 1.0 - (elapsed - fall_duration) / METEOR_LANDING_DURATION
-		draw_texture_rect(FALLING_METEOR_TEXTURE, Rect2(center - draw_size * 0.5, draw_size), false, Color(1.0, 1.0, 1.0, meteor_alpha))
-	draw_circle(center, lerpf(28.0, 8.0, ripple_progress), Color(0.55, 0.18, 0.82, 0.24 * ripple_alpha))
+		draw_texture_rect(FALLING_METEOR_TEXTURE, meteor_texture_rect(center, draw_size), false, Color(1.0, 1.0, 1.0, meteor_alpha))
+	draw_circle(center, ripple_radius, Color(0.55, 0.18, 0.82, 0.24 * ripple_alpha))
 	draw_arc(center, ripple_radius, 0.0, TAU, 48, Color(0.86, 0.56, 1.0, 0.90 * ripple_alpha), 5.0, true)
 	draw_arc(center, ripple_radius * 0.58, 0.0, TAU, 40, Color(0.52, 0.20, 0.82, 0.56 * ripple_alpha), 3.0, true)
+
+
+func meteor_texture_rect(landing_point: Vector2, draw_size: Vector2) -> Rect2:
+	return Rect2(landing_point - Vector2(draw_size.x * 0.5, draw_size.y * METEOR_TEXTURE_VISIBLE_BOTTOM_RATIO), draw_size)
 
 
 func draw_decoy(decoy: Dictionary, alpha: float) -> void:

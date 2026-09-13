@@ -27,6 +27,7 @@ func _run() -> void:
 	_test_dedicated_trace_persistence(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
 	_test_dedicated_chanter_skill3_presentation(prototype)
+	_test_meteor_landing_anchor(prototype)
 	_test_sound_effect_setup(prototype)
 	# The test supplies a pending reservation to exercise dedicated-only UI.
 	# Clear it before the next frame so the scene never attempts a real RPC.
@@ -398,6 +399,13 @@ func _test_dedicated_chanter_skill3_presentation(prototype: Node) -> void:
 	prototype.call("receive_skill_presentation", partial_presentation)
 	assert((prototype.get("dedicated_chanter_skill3_visual_projectiles") as Array).size() == 3)
 	prototype.call("_clear_dedicated_chanter_skill3_visual_projectiles")
+
+
+func _test_meteor_landing_anchor(prototype: Node) -> void:
+	var landing_point := Vector2(600, 387)
+	var draw_size := Vector2(128, 192)
+	var meteor_rect: Rect2 = prototype.call("meteor_texture_rect", landing_point, draw_size)
+	assert((meteor_rect.position + Vector2(draw_size.x * 0.5, draw_size.y * 85.0 / 96.0)).is_equal_approx(landing_point))
 
 
 func _test_sound_effect_setup(prototype: Node) -> void:

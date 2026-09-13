@@ -10,9 +10,11 @@ func _init() -> void:
 	_test_hack_vision_full_homing()
 	_test_arithmetician_perfect_mapping()
 	_test_arithmetician_interference_points()
+	_test_arithmetician_equation_domination()
 	_test_chanter_skills()
 	_test_chanter_skill2_specification()
 	_test_chanter_meteor_shower()
+	_test_meteor_damage_matches_shadow_radius()
 	_test_chanter_skill1_candidate_and_skill3()
 	_test_chanter_skill3_event_driven_presentation()
 	_test_lunar_eclipse_rules()
@@ -372,11 +374,42 @@ func _test_arithmetician_skills() -> void:
 	var hack_snapshot := MatchProtocol.snapshot("arithmetician-skill3", skill3_simulation.state, "match", "", 2)
 	assert(int(hack_snapshot["players"][2]["hack_vision_owner_id"]) == 1)
 
-	var unavailable_skill3_simulation := MatchSimulation.new()
-	unavailable_skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
-	assert(str(unavailable_skill3_simulation.state["players"][1]["skill3_id"]).is_empty())
-	assert(not unavailable_skill3_simulation.handle_event(1, {"type": "skill3"}))
+	var equation_skill3_simulation := MatchSimulation.new()
+	equation_skill3_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
+	assert(str(equation_skill3_simulation.state["players"][1]["skill3_id"]) == "arithmetic_equation_domination")
 
+
+func _test_arithmetician_equation_domination() -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
+	assert(simulation.handle_event(2, {"type": "small_skill"}))
+	var interrupted: Dictionary = simulation.state["challenges"][2].duplicate(true)
+	assert(simulation.handle_event(1, {"type": "skill3"}))
+	assert(str(simulation.state["challenges"][1]["skill"]) == "skill3_arithmetic_equation_domination")
+	_complete_arithmetic(simulation, 1)
+	var forced: Dictionary = simulation.state["challenges"][2]
+	assert(str(forced["skill"]) == "forced_arithmetic_equation_domination")
+	assert(is_equal_approx(float(forced["limit"]), 8.0))
+	assert(not bool(simulation.state["players"][2]["focused"]))
+	assert(not simulation.handle_event(2, {"type": "attack"}))
+	assert(not simulation.handle_event(2, {"type": "big_skill"}))
+	assert(simulation.handle_event(2, {"type": "challenge_submit", "payload": str(forced["answer"])}))
+	assert(str(simulation.state["challenges"][2]["skill"]) == str(interrupted["skill"]))
+	assert(is_equal_approx(float(simulation.state["challenges"][2]["elapsed"]), float(interrupted["elapsed"])))
+
+	var failure_simulation := MatchSimulation.new()
+	failure_simulation.configure_loadout(1, 1, "typist_trident", "", 0, 1)
+	assert(failure_simulation.handle_event(1, {"type": "skill3"}))
+	_complete_arithmetic(failure_simulation, 1)
+	assert(failure_simulation.handle_event(2, {"type": "challenge_cancel"}))
+	assert(is_equal_approx(float(failure_simulation.state["players"][2]["equation_lock_time"]), 5.0))
+	assert(not failure_simulation.handle_event(2, {"type": "attack"}))
+	assert(not failure_simulation.handle_event(2, {"type": "small_skill"}))
+	assert(failure_simulation.state["arithmetic_point_collections"].size() == 1)
+	assert(is_equal_approx(float(failure_simulation.state["arithmetic_point_collections"][0]["amount"]), 0.5))
+	failure_simulation.state["players"][2]["position"] = Vector2(1000, 300)
+	failure_simulation.step(1.0, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.RIGHT}})
+	assert(is_equal_approx(float(failure_simulation.state["players"][2]["position"].x), 1210.0))
 
 func _test_hack_vision_full_homing() -> void:
 	var simulation := MatchSimulation.new()
@@ -515,10 +548,13 @@ func _test_chanter_meteor_shower() -> void:
 	assert(simulation.state["meteor_impacts"].size() == 20)
 	assert(is_equal_approx(float(simulation.state["meteor_impacts"][0]["delay"]), 0.0))
 	assert(is_equal_approx(float(simulation.state["meteor_impacts"][1]["delay"]), 0.0))
-	assert(is_equal_approx(float(simulation.state["meteor_impacts"][2]["delay"]), 0.65))
+	assert(is_equal_approx(float(simulation.state["meteor_impacts"][2]["delay"]), 1.25))
 	assert(is_equal_approx(float(simulation.state["players"][1]["big_cooldown"]), 8.0))
 	for impact_index in simulation.state["meteor_impacts"].size():
-		assert(Vector2(simulation.state["meteor_impacts"][impact_index]["position"]).distance_to(Vector2(simulation.state["players"][1]["position"])) > 120.0)
+		var impact_position := Vector2(simulation.state["meteor_impacts"][impact_index]["position"])
+		assert(Rect2(0, 0, 1680, 774).has_point(impact_position))
+		assert(impact_position.distance_to(Vector2(simulation.state["players"][2]["position"])) >= 80.0)
+		assert(impact_position.distance_to(Vector2(simulation.state["players"][2]["position"])) <= 640.0)
 	var landing_impact: Dictionary = simulation.state["meteor_impacts"][0]
 	landing_impact["position"] = Vector2(simulation.state["players"][2]["position"])
 	simulation.state["meteor_impacts"][0] = landing_impact
@@ -527,11 +563,28 @@ func _test_chanter_meteor_shower() -> void:
 	simulation.state["meteor_impacts"][1] = other_impact
 	var snapshot := MatchProtocol.snapshot("meteor-shower", simulation.state, "match", "", 1)
 	assert(snapshot["meteor_impacts"].size() == 20)
-	simulation.step(1.99, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	simulation.step(3.49, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(int(simulation.state["players"][2]["hp"]) == 100)
 	simulation.step(0.02, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
 	assert(int(simulation.state["players"][2]["hp"]) == 88)
 	assert(int(simulation.state["players"][1]["hp"]) == 100)
+
+
+func _test_meteor_damage_matches_shadow_radius() -> void:
+	var inside_simulation := MatchSimulation.new()
+	inside_simulation.configure_loadout(1, 2, "chanter_meteor_shower")
+	inside_simulation.state["players"][1]["position"] = Vector2(200, 387)
+	inside_simulation.state["players"][2]["position"] = Vector2(648, 387)
+	inside_simulation.state["meteor_impacts"].append({"impact_id": 1, "owner_id": 1, "position": Vector2(600, 387), "delay": 0.0, "elapsed": 3.49, "fall_duration": 3.5, "ripple_duration": 1.5, "damage": 12, "landed": false})
+	inside_simulation.step(0.02, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(inside_simulation.state["players"][2]["hp"]) == 88)
+	var outside_simulation := MatchSimulation.new()
+	outside_simulation.configure_loadout(1, 2, "chanter_meteor_shower")
+	outside_simulation.state["players"][1]["position"] = Vector2(200, 387)
+	outside_simulation.state["players"][2]["position"] = Vector2(649, 387)
+	outside_simulation.state["meteor_impacts"].append({"impact_id": 1, "owner_id": 1, "position": Vector2(600, 387), "delay": 0.0, "elapsed": 3.49, "fall_duration": 3.5, "ripple_duration": 1.5, "damage": 12, "landed": false})
+	outside_simulation.step(0.02, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(int(outside_simulation.state["players"][2]["hp"]) == 100)
 
 
 func _test_chanter_skill1_candidate_and_skill3() -> void:

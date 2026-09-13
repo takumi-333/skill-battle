@@ -55,6 +55,8 @@ func create_player(display_name: String, start_position: Vector2, start_facing: 
 		"invisible_flicker": 0.0,
 		"hack_vision_time": 0.0,
 		"hack_vision_owner_id": 0,
+		"equation_lock_time": 0.0,
+		"equation_lock_owner_id": 0,
 		"normal_damage": 12,
 		"small_cooldown": 0.0,
 		"big_cooldown": 0.0,
