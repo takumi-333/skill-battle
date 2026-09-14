@@ -32,6 +32,7 @@ def test_gateway_forwards_only_allowlisted_request_data(monkeypatch):
         headers={
             "X-Skill-Battle-Access-Token": "invite",
             "Content-Type": "application/json",
+            "Tailscale-Funnel-Request": "true",
             "Tailscale-Headers-Info": "ignored-proxy-metadata",
             "Tailscale-Ingress-Target": "takumipc.tail1f4370.ts.net:443",
             "Tailscale-User-Login": "player@example.test",

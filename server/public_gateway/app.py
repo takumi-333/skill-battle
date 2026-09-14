@@ -23,6 +23,7 @@ API_ALLOWED_HEADERS = {
 }
 PROXY_METADATA_HEADERS = {
     "forwarded",
+    "tailscale-funnel-request",
     "tailscale-headers-info",
     "tailscale-ingress-target",
     "tailscale-user-login",
