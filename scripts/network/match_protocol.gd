@@ -6,13 +6,31 @@ const TICK_RATE := 60.0
 const TICK_SECONDS := 1.0 / TICK_RATE
 const SNAPSHOT_RATE := 20.0
 const MAX_ROOMS := 10
-const ROOM_CAPACITY := 2
+const ROOM_CAPACITY := 2 # Compatibility alias for existing duel callers.
+const MATCH_MODES := ["duel", "free_for_all"]
+const DEFAULT_MATCH_MODE := "duel"
+const FREE_FOR_ALL_CAPACITY := 3
 const MAX_INPUT_SEQUENCE_GAP := 120
 const MAX_EVENT_SEQUENCE_GAP := 120
 const MAX_CHALLENGE_TEXT_LENGTH := 64
 const MAX_TRACE_POINTS := 512
 const MAX_DISPLAY_NAME_LENGTH := 20
 const EVENT_TYPES := ["attack", "small_skill", "big_skill", "skill3", "challenge_character", "challenge_submit", "challenge_trace", "challenge_cancel", "loadout"]
+
+static func valid_match_mode(value: Variant) -> bool:
+	return value is String and value in MATCH_MODES
+
+static func normalized_match_mode(value: Variant) -> String:
+	return str(value) if valid_match_mode(value) else DEFAULT_MATCH_MODE
+
+static func room_capacity(match_mode: Variant = DEFAULT_MATCH_MODE) -> int:
+	return FREE_FOR_ALL_CAPACITY if normalized_match_mode(match_mode) == "free_for_all" else ROOM_CAPACITY
+
+static func slots_for_mode(match_mode: Variant = DEFAULT_MATCH_MODE) -> Array[int]:
+	var slots: Array[int] = []
+	for slot in range(1, room_capacity(match_mode) + 1):
+		slots.append(slot)
+	return slots
 
 static func make_input(sequence: int, move: Vector2) -> Dictionary:
 	return {"sequence": sequence, "move": move.limit_length(1.0)}
@@ -64,7 +82,7 @@ static func dictionary_array(value: Variant) -> Array[Dictionary]:
 	return result
 
 const PLAYER_SNAPSHOT_KEYS := [
-	"name", "has_display_name", "character_id", "visual_id", "is_moving", "position", "facing", "attack_facing", "color", "hp",
+	"name", "has_display_name", "character_id", "visual_id", "is_moving", "position", "facing", "attack_facing", "color", "hp", "defeated", "placement", "spectator_target_id",
 	"attack_cooldown", "attack_time", "hit_time", "focused", "challenge_elapsed", "skill_cooldown",
 	"skill_successes", "score_total", "best_score", "challenge_count", "challenge_score_total", "challenge_best_score",
 	"challenge_errors", "challenge_total_time", "buff_time", "invisible_time", "invisible_flicker", "small_skill_id",
@@ -82,6 +100,8 @@ static func snapshot(room_id: String, state: Dictionary, phase: String, status: 
 			challenges[recipient_slot] = challenge
 	return {
 		"room_id": room_id,
+		"match_mode": normalized_match_mode(state.get("match_mode", DEFAULT_MATCH_MODE)),
+		"room_capacity": room_capacity(state.get("match_mode", DEFAULT_MATCH_MODE)),
 		"server_tick": server_tick,
 		"input_acknowledgements": input_acknowledgements.duplicate(),
 		"phase": phase,

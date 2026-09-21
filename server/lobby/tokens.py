@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 
-def issue(secret: str, room_id: str, slot: int, nonce: str | int | None = None, lifetime_seconds: int = 60) -> str:
+def issue(secret: str, room_id: str, slot: int, nonce: str | int | None = None, lifetime_seconds: int = 60, match_mode: str = "duel") -> str:
     """Create a ticket bound to exactly one room, slot, nonce and expiry."""
     # The old four-argument API used its fourth positional value as lifetime.
     # Keep it for local tooling while the public path supplies a string nonce.
@@ -25,6 +25,7 @@ def issue(secret: str, room_id: str, slot: int, nonce: str | int | None = None, 
         "slot": slot,
         "nonce": nonce or secrets.token_urlsafe(32),
         "expires_at": int(time.time()) + lifetime_seconds,
+        "match_mode": match_mode if match_mode in {"duel", "free_for_all"} else "duel",
     }
     encoded = base64.b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")).decode("ascii")
     signature = hmac.new(secret.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).hexdigest()

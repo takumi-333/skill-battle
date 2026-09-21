@@ -19,6 +19,7 @@ func reset() -> void:
 	players.clear()
 	players[1] = create_player("打鍵士", Vector2(200, START_Y), Vector2.RIGHT, Color("ef6b73"))
 	players[2] = create_player("算術士", Vector2(1480, START_Y), Vector2.LEFT, Color("7498ff"))
+	players[3] = create_player("Player 3", Vector2(840, 620), Vector2.UP, Color("b98aff"))
 	time_remaining = MATCH_DURATION
 	match_over = false
 	winner_id = 0
@@ -35,6 +36,9 @@ func create_player(display_name: String, start_position: Vector2, start_facing: 
 		"attack_facing": start_facing,
 		"color": display_color,
 		"hp": 100,
+		"defeated": false,
+		"placement": 0,
+		"spectator_target_id": 0,
 		"attack_cooldown": 0.0,
 		"attack_time": 0.0,
 		"hit_time": 0.0,

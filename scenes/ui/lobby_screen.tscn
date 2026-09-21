@@ -318,6 +318,105 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_t5ykj")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_e755i")
 text = "準備完了"
 
+[node name="PlayerThreeCard" type="TextureRect" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 840.0
+offset_top = 140.0
+offset_right = 1200.0
+offset_bottom = 500.0
+mouse_filter = 2
+texture = ExtResource("2_kvtbc")
+expand_mode = 1
+
+[node name="PlayerThreePreview" type="TextureRect" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 884.0
+offset_top = 206.0
+offset_right = 1156.0
+offset_bottom = 392.0
+mouse_filter = 2
+texture = ExtResource("5_shadow")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerThreeInfo" type="Label" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 860.0
+offset_top = 154.0
+offset_right = 1180.0
+offset_bottom = 202.0
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerThreeStatus" type="Control" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 1120.0
+offset_top = 160.0
+offset_right = 1168.0
+offset_bottom = 208.0
+script = ExtResource("3_nr3vt")
+
+[node name="PlayerThreeLeftFrame" type="TextureRect" parent="."]
+visible = false
+z_index = 1
+layout_mode = 0
+offset_left = 880.0
+offset_top = 420.0
+offset_right = 970.0
+offset_bottom = 466.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerThreeLeft" type="Button" parent="."]
+visible = false
+z_index = 10
+layout_mode = 0
+offset_left = 880.0
+offset_top = 420.0
+offset_right = 970.0
+offset_bottom = 466.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_bjg73")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_bu4jf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
+text = "◀"
+
+[node name="PlayerThreeRightFrame" type="TextureRect" parent="."]
+visible = false
+z_index = 1
+layout_mode = 0
+offset_left = 1070.0
+offset_top = 420.0
+offset_right = 1160.0
+offset_bottom = 466.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerThreeRight" type="Button" parent="."]
+visible = false
+z_index = 10
+layout_mode = 0
+offset_left = 1070.0
+offset_top = 420.0
+offset_right = 1160.0
+offset_bottom = 466.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
+text = "▶"
+
 [node name="PlayerOneReady" type="Button" parent="." unique_id=146356369]
 z_index = 10
 layout_mode = 0

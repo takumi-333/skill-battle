@@ -19,6 +19,7 @@ from typing import Iterator
 
 ROOM_STATES = ("AVAILABLE", "RESERVED", "CONNECTING", "CONNECTED", "RUNNING", "CLOSED")
 RESERVATION_STATES = ("RESERVED", "CONNECTING", "CONNECTED", "RUNNING", "CLOSED")
+MATCH_MODES = {"duel": 2, "free_for_all": 3}
 
 
 class DatabaseBusy(RuntimeError):
@@ -38,11 +39,12 @@ class LobbyDatabase:
             self.connection.execute("""CREATE TABLE IF NOT EXISTS rooms (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL,
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-                slot1_reserved_until INTEGER, slot2_reserved_until INTEGER
+                slot1_reserved_until INTEGER, slot2_reserved_until INTEGER,
+                match_mode TEXT NOT NULL DEFAULT 'duel'
             )""")
             self.connection.execute("""CREATE TABLE IF NOT EXISTS reservations (
                 room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-                slot INTEGER NOT NULL CHECK(slot IN (1,2)),
+                slot INTEGER NOT NULL CHECK(slot IN (1,2,3)),
                 state TEXT NOT NULL CHECK(state IN ('RESERVED','CONNECTING','CONNECTED','RUNNING','CLOSED')),
                 reserved_until INTEGER,
                 connecting_lease_until INTEGER,
@@ -54,7 +56,7 @@ class LobbyDatabase:
             self.connection.execute("""CREATE TABLE IF NOT EXISTS nonces (
                 nonce_hash TEXT PRIMARY KEY,
                 room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-                slot INTEGER NOT NULL CHECK(slot IN (1,2)),
+                slot INTEGER NOT NULL CHECK(slot IN (1,2,3)),
                 expires_at INTEGER NOT NULL,
                 issued_at INTEGER NOT NULL,
                 used_at INTEGER
@@ -72,6 +74,7 @@ class LobbyDatabase:
             self.connection.execute("UPDATE rooms SET status='AVAILABLE' WHERE status='open'")
             self.connection.execute("UPDATE rooms SET status='RUNNING' WHERE status='running'")
             self.connection.execute("UPDATE rooms SET status='CLOSED' WHERE status='closed'")
+            self._migrate_match_mode_schema()
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -94,15 +97,16 @@ class LobbyDatabase:
     def _nonce_hash(nonce: str) -> str:
         return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
 
-    def create_room(self, name: str, reservation_seconds: int = 60, token_seconds: int = 60) -> dict:
+    def create_room(self, name: str, match_mode: str = "duel", reservation_seconds: int = 60, token_seconds: int = 60) -> dict:
         """Create a room and slot-one reservation with one redeemable nonce."""
         now = int(time.time())
-        room = {"id": uuid.uuid4().hex, "name": name[:48], "status": "RESERVED", "created_at": now, "updated_at": now}
+        match_mode = match_mode if match_mode in MATCH_MODES else "duel"
+        room = {"id": uuid.uuid4().hex, "name": name[:48], "status": "RESERVED", "match_mode": match_mode, "created_at": now, "updated_at": now}
         nonce = secrets.token_urlsafe(32)
         with self._transaction():
             self._recover_expired(now)
             self.connection.execute(
-                "INSERT INTO rooms(id,name,status,created_at,updated_at) VALUES(:id,:name,:status,:created_at,:updated_at)", room
+                "INSERT INTO rooms(id,name,status,match_mode,created_at,updated_at) VALUES(:id,:name,:status,:match_mode,:created_at,:updated_at)", room
             )
             self._insert_reservation(room["id"], 1, nonce, now, reservation_seconds, token_seconds)
         return {"room": room, "slot": 1, "nonce": nonce}
@@ -121,7 +125,8 @@ class LobbyDatabase:
                     "SELECT slot FROM reservations WHERE room_id=? AND state != 'CLOSED'", (room_id,)
                 ).fetchall()
             }
-            slot = next((candidate for candidate in (1, 2) if candidate not in occupied), 0)
+            capacity = MATCH_MODES.get(str(room["match_mode"]), 2)
+            slot = next((candidate for candidate in range(1, capacity + 1) if candidate not in occupied), 0)
             if slot == 0:
                 return None
             nonce = secrets.token_urlsafe(32)
@@ -134,17 +139,17 @@ class LobbyDatabase:
         with self._transaction():
             self._recover_expired(now)
             rows = self.connection.execute(
-                """SELECT r.id,r.name,r.status,COUNT(s.slot) AS players
+                """SELECT r.id,r.name,r.status,r.match_mode,COUNT(s.slot) AS players
                    FROM rooms r JOIN reservations s ON s.room_id=r.id
                    WHERE r.status IN ('AVAILABLE','RESERVED','CONNECTING','CONNECTED')
                      AND s.state IN ('RESERVED','CONNECTING','CONNECTED')
                    GROUP BY r.id ORDER BY r.created_at DESC"""
             ).fetchall()
-            return [{"id": row["id"], "name": row["name"], "status": row["status"], "players": int(row["players"])} for row in rows]
+            return [{"id": row["id"], "name": row["name"], "status": row["status"], "match_mode": row["match_mode"], "capacity": MATCH_MODES.get(row["match_mode"], 2), "players": int(row["players"])} for row in rows]
 
     def consume_nonce(self, room_id: str, slot: int, nonce: str, connecting_lease_seconds: int = 15) -> bool:
         """One-way nonce consumption and RESERVED -> CONNECTING transition."""
-        if slot not in (1, 2) or not nonce:
+        if slot not in (1, 2, 3) or not nonce:
             return False
         now = int(time.time())
         with self._transaction():
@@ -183,7 +188,7 @@ class LobbyDatabase:
                 return status in {"disconnected", "closed"}
             if room["status"] == "CLOSED":
                 return status in {"disconnected", "closed"}
-            if status == "connected" and slot in (1, 2):
+            if status == "connected" and slot in (1, 2, 3):
                 changed = self.connection.execute(
                     """UPDATE reservations SET state='CONNECTED', connected_at=?, connecting_lease_until=NULL, updated_at=?
                        WHERE room_id=? AND slot=? AND state='CONNECTING'""",
@@ -196,7 +201,7 @@ class LobbyDatabase:
                     "SELECT state FROM reservations WHERE room_id=? AND slot=?", (room_id, slot)
                 ).fetchone()
                 return current is not None and current["state"] == "CONNECTED"
-            if status == "disconnected" and slot in (1, 2):
+            if status == "disconnected" and slot in (1, 2, 3):
                 if room["status"] == "RUNNING":
                     return self._close_room(room_id, now)
                 changed = self.connection.execute(
@@ -217,7 +222,8 @@ class LobbyDatabase:
                 connected = self.connection.execute(
                     "SELECT COUNT(*) FROM reservations WHERE room_id=? AND state='CONNECTED'", (room_id,)
                 ).fetchone()[0]
-                if connected != 2:
+                mode_row = self.connection.execute("SELECT match_mode FROM rooms WHERE id=?", (room_id,)).fetchone()
+                if connected != MATCH_MODES.get(str(mode_row["match_mode"]) if mode_row else "duel", 2):
                     return False
                 self.connection.execute("UPDATE reservations SET state='RUNNING',updated_at=? WHERE room_id=? AND state='CONNECTED'", (now, room_id))
                 self.connection.execute("UPDATE rooms SET status='RUNNING',updated_at=? WHERE id=?", (now, room_id))
@@ -248,7 +254,7 @@ class LobbyDatabase:
 
     def get_room(self, room_id: str) -> dict | None:
         with self._lock:
-            row = self.connection.execute("SELECT id,name,status,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
+            row = self.connection.execute("SELECT id,name,status,match_mode,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
             return None if row is None else dict(row)
 
     def record_server_update(self, kind: str, room_id: str | None, payload: dict) -> None:
@@ -288,7 +294,7 @@ class LobbyDatabase:
         )
 
     def _room_dict(self, room_id: str) -> dict:
-        row = self.connection.execute("SELECT id,name,status,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
+        row = self.connection.execute("SELECT id,name,status,match_mode,created_at,updated_at FROM rooms WHERE id=?", (room_id,)).fetchone()
         return dict(row) if row is not None else {}
 
     def _refresh_room_state(self, room_id: str, now: int) -> None:
@@ -330,3 +336,29 @@ class LobbyDatabase:
             """DELETE FROM rooms WHERE status='AVAILABLE'
                AND NOT EXISTS (SELECT 1 FROM reservations WHERE reservations.room_id=rooms.id)"""
         )
+
+    def _migrate_match_mode_schema(self) -> None:
+        columns = {row["name"] for row in self.connection.execute("PRAGMA table_info(rooms)").fetchall()}
+        if "match_mode" not in columns:
+            self.connection.execute("ALTER TABLE rooms ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'duel'")
+        # SQLite cannot alter CHECK constraints. Rebuild only legacy two-slot tables.
+        for table in ("reservations", "nonces"):
+            sql_row = self.connection.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+            if sql_row is None or "IN(1,2)" not in str(sql_row["sql"]).replace(" ", ""):
+                continue
+            self.connection.execute(f"ALTER TABLE {table} RENAME TO {table}_legacy")
+            if table == "reservations":
+                self.connection.execute("""CREATE TABLE reservations (
+                    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    slot INTEGER NOT NULL CHECK(slot IN (1,2,3)),
+                    state TEXT NOT NULL CHECK(state IN ('RESERVED','CONNECTING','CONNECTED','RUNNING','CLOSED')),
+                    reserved_until INTEGER, connecting_lease_until INTEGER, connected_at INTEGER,
+                    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(room_id, slot))""")
+            else:
+                self.connection.execute("""CREATE TABLE nonces (
+                    nonce_hash TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    slot INTEGER NOT NULL CHECK(slot IN (1,2,3)), expires_at INTEGER NOT NULL,
+                    issued_at INTEGER NOT NULL, used_at INTEGER)""")
+            self.connection.execute(f"INSERT INTO {table} SELECT * FROM {table}_legacy")
+            self.connection.execute(f"DROP TABLE {table}_legacy")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS nonces_lookup ON nonces(room_id,slot,used_at,expires_at)")

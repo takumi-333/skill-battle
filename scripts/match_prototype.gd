@@ -480,8 +480,10 @@ var finish_remaining: float = 0.0
 var finish_visual_snapshot_captured := false
 var p1_selection: int = 0
 var p2_selection: int = 1
+var p3_selection: int = 2
 var p1_ready: bool = false
 var p2_ready: bool = false
+var p3_ready: bool = false
 var challenge_owner: int = 0
 var challenge_skill: String = ""
 var equation_forced_source_id: int = 0
@@ -543,6 +545,9 @@ var result_winner_hp_value_label: Label
 var result_opponent_hp_value_label: Label
 var result_winner_score_value_label: Label
 var result_opponent_score_value_label: Label
+var result_ffa_panel: Control
+var result_ffa_rows: Array[Label] = []
+var result_legacy_nodes: Array[Control] = []
 var match_start_prompt: Control
 var match_start_prompt_label: Label
 var network_back_button: Button
@@ -550,6 +555,9 @@ var lobby_home_button: Button
 var gameplay_home_button: Button
 var hp_bar: ProgressBar
 var opponent_hp_bar: ProgressBar
+var opponent_two_hp_bar: ProgressBar
+var opponent_one_label: Label
+var opponent_two_label: Label
 var arithmetic_multiplier_label: Label
 var opponent_arithmetic_multiplier_label: Label
 var skill_widgets: Array[Node] = []
@@ -564,6 +572,7 @@ var network_room_list_close_button: Button
 var dedicated_connection: DedicatedClientConnection
 var dedicated_rooms: Array = []
 var dedicated_connected_slots: Array[int] = []
+var dedicated_match_mode := MatchProtocol.DEFAULT_MATCH_MODE
 var dedicated_action_down := {"attack": false, "small_skill": false, "big_skill": false, "skill3": false}
 var dedicated_challenge_type := ""
 var dedicated_challenge_limit := 0.0
@@ -645,20 +654,27 @@ var debug_control_p1_button: Button
 var debug_control_p2_button: Button
 var lobby_p1_preview: TextureRect
 var lobby_p2_preview: TextureRect
+var lobby_p3_preview: TextureRect
 var lobby_p1_info: Label
 var lobby_p2_info: Label
+var lobby_p3_info: Label
 var lobby_p1_status_icon: Control
 var lobby_p2_status_icon: Control
+var lobby_p3_status_icon: Control
 var lobby_p1_left: Button
 var lobby_p1_right: Button
 var lobby_p1_ready: Button
 var lobby_p2_left: Button
 var lobby_p2_right: Button
 var lobby_p2_ready: Button
+var lobby_p3_left: Button
+var lobby_p3_right: Button
 var lobby_p1_left_frame: TextureRect
 var lobby_p1_right_frame: TextureRect
 var lobby_p2_left_frame: TextureRect
 var lobby_p2_right_frame: TextureRect
+var lobby_p3_left_frame: TextureRect
+var lobby_p3_right_frame: TextureRect
 var lobby_start_button: Button
 var lobby_debug_last_signature := ""
 var lobby_ready_mouse_down := false
@@ -2996,11 +3012,14 @@ func show_result(winner_id: int) -> void:
 	clear_active_challenge_state()
 	if was_finish:
 		stop_battle_bgm()
-	var first: Dictionary = players[1]
-	var second: Dictionary = players[2]
 	var winner_name := result_player_display_name(winner_id)
 	var display_title := "引き分け" if winner_id == 0 else "%sの勝利" % winner_name
-	result_summary_text = "%s\n\nP1 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d\nP2 %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [display_title, result_player_display_name(1), first["hp"], first["challenge_count"], average_score(first), first["challenge_best_score"], result_player_display_name(2), second["hp"], second["challenge_count"], average_score(second), second["challenge_best_score"]]
+	var result_lines := [display_title, ""]
+	for slot in players.keys():
+		var player_id := int(slot)
+		var player: Dictionary = players[player_id]
+		result_lines.append("P%d %s  残HP %d  成功 %d回  平均 %.1f  最高 %d" % [player_id, result_player_display_name(player_id), player["hp"], player["challenge_count"], average_score(player), player["challenge_best_score"]])
+	result_summary_text = "\n".join(result_lines)
 	refresh_result_details(winner_id)
 	refresh_result_action_ui()
 	apply_screen_state("result")
@@ -3051,29 +3070,56 @@ func refresh_result_action_ui() -> void:
 		result_label.text = ""
 		return
 	var local_slot := local_player_id if network_mode == "client" else 1
-	var remote_slot := 2 if local_slot == 1 else 1
 	var local_requested := bool(result_rematch_ready.get(local_slot, false))
-	var remote_requested := bool(result_rematch_ready.get(remote_slot, false))
-	var remote_returned := bool(result_lobby_slots.get(remote_slot, false))
+	var remote_slots := _lobby_slots().filter(func(slot: int) -> bool: return slot != local_slot)
+	var remote_requested := remote_slots.any(func(slot: int) -> bool: return bool(result_rematch_ready.get(slot, false)))
+	var remote_returned := remote_slots.any(func(slot: int) -> bool: return bool(result_lobby_slots.get(slot, false)))
 	result_rematch_button.disabled = local_requested or remote_returned
 	result_rematch_button.text = "再戦不可" if remote_returned else ("再戦を待機中" if local_requested else "再戦")
-	var decision_text := "両者が再戦を選ぶと再戦を開始します。"
+	var decision_text := "全参加者が再戦を選ぶと再戦を開始します。"
 	if remote_returned:
-		decision_text = "相手がロビーに戻りました。ロビーへ戻るを選択してください。"
+		decision_text = "参加者がロビーに戻りました。ロビーへ戻るを選択してください。"
 	elif local_requested and not remote_requested:
-		decision_text = "相手の再戦選択を待っています。"
+		decision_text = "他の参加者の再戦選択を待っています。"
 	elif remote_requested and not local_requested:
-		decision_text = "相手が再戦を希望しています。"
+		decision_text = "参加者が再戦を希望しています。"
 	result_label.text = decision_text
 
 
 func refresh_result_details(winner_id: int) -> void:
 	if result_match_time_label == null:
 		return
+	var is_ffa := players.has(3) and dedicated_match_mode == "free_for_all"
+	result_ffa_panel.visible = is_ffa
+	for node in result_legacy_nodes:
+		node.visible = not is_ffa
 	var first: Dictionary = players[1]
 	var second: Dictionary = players[2]
 	var elapsed_seconds := maxi(0, roundi(MATCH_DURATION - match_state.time_remaining))
 	result_match_time_label.text = "試合時間 %02d:%02d" % [elapsed_seconds / 60, elapsed_seconds % 60]
+	if is_ffa:
+		var ranking: Array[int] = []
+		for slot in players.keys():
+			ranking.append(int(slot))
+		ranking.sort_custom(func(left: int, right: int) -> bool:
+			var left_player: Dictionary = players[left]
+			var right_player: Dictionary = players[right]
+			var left_placement := int(left_player.get("placement", 0))
+			var right_placement := int(right_player.get("placement", 0))
+			if left_placement > 0 and right_placement > 0 and left_placement != right_placement:
+				return left_placement < right_placement
+			if left_placement > 0 and right_placement == 0:
+				return false
+			if left_placement == 0 and right_placement > 0:
+				return true
+			return int(left_player.get("hp", 0)) > int(right_player.get("hp", 0))
+		)
+		for index in result_ffa_rows.size():
+			var player_id := ranking[index]
+			var player: Dictionary = players[player_id]
+			var suffix := "  WINNER" if player_id == winner_id else ""
+			result_ffa_rows[index].text = "%d位   %s    HP %d / 100    平均 %.1f%s" % [index + 1, result_player_display_name(player_id), int(player.get("hp", 0)), average_score(player), suffix]
+		return
 	var winner_slot := 1 if winner_id == 0 else winner_id
 	var opponent_slot := 2 if winner_slot == 1 else 1
 	var winner_player: Dictionary = players[winner_slot]
@@ -3124,6 +3170,13 @@ func create_hud() -> void:
 	opponent_hp_bar.max_value = 100.0
 	opponent_hp_bar.value = 100.0
 	opponent_hp_bar.show_percentage = false
+	opponent_one_label = hud_root.get_node("OpponentOneLabel") as Label
+	opponent_two_hp_bar = hud_root.get_node("OpponentTwoHPBar") as ProgressBar
+	opponent_two_hp_bar.min_value = 0.0
+	opponent_two_hp_bar.max_value = 100.0
+	opponent_two_hp_bar.value = 100.0
+	opponent_two_hp_bar.show_percentage = false
+	opponent_two_label = hud_root.get_node("OpponentTwoLabel") as Label
 	opponent_arithmetic_multiplier_label = hud_root.get_node("OpponentArithmeticMultiplier") as Label
 	opponent_arithmetic_multiplier_label.visible = false
 	var hp_background := StyleBoxFlat.new()
@@ -3146,6 +3199,8 @@ func create_hud() -> void:
 	opponent_hp_fill.corner_radius_bottom_right = 3
 	opponent_hp_bar.add_theme_stylebox_override("background", hp_background)
 	opponent_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
+	opponent_two_hp_bar.add_theme_stylebox_override("background", hp_background)
+	opponent_two_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
 	timer_label = hud_root.get_node("Timer") as Label
 	status_label = hud_root.get_node("Status") as Label
 	status_label.add_theme_font_size_override("font_size", 16)
@@ -3190,6 +3245,9 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	hp_bar.visible = is_visible
 	arithmetic_multiplier_label.visible = is_visible and arithmetic_multiplier_label.visible
 	opponent_hp_bar.visible = is_visible
+	opponent_one_label.visible = is_visible
+	opponent_two_hp_bar.visible = false
+	opponent_two_label.visible = false
 	opponent_arithmetic_multiplier_label.visible = is_visible and opponent_arithmetic_multiplier_label.visible
 	timer_label.visible = is_visible
 	status_label.visible = false
@@ -3334,9 +3392,6 @@ func _load_local_development_lobby_config() -> void:
 	# the launcher has rotated the local invite token.
 	if not OS.is_debug_build():
 		return
-	var saved_url_is_loopback_http := _is_loopback_http_lobby_url(lobby_api_url)
-	if not lobby_api_url.is_empty() and not saved_url_is_loopback_http:
-		return
 	var file := FileAccess.open(LOCAL_DEVELOPMENT_CLIENT_CONFIG_PATH, FileAccess.READ)
 	if file == null:
 		return
@@ -3466,31 +3521,40 @@ func create_lobby_ui() -> void:
 	lobby_label = $UIRoot/Lobby/Title
 	lobby_p1_preview = $UIRoot/Lobby/PlayerOnePreview
 	lobby_p2_preview = $UIRoot/Lobby/PlayerTwoPreview
+	lobby_p3_preview = $UIRoot/Lobby/PlayerThreePreview
 	lobby_p1_info = $UIRoot/Lobby/PlayerOneInfo
 	lobby_p2_info = $UIRoot/Lobby/PlayerTwoInfo
+	lobby_p3_info = $UIRoot/Lobby/PlayerThreeInfo
 	lobby_p1_status_icon = $UIRoot/Lobby/PlayerOneStatus
 	lobby_p2_status_icon = $UIRoot/Lobby/PlayerTwoStatus
+	lobby_p3_status_icon = $UIRoot/Lobby/PlayerThreeStatus
 	lobby_p1_left = $UIRoot/Lobby/PlayerOneLeft
 	lobby_p1_right = $UIRoot/Lobby/PlayerOneRight
 	lobby_p1_ready = $UIRoot/Lobby/PlayerOneReady
 	lobby_p2_left = $UIRoot/Lobby/PlayerTwoLeft
 	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
 	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
+	lobby_p3_left = $UIRoot/Lobby/PlayerThreeLeft
+	lobby_p3_right = $UIRoot/Lobby/PlayerThreeRight
 	lobby_p1_left_frame = $UIRoot/Lobby/PlayerOneLeftFrame
 	lobby_p1_right_frame = $UIRoot/Lobby/PlayerOneRightFrame
 	lobby_p2_left_frame = $UIRoot/Lobby/PlayerTwoLeftFrame
 	lobby_p2_right_frame = $UIRoot/Lobby/PlayerTwoRightFrame
+	lobby_p3_left_frame = $UIRoot/Lobby/PlayerThreeLeftFrame
+	lobby_p3_right_frame = $UIRoot/Lobby/PlayerThreeRightFrame
 	lobby_start_button = $UIRoot/Lobby/StartButton
 	lobby_start_button.text = "ゲーム開始"
 	lobby_home_button = $UIRoot/Lobby/HomeButton
-	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_start_button, lobby_home_button]:
+	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_p3_left, lobby_p3_right, lobby_start_button, lobby_home_button]:
 		style_menu_button(button)
-	connect_button_once(lobby_p1_left, func(): set_lobby_selection(1, -1))
-	connect_button_once(lobby_p1_right, func(): set_lobby_selection(1, 1))
+	connect_button_once(lobby_p1_left, func(): set_lobby_selection(_local_lobby_slot(), -1))
+	connect_button_once(lobby_p1_right, func(): set_lobby_selection(_local_lobby_slot(), 1))
 	connect_button_once(lobby_p1_ready, toggle_local_lobby_ready)
-	connect_button_once(lobby_p2_left, func(): set_lobby_selection(2, -1))
-	connect_button_once(lobby_p2_right, func(): set_lobby_selection(2, 1))
+	connect_button_once(lobby_p2_left, func(): set_lobby_selection(_local_lobby_slot(2), -1))
+	connect_button_once(lobby_p2_right, func(): set_lobby_selection(_local_lobby_slot(2), 1))
 	connect_button_once(lobby_p2_ready, toggle_local_lobby_ready)
+	connect_button_once(lobby_p3_left, func(): set_lobby_selection(3, -1))
+	connect_button_once(lobby_p3_right, func(): set_lobby_selection(3, 1))
 	connect_button_once(lobby_start_button, start_lobby_match)
 	connect_button_once(lobby_home_button, return_to_home)
 
@@ -3535,28 +3599,21 @@ func make_status_icon(icon_position: Vector2) -> StatusIcon:
 func set_lobby_selection(player_id: int, step: int) -> void:
 	lobby_debug_log("selection requested; player_id=%d step=%d mode=%s local_id=%d" % [player_id, step, network_mode, local_player_id])
 	if dedicated_connection and dedicated_connection.has_pending_join():
-		if player_id != local_player_id:
+		if player_id != _local_lobby_slot():
 			return
-		if player_id == 1:
-			p1_selection = posmod(p1_selection + step, 3)
-			p1_ready = false
-		else:
-			p2_selection = posmod(p2_selection + step, 3)
-			p2_ready = false
+		var selection := posmod(_lobby_selection(player_id) + step, 3)
+		_set_lobby_selection(player_id, selection)
+		_set_lobby_ready(player_id, false)
 		dedicated_connection.set_ready(false)
-		_send_dedicated_loadout(p1_selection if player_id == 1 else p2_selection)
+		_send_dedicated_loadout(selection)
 		refresh_lobby_label()
 		return
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
 		return
-	if player_id == 1:
-		p1_selection = posmod(p1_selection + step, 3)
-		p1_ready = false
-	else:
-		p2_selection = posmod(p2_selection + step, 3)
-		p2_ready = false
+	_set_lobby_selection(player_id, posmod(_lobby_selection(player_id) + step, 3))
+	_set_lobby_ready(player_id, false)
 	if network_mode == "client":
 		rpc_id(1, "receive_remote_lobby_choice", p2_selection, p2_ready)
 	refresh_lobby_label()
@@ -3582,19 +3639,16 @@ func _send_dedicated_loadout(selection: int) -> void:
 func toggle_lobby_ready(player_id: int) -> void:
 	lobby_debug_log("ready requested; player_id=%d mode=%s local_id=%d before p1=%s p2=%s" % [player_id, network_mode, local_player_id, str(p1_ready), str(p2_ready)])
 	if dedicated_connection and dedicated_connection.has_pending_join():
-		if player_id != local_player_id:
+		if player_id != _local_lobby_slot():
 			return
-		var next_ready := not (p1_ready if player_id == 1 else p2_ready)
+		var next_ready := not _lobby_ready(player_id)
 		dedicated_connection.set_ready(next_ready)
 		return
 	if player_id == 1 and network_mode == "client":
 		return
 	if player_id == 2 and network_mode == "host":
 		return
-	if player_id == 1:
-		p1_ready = not p1_ready
-	else:
-		p2_ready = not p2_ready
+	_set_lobby_ready(player_id, not _lobby_ready(player_id))
 	if network_mode == "client":
 		lobby_debug_log("sending remote lobby choice; selection=%d ready=%s" % [p2_selection, str(p2_ready)])
 		rpc_id(1, "receive_remote_lobby_choice", p2_selection, p2_ready)
@@ -3603,16 +3657,64 @@ func toggle_lobby_ready(player_id: int) -> void:
 
 func toggle_local_lobby_ready() -> void:
 	lobby_debug_log("local ready button pressed; mode=%s local_id=%d" % [network_mode, local_player_id])
-	toggle_lobby_ready(local_player_id if dedicated_connection and dedicated_connection.has_pending_join() else (2 if network_mode == "client" else 1))
+	toggle_lobby_ready(_local_lobby_slot() if dedicated_connection and dedicated_connection.has_pending_join() else (2 if network_mode == "client" else 1))
+
+
+func _local_lobby_slot(legacy_slot := 1) -> int:
+	if dedicated_connection != null and dedicated_connection.has_pending_join():
+		if dedicated_connection.joined_slot in [1, 2, 3]:
+			return dedicated_connection.joined_slot
+		if dedicated_connection.reserved_slot in [1, 2, 3]:
+			return dedicated_connection.reserved_slot
+		return local_player_id
+	return legacy_slot
+
+
+func _lobby_slots() -> Array[int]:
+	return MatchProtocol.slots_for_mode(dedicated_match_mode) if dedicated_connection != null and dedicated_connection.has_pending_join() else [1, 2]
+
+
+func _lobby_selection(player_id: int) -> int:
+	match player_id:
+		1: return p1_selection
+		2: return p2_selection
+		3: return p3_selection
+		_: return p1_selection
+
+
+func _set_lobby_selection(player_id: int, selection: int) -> void:
+	match player_id:
+		1: p1_selection = selection
+		2: p2_selection = selection
+		3: p3_selection = selection
+
+
+func _lobby_ready(player_id: int) -> bool:
+	match player_id:
+		1: return p1_ready
+		2: return p2_ready
+		3: return p3_ready
+		_: return false
+
+
+func _set_lobby_ready(player_id: int, is_ready: bool) -> void:
+	match player_id:
+		1: p1_ready = is_ready
+		2: p2_ready = is_ready
+		3: p3_ready = is_ready
+
+
+func _all_lobby_players_ready() -> bool:
+	return _lobby_slots().all(func(slot: int) -> bool: return _lobby_ready(slot))
 
 
 func start_lobby_match() -> void:
 	if dedicated_connection and dedicated_connection.has_pending_join():
-		if local_player_id != 1 or not p1_ready or not p2_ready:
+		if _local_lobby_slot() != 1 or not _all_lobby_players_ready():
 			return
 		rpc_id(1, "request_match_start")
 		return
-	if network_mode != "host" or not p1_ready or not p2_ready:
+	if network_mode != "host" or not _all_lobby_players_ready():
 		return
 	prepare_match_start()
 
@@ -3630,6 +3732,20 @@ func create_result_ui() -> void:
 	result_opponent_hp_value_label = $UIRoot/Result/OpponentHpValue
 	result_winner_score_value_label = $UIRoot/Result/WinnerScoreValue
 	result_opponent_score_value_label = $UIRoot/Result/OpponentScoreValue
+	result_ffa_panel = $UIRoot/Result/FFAResults
+	result_ffa_rows = [
+		$UIRoot/Result/FFAResults/RowOne,
+		$UIRoot/Result/FFAResults/RowTwo,
+		$UIRoot/Result/FFAResults/RowThree,
+	]
+	result_legacy_nodes = [
+		$UIRoot/Result/WinnerPortrait, $UIRoot/Result/OpponentPortrait, $UIRoot/Result/VictoryBadge,
+		$UIRoot/Result/WinnerName, $UIRoot/Result/OpponentName, $UIRoot/Result/ResultStatsPanel,
+		$UIRoot/Result/WinnerHpIcon, $UIRoot/Result/WinnerHpCaption, $UIRoot/Result/WinnerHpValue,
+		$UIRoot/Result/WinnerScoreIcon, $UIRoot/Result/WinnerScoreCaption, $UIRoot/Result/WinnerScoreValue,
+		$UIRoot/Result/OpponentHpIcon, $UIRoot/Result/OpponentHpCaption, $UIRoot/Result/OpponentHpValue,
+		$UIRoot/Result/OpponentScoreIcon, $UIRoot/Result/OpponentScoreCaption, $UIRoot/Result/OpponentScoreValue,
+	]
 	result_rematch_button = $UIRoot/Result/RematchButton
 	style_menu_button(result_rematch_button)
 	connect_button_once(result_rematch_button, request_rematch)
@@ -3678,11 +3794,14 @@ func create_network_ui() -> void:
 	network_refresh_button = $UIRoot/Connection/RoomListModal/RefreshButton
 	network_room_list_close_button = $UIRoot/Connection/RoomListModal/CloseButton
 	var host_button: Button = $UIRoot/Connection/HostButton
+	var free_for_all_button: Button = $UIRoot/Connection/FreeForAllButton
 	var join_button: Button = $UIRoot/Connection/JoinButton
 	network_back_button = $UIRoot/Connection/BackButton
-	for button in [host_button, join_button, network_back_button, network_refresh_button, network_room_list_close_button]:
+	host_button.text = "オンライン 1 vs 1"
+	for button in [host_button, free_for_all_button, join_button, network_back_button, network_refresh_button, network_room_list_close_button]:
 		style_menu_button(button, 23 if button != network_back_button else 20)
 	connect_button_once(host_button, start_host)
+	connect_button_once(free_for_all_button, start_host.bind("free_for_all"))
 	connect_button_once(join_button, open_room_list_modal)
 	connect_button_once(network_refresh_button, refresh_dedicated_rooms)
 	connect_button_once(network_room_list_close_button, close_room_list_modal)
@@ -3741,7 +3860,13 @@ func _refresh_room_list_rows() -> void:
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var room_label := Label.new()
 		room_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var mode := str(room.get("match_mode", "duel"))
+		var mode_label := "オンライン 1 vs 1 vs 1" if mode == "free_for_all" else "オンライン 1 vs 1"
+		room_label.text = "%s  %s  (%d/%d)" % [str(room.get("name", "Room")), mode_label, int(room.get("players", 0)), int(room.get("capacity", 2))]
 		room_label.text = "%s  (%d/2)" % [str(room.get("name", "無名ルーム")), int(room.get("players", 0))]
+		var displayed_mode := str(room.get("match_mode", "duel"))
+		var displayed_mode_label := "オンライン 1 vs 1 vs 1" if displayed_mode == "free_for_all" else "オンライン 1 vs 1"
+		room_label.text = "%s  %s  (%d/%d)" % [str(room.get("name", "Room")), displayed_mode_label, int(room.get("players", 0)), int(room.get("capacity", 2))]
 		room_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		room_label.add_theme_font_size_override("font_size", 18)
 		row.add_child(room_label)
@@ -3792,7 +3917,7 @@ func _on_dedicated_joined(room_id: String, slot: int) -> void:
 	local_player_id = slot
 	phase = "lobby"
 	_clear_dedicated_snapshot_buffer()
-	_send_dedicated_loadout(p1_selection if slot == 1 else p2_selection)
+	_send_dedicated_loadout(_lobby_selection(slot))
 	status_text = "ルーム %s に参加しました。" % room_id.left(8)
 	show_lobby()
 
@@ -3805,6 +3930,7 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	if incoming_tick < dedicated_last_server_tick:
 		return
 	dedicated_last_server_tick = incoming_tick
+	dedicated_match_mode = MatchProtocol.normalized_match_mode(str(snapshot.get("match_mode", MatchProtocol.DEFAULT_MATCH_MODE)))
 	_play_dedicated_damage_hit_sounds(incoming_players)
 	match_state.players = incoming_players
 	match_state.time_remaining = float(snapshot.get("time_remaining", MATCH_DURATION))
@@ -3841,10 +3967,11 @@ func _on_dedicated_snapshot_received(snapshot: Dictionary) -> void:
 	var ready: Dictionary = snapshot.get("ready", {})
 	p1_ready = bool(ready.get(1, false))
 	p2_ready = bool(ready.get(2, false))
+	p3_ready = bool(ready.get(3, false))
 	dedicated_connected_slots.clear()
 	for value in snapshot.get("connected_slots", []):
 		var slot := int(value)
-		if slot in [1, 2]:
+		if slot in [1, 2, 3]:
 			dedicated_connected_slots.append(slot)
 	trident_impacts = MatchProtocol.dictionary_array(snapshot.get("trident_impacts", []))
 	meteor_impacts = MatchProtocol.dictionary_array(snapshot.get("meteor_impacts", []))
@@ -4092,7 +4219,7 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 @rpc("authority", "reliable")
 func joined_room(room_id: String, slot: int) -> void:
 	if dedicated_connection:
-		dedicated_connection.joined.emit(room_id, slot)
+		dedicated_connection.joined_room(room_id, slot)
 
 
 @rpc("authority", "reliable")
@@ -4428,6 +4555,7 @@ func return_to_home() -> void:
 	local_player_id = 1
 	p1_ready = false
 	p2_ready = false
+	p3_ready = false
 	network_target_players.clear()
 	remote_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false, "skill3": false}
 	show_home()
@@ -4829,7 +4957,7 @@ func start_local_debug() -> void:
 	show_debug_select()
 
 
-func start_host() -> void:
+func start_host(match_mode: String = MatchProtocol.DEFAULT_MATCH_MODE) -> void:
 	if dedicated_connection == null:
 		return
 	var configuration_error := _lobby_configuration_error(lobby_api_url, lobby_access_token)
@@ -4840,7 +4968,7 @@ func start_host() -> void:
 	if room_name.is_empty():
 		network_status_label.text = "ルーム名を入力してください。"
 		return
-	dedicated_connection.create_room(room_name)
+	dedicated_connection.create_room(room_name, match_mode)
 	network_status_label.text = "ルームを作成しています..."
 
 
@@ -4893,6 +5021,13 @@ func _on_server_disconnected() -> void:
 
 func process_client_network_input(_delta: float) -> void:
 	if phase != "match":
+		return
+	if is_local_player_spectating():
+		pending_client_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false, "skill3": false}
+		for action in ["attack", "small_skill", "big_skill", "skill3"]:
+			dedicated_action_down[action] = false
+		if dedicated_connection:
+			dedicated_connection.send_input(Vector2.ZERO)
 		return
 	var move := Vector2.ZERO
 	move.x = float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
@@ -5226,46 +5361,49 @@ func update_lobby(_delta: float) -> void:
 func refresh_lobby_label() -> void:
 	var names: Array[String] = ["打鍵士", "算術士", "詠唱者"]
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
-	lobby_label.text = "オンライン対戦 - 待機画面"
-	var local_side := local_player_id if network_mode == "client" else 1
-	var remote_connected := is_remote_lobby_player_connected(local_side)
-	# Both cards remain visible so the opponent slot can communicate connection
-	# state with the shadow portrait. The status icon still indicates readiness.
-	lobby_p1_preview.visible = local_side == 1 or remote_connected
-	lobby_p2_preview.visible = local_side == 2 or remote_connected
-	lobby_p1_info.text = "あなた\n%s" % names[p1_selection] if local_side == 1 else "対戦相手"
-	lobby_p2_info.text = "あなた\n%s" % names[p2_selection] if local_side == 2 else "対戦相手"
-	set_lobby_status_icon(lobby_p1_status_icon, p1_ready, local_side == 1 or remote_connected)
-	set_lobby_status_icon(lobby_p2_status_icon, p2_ready, local_side == 2 or remote_connected)
-	lobby_p1_info.text = ("あなた\n%s" % _lobby_player_display_name(1, p1_selection)) if local_side == 1 else ("対戦相手\n%s" % _lobby_player_display_name(1, p1_selection))
-	lobby_p2_info.text = ("あなた\n%s" % _lobby_player_display_name(2, p2_selection)) if local_side == 2 else ("対戦相手\n%s" % _lobby_player_display_name(2, p2_selection))
-	if local_side == 1:
-		lobby_p1_info.text = "あなた　%s" % names[p1_selection]
-		lobby_p2_info.text = _remote_lobby_display_name(2) if remote_connected else ""
-	else:
-		lobby_p1_info.text = _remote_lobby_display_name(1) if remote_connected else ""
-		lobby_p2_info.text = "あなた　%s" % names[p2_selection]
-	if local_side == 1:
-		lobby_p1_preview.texture = get_idle_texture(visual_ids[p1_selection])
-		lobby_p2_preview.texture = SHADOW_IDLE_TEXTURE if remote_connected else null
-	else:
-		lobby_p1_preview.texture = SHADOW_IDLE_TEXTURE if remote_connected else null
-		lobby_p2_preview.texture = get_idle_texture(visual_ids[p2_selection])
-	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready]:
-		var should_show := local_side == 1
-		if button.visible != should_show:
-			button.visible = should_show
-	for button in [lobby_p2_left, lobby_p2_right, lobby_p2_ready]:
-		var should_show := local_side == 2
-		if button.visible != should_show:
-			button.visible = should_show
+	var local_side := _local_lobby_slot()
+	var is_ffa := _lobby_slots().size() == 3
+	_apply_lobby_card_layout(is_ffa)
+	lobby_label.text = "オンライン対戦 - 3人対戦" if is_ffa else "オンライン対戦 - 待機画面"
+	var slots: Array[int] = []
+	var slot_count := 3 if is_ffa else 2
+	for slot in range(1, slot_count + 1):
+		slots.append(slot)
+	var previews: Array[TextureRect] = [lobby_p1_preview, lobby_p2_preview, lobby_p3_preview]
+	var infos: Array[Label] = [lobby_p1_info, lobby_p2_info, lobby_p3_info]
+	var status_icons: Array[Control] = [lobby_p1_status_icon, lobby_p2_status_icon, lobby_p3_status_icon]
+	for slot in slots:
+		var index := slot - 1
+		var is_present := slot == local_side or slot in dedicated_connected_slots
+		var selection := _lobby_selection(slot)
+		var is_local := slot == local_side
+		previews[index].visible = is_present
+		infos[index].text = "あなた\n%s" % names[selection] if is_local else ("対戦相手\n%s" % _remote_lobby_display_name(slot) if is_present else "参加待ち")
+		if is_present:
+			var synchronized_player: Dictionary = players.get(slot, {})
+			var remote_visual := str(synchronized_player.get("visual_id", visual_ids[selection]))
+			previews[index].texture = get_idle_texture(visual_ids[selection]) if is_local else get_idle_texture(remote_visual)
+		else:
+			previews[index].texture = SHADOW_IDLE_TEXTURE
+		set_lobby_status_icon(status_icons[index], _lobby_ready(slot), is_present)
+	lobby_p3_preview.visible = is_ffa and lobby_p3_preview.visible
+	lobby_p3_info.visible = is_ffa
+	lobby_p3_status_icon.visible = is_ffa and lobby_p3_status_icon.visible
+	for button in [lobby_p1_left, lobby_p1_right]:
+		button.visible = local_side == 1
 	for frame in [lobby_p1_left_frame, lobby_p1_right_frame]:
 		frame.visible = local_side == 1
+	for button in [lobby_p2_left, lobby_p2_right]:
+		button.visible = local_side == 2
 	for frame in [lobby_p2_left_frame, lobby_p2_right_frame]:
 		frame.visible = local_side == 2
+	for button in [lobby_p3_left, lobby_p3_right]:
+		button.visible = is_ffa and local_side == 3
+	for frame in [lobby_p3_left_frame, lobby_p3_right_frame]:
+		frame.visible = is_ffa and local_side == 3
 	var is_dedicated_lobby := dedicated_connection != null and dedicated_connection.has_pending_join()
 	if is_dedicated_lobby:
-		lobby_p1_ready.visible = local_side == 1
+		lobby_p1_ready.visible = local_side in [1, 3]
 		lobby_p2_ready.visible = local_side == 2
 	else:
 		# Legacy player-hosted lobby keeps the original single visible ready button.
@@ -5277,12 +5415,12 @@ func refresh_lobby_label() -> void:
 	var should_show_start := (network_mode == "host" and not is_dedicated_lobby) or (is_dedicated_lobby and local_is_host)
 	if lobby_start_button.visible != should_show_start:
 		lobby_start_button.visible = should_show_start
-	var should_disable_start := not (p1_ready and p2_ready)
+	var should_disable_start := not _all_lobby_players_ready()
 	if lobby_start_button.disabled != should_disable_start:
 		lobby_start_button.disabled = should_disable_start
 	if lobby_start_button.text != "ゲーム開始":
 		lobby_start_button.text = "ゲーム開始"
-	var next_ready_text := "準備完了済み" if (p2_ready if local_side == 2 else p1_ready) else "準備完了"
+	var next_ready_text := "準備完了済み" if _lobby_ready(local_side) else "準備完了"
 	var local_ready_button := get_local_lobby_ready_button()
 	var ready_was_pressed := local_ready_button.button_pressed
 	var ready_text_before := local_ready_button.text
@@ -5290,10 +5428,41 @@ func refresh_lobby_label() -> void:
 		local_ready_button.text = next_ready_text
 	if ready_was_pressed or ready_text_before != next_ready_text:
 		lobby_debug_log("ready button refreshed while active; pressed=%s text=%s->%s visible=%s disabled=%s" % [str(ready_was_pressed), ready_text_before, next_ready_text, str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled)])
-	var debug_signature := "%s|%s|%s|%s|%s|%s|%s" % [network_mode, screen, str(remote_connected), str(p1_ready), str(p2_ready), str(lobby_p1_ready.visible), str(lobby_home_button.visible)]
+	var remote_connected := is_remote_lobby_player_connected(local_side)
+	var debug_signature := "%s|%s|%s|%s|%s|%s|%s|%s" % [network_mode, screen, str(remote_connected), str(p1_ready), str(p2_ready), str(p3_ready), str(lobby_p1_ready.visible), str(lobby_home_button.visible)]
 	if debug_signature != lobby_debug_last_signature:
 		lobby_debug_last_signature = debug_signature
-		lobby_debug_log("lobby refreshed; mode=%s side=%d connected=%s p1_ready=%s p2_ready=%s ready_visible=%s ready_disabled=%s home_visible=%s home_disabled=%s" % [network_mode, local_side, str(remote_connected), str(p1_ready), str(p2_ready), str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled), str(lobby_home_button.visible), str(lobby_home_button.disabled)])
+		lobby_debug_log("lobby refreshed; mode=%s side=%d connected=%s p1_ready=%s p2_ready=%s p3_ready=%s ready_visible=%s ready_disabled=%s home_visible=%s home_disabled=%s" % [network_mode, local_side, str(remote_connected), str(p1_ready), str(p2_ready), str(p3_ready), str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled), str(lobby_home_button.visible), str(lobby_home_button.disabled)])
+
+
+func _set_lobby_rect(control: Control, position_value: Vector2, size_value: Vector2) -> void:
+	control.position = position_value
+	control.size = size_value
+
+
+func _apply_lobby_card_layout(is_ffa: bool) -> void:
+	var card_nodes: Array[Control] = [$UIRoot/Lobby/PlayerOneCard, $UIRoot/Lobby/PlayerTwoCard, $UIRoot/Lobby/PlayerThreeCard]
+	var previews: Array[Control] = [lobby_p1_preview, lobby_p2_preview, lobby_p3_preview]
+	var infos: Array[Control] = [lobby_p1_info, lobby_p2_info, lobby_p3_info]
+	var statuses: Array[Control] = [lobby_p1_status_icon, lobby_p2_status_icon, lobby_p3_status_icon]
+	var left_frames: Array[Control] = [lobby_p1_left_frame, lobby_p2_left_frame, lobby_p3_left_frame]
+	var left_buttons: Array[Control] = [lobby_p1_left, lobby_p2_left, lobby_p3_left]
+	var right_frames: Array[Control] = [lobby_p1_right_frame, lobby_p2_right_frame, lobby_p3_right_frame]
+	var right_buttons: Array[Control] = [lobby_p1_right, lobby_p2_right, lobby_p3_right]
+	var columns := [80.0, 460.0, 840.0] if is_ffa else [199.0, 681.0, 840.0]
+	for index in 3:
+		var show_card := index < 2 or is_ffa
+		card_nodes[index].visible = show_card
+		if is_ffa:
+			var x := float(columns[index])
+			_set_lobby_rect(card_nodes[index], Vector2(x, 140.0), Vector2(360.0, 360.0))
+			_set_lobby_rect(previews[index], Vector2(x + 32.0, 214.0), Vector2(296.0, 188.0))
+			_set_lobby_rect(infos[index], Vector2(x + 20.0, 156.0), Vector2(320.0, 48.0))
+			_set_lobby_rect(statuses[index], Vector2(x + 266.0, 162.0), Vector2(48.0, 48.0))
+			_set_lobby_rect(left_frames[index], Vector2(x + 42.0, 420.0), Vector2(80.0, 46.0))
+			_set_lobby_rect(left_buttons[index], Vector2(x + 42.0, 420.0), Vector2(80.0, 46.0))
+			_set_lobby_rect(right_frames[index], Vector2(x + 238.0, 420.0), Vector2(80.0, 46.0))
+			_set_lobby_rect(right_buttons[index], Vector2(x + 238.0, 420.0), Vector2(80.0, 46.0))
 
 
 func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> void:
@@ -5304,13 +5473,12 @@ func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> v
 
 func is_remote_lobby_player_connected(local_side: int) -> bool:
 	if dedicated_connection != null and dedicated_connection.has_pending_join():
-		var remote_side := 2 if local_side == 1 else 1
-		return remote_side in dedicated_connected_slots
+		return dedicated_connected_slots.any(func(slot: int) -> bool: return slot != local_side)
 	return multiplayer.has_multiplayer_peer() and (network_mode == "client" or multiplayer.get_peers().size() > 0)
 
 
 func get_local_lobby_ready_button() -> Button:
-	return lobby_p1_ready if local_player_id == 1 else lobby_p2_ready
+	return lobby_p2_ready if _local_lobby_slot() == 2 else lobby_p1_ready
 
 
 func _lobby_player_display_name(player_id: int, selection: int) -> String:
@@ -5362,6 +5530,8 @@ func prepare_match_start() -> void:
 	players = match_state.players
 	configure_player(1, p1_selection)
 	configure_player(2, p2_selection)
+	if players.has(3):
+		configure_player(3, p3_selection)
 	phase = "countdown"
 	countdown_remaining = MATCH_READY_DURATION
 	finish_remaining = 0.0
@@ -5603,8 +5773,20 @@ func update_hud() -> void:
 	if not players.has(hud_player_id):
 		return
 	var own_player: Dictionary = players[hud_player_id]
-	var opponent_player_id := 2 if hud_player_id == 1 else 1
-	var opponent_player: Dictionary = players.get(opponent_player_id, {})
+	if network_mode == "client" and bool(own_player.get("defeated", false)):
+		var spectator_target := int(own_player.get("spectator_target_id", 0))
+		status_label.text = "観戦中: %s" % match_player_display_name(spectator_target)
+		status_label.visible = true
+	else:
+		status_label.visible = false
+	var opponent_ids: Array[int] = []
+	for player_id in players.keys():
+		var slot := int(player_id)
+		if slot != hud_player_id:
+			opponent_ids.append(slot)
+	opponent_ids.sort()
+	var opponent_player: Dictionary = players.get(opponent_ids[0], {}) if not opponent_ids.is_empty() else {}
+	var opponent_two_player: Dictionary = players.get(opponent_ids[1], {}) if opponent_ids.size() > 1 else {}
 	configure_skill_icons(own_player)
 	player_one_label.text = "HP %d / 100" % int(own_player["hp"])
 	hp_bar.value = int(own_player["hp"])
@@ -5615,6 +5797,13 @@ func update_hud() -> void:
 		arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(multiplier, 1.0) else "f(x) = %.1fx" % multiplier
 	if not opponent_player.is_empty():
 		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
+		opponent_one_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[0]), int(opponent_player.get("hp", 0))]
+	var has_second_opponent := not opponent_two_player.is_empty()
+	opponent_two_hp_bar.visible = has_second_opponent
+	opponent_two_label.visible = has_second_opponent
+	if has_second_opponent:
+		opponent_two_hp_bar.value = int(opponent_two_player.get("hp", 0))
+		opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
 	var is_opponent_arithmetician := str(opponent_player.get("character_id", "")) == "arithmetic"
 	opponent_arithmetic_multiplier_label.visible = is_opponent_arithmetician
 	if is_opponent_arithmetician:
@@ -5638,6 +5827,25 @@ func update_hud() -> void:
 
 func get_hud_player_id() -> int:
 	return debug_controlled_player_id if network_mode == "local" else local_player_id
+
+
+func is_local_player_spectating() -> bool:
+	return network_mode == "client" and players.has(local_player_id) and bool(players[local_player_id].get("defeated", false))
+
+
+func get_camera_player_id() -> int:
+	var camera_player_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	if not is_local_player_spectating():
+		return camera_player_id
+	var spectator: Dictionary = players[local_player_id]
+	var target := int(spectator.get("spectator_target_id", 0))
+	if players.has(target) and not bool(players[target].get("defeated", false)):
+		return target
+	for player_id in players.keys():
+		var candidate := int(player_id)
+		if not bool(players[candidate].get("defeated", false)):
+			return candidate
+	return camera_player_id
 
 
 func match_player_display_name(player_id: int) -> String:
@@ -5782,7 +5990,8 @@ func _draw() -> void:
 	draw_set_transform(get_world_draw_offset())
 	draw_arena()
 	# 条件式の配列リテラルは未型付きArrayになるため、ここでは推論型で受ける。
-	var draw_player_ids := [1] if network_mode == "practice" else [1, 2]
+	var draw_player_ids: Array = [1] if network_mode == "practice" else (players.keys() if network_mode == "client" and dedicated_match_mode == "free_for_all" else [1, 2])
+	draw_player_ids.sort()
 	# 魔方陣は足元の地面効果なのでキャラクターの背面へ描画する。
 	for zone in magic_zones:
 		if bool(zone.get("spawned", false)):
@@ -5802,7 +6011,8 @@ func _draw() -> void:
 	for spin in hammer_spins:
 		draw_hammer_spin(spin)
 	for player_id in draw_player_ids:
-		draw_player(player_id, players[player_id])
+		if players.has(player_id):
+			draw_player(player_id, players[player_id])
 	for effect in perfect_mapping_effects:
 		draw_perfect_mapping_effect(effect)
 	for impact in trident_impacts:
@@ -5827,7 +6037,7 @@ func _draw() -> void:
 	for eclipse in lunar_eclipses:
 		draw_lunar_eclipse_laser(eclipse)
 	for player_id in draw_player_ids:
-		if is_player_in_chanter_beam(players[player_id]):
+		if players.has(player_id) and is_player_in_chanter_beam(players[player_id]):
 			draw_player_silhouette(players[player_id])
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_arithmetic_flash()
@@ -5981,11 +6191,7 @@ func is_player_in_chanter_beam(player: Dictionary) -> bool:
 
 
 func get_world_draw_offset() -> Vector2:
-	var camera_player_id := 1
-	if network_mode == "local":
-		camera_player_id = debug_controlled_player_id
-	elif network_mode != "practice":
-		camera_player_id = local_player_id
+	var camera_player_id := 1 if network_mode == "practice" else get_camera_player_id()
 	if not players.has(camera_player_id):
 		return Vector2.ZERO
 	var camera_offset := get_viewport_rect().size * 0.5 - Vector2(players[camera_player_id]["position"])
@@ -6455,7 +6661,7 @@ func draw_arithmetic_point_collection(collection: Dictionary) -> void:
 func draw_arithmetic_flash() -> void:
 	if arithmetic_flash_time <= 0.0 or arithmetic_flash_owner_id == 0:
 		return
-	var camera_player_id := debug_controlled_player_id if network_mode == "local" else local_player_id
+	var camera_player_id := get_camera_player_id()
 	if not players.has(camera_player_id):
 		return
 	var camera_position: Vector2 = players[camera_player_id]["position"]
@@ -6498,6 +6704,9 @@ func _input(event: InputEvent) -> void:
 			return
 	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
 		return
+	if phase == "match" and is_local_player_spectating():
+		# A defeated FFA player only observes; challenge keyboard and mouse input are ignored too.
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if challenge_owner != 0 and not _is_trace_challenge() and challenge_owner == local_player_id:
 			if _is_arithmetic_challenge():
@@ -6527,7 +6736,7 @@ func _input(event: InputEvent) -> void:
 			return
 		if phase == "lobby":
 			if dedicated_connection and dedicated_connection.has_pending_join():
-				var dedicated_selection := p1_selection if local_player_id == 1 else p2_selection
+				var dedicated_selection := _lobby_selection(local_player_id)
 				if event.keycode == KEY_1:
 					dedicated_selection = 0
 				elif event.keycode == KEY_2:
@@ -6539,11 +6748,9 @@ func _input(event: InputEvent) -> void:
 					return
 				else:
 					return
-				if local_player_id == 1:
-					p1_selection = dedicated_selection
-				else:
-					p2_selection = dedicated_selection
+				_set_lobby_selection(local_player_id, dedicated_selection)
 				_send_dedicated_loadout(dedicated_selection)
+				refresh_lobby_label()
 				return
 			if network_mode == "client":
 				if event.keycode == KEY_1 or event.keycode == KEY_7:

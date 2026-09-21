@@ -370,3 +370,69 @@ theme_override_styles/pressed = SubResource("StyleEmpty")
 theme_override_styles/hover = SubResource("StyleEmpty")
 theme_override_styles/focus = SubResource("StyleEmpty")
 text = "ロビーへ戻る"
+
+[node name="FFAResults" type="Control" parent="."]
+visible = false
+z_index = 10
+layout_mode = 0
+offset_left = 230.0
+offset_top = 156.0
+offset_right = 1050.0
+offset_bottom = 586.0
+mouse_filter = 2
+
+[node name="Background" type="ColorRect" parent="FFAResults"]
+layout_mode = 0
+offset_right = 820.0
+offset_bottom = 430.0
+color = Color(0.025, 0.047, 0.105, 0.96)
+
+[node name="Border" type="ColorRect" parent="FFAResults"]
+layout_mode = 0
+offset_right = 820.0
+offset_bottom = 4.0
+color = Color(1, 0.7, 0.32, 0.9)
+
+[node name="Title" type="Label" parent="FFAResults"]
+layout_mode = 0
+offset_top = 26.0
+offset_right = 820.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 0.82, 0.46, 1)
+theme_override_font_sizes/font_size = 31
+text = "FREE FOR ALL  RESULT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RowOne" type="Label" parent="FFAResults"]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 108.0
+offset_right = 762.0
+offset_bottom = 176.0
+theme_override_colors/font_color = Color(1, 0.84, 0.45, 1)
+theme_override_font_sizes/font_size = 27
+text = "1位   PLAYER 1    HP 100 / 100"
+vertical_alignment = 1
+
+[node name="RowTwo" type="Label" parent="FFAResults"]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 202.0
+offset_right = 762.0
+offset_bottom = 270.0
+theme_override_colors/font_color = Color(0.78, 0.79, 0.9, 1)
+theme_override_font_sizes/font_size = 27
+text = "2位   PLAYER 2    HP 100 / 100"
+vertical_alignment = 1
+
+[node name="RowThree" type="Label" parent="FFAResults"]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 296.0
+offset_right = 762.0
+offset_bottom = 364.0
+theme_override_colors/font_color = Color(0.76, 0.64, 0.92, 1)
+theme_override_font_sizes/font_size = 27
+text = "3位   PLAYER 3    HP 100 / 100"
+vertical_alignment = 1

@@ -24,6 +24,8 @@ func _init() -> void:
 	_test_challenge_miss_sequence_and_snapshot()
 	_test_session_event_deduplication()
 	_test_session_ready_start()
+	_test_free_for_all_mode()
+	_test_ffa_multi_target_attacks_and_spectator()
 	_test_session_knockout_finish_phase()
 	_test_session_result_actions()
 	_test_session_disconnect_transitions()
@@ -917,6 +919,86 @@ func _test_session_ready_start() -> void:
 	session.step(MatchSession.READY_DURATION)
 	assert(session.phase == "match")
 	assert(is_equal_approx(float(session.simulation.state["time_remaining"]), 150.0))
+
+
+func _test_free_for_all_mode() -> void:
+	assert(MatchProtocol.room_capacity("duel") == 2)
+	assert(MatchProtocol.room_capacity("free_for_all") == 3)
+	var session := MatchSession.new("ffa-ready-room", "free_for_all")
+	assert(session.join(11, 1) == 1)
+	assert(session.join(12, 2) == 2)
+	assert(session.join(13, 3) == 3)
+	assert(not session.start(11))
+	session.set_ready(11, true)
+	session.set_ready(12, true)
+	assert(not session.start(11))
+	session.set_ready(13, true)
+	assert(session.start(11))
+	assert(str(session.make_snapshot()["match_mode"]) == "free_for_all")
+	assert(int(session.make_snapshot()["room_capacity"]) == 3)
+	assert(not Vector2(session.simulation.state["players"][2]["position"]).is_equal_approx(Vector2(session.simulation.state["players"][3]["position"])))
+	session.step(MatchSession.READY_DURATION)
+	assert(session.phase == "match")
+	var player_two_start := Vector2(session.simulation.state["players"][2]["position"])
+	assert(session.submit_input(12, MatchProtocol.make_input(0, Vector2.LEFT)))
+	session.step(MatchProtocol.TICK_SECONDS)
+	assert(Vector2(session.simulation.state["players"][2]["position"]).x < player_two_start.x)
+	var simulation := session.simulation
+	simulation.call("_apply_damage", 3, 100, "test")
+	assert(bool(simulation.state["players"][3]["defeated"]))
+	assert(not bool(simulation.state["match_over"]))
+	assert(not simulation.handle_event(3, {"type": "attack"}))
+	simulation.call("_apply_damage", 2, 100, "test")
+	assert(bool(simulation.state["match_over"]))
+	assert(int(simulation.state["winner_id"]) == 1)
+	var timeout := MatchSimulation.new()
+	timeout.set_match_mode("free_for_all")
+	timeout.state["players"][1]["hp"] = 42
+	timeout.state["players"][2]["hp"] = 76
+	timeout.state["players"][3]["hp"] = 76
+	timeout.call("_finish_by_hp")
+	assert(int(timeout.state["winner_id"]) == 0)
+
+
+func _test_ffa_multi_target_attacks_and_spectator() -> void:
+	var normal_simulation := MatchSimulation.new()
+	normal_simulation.set_match_mode("free_for_all")
+	normal_simulation.state["players"][1]["position"] = Vector2(100, 100)
+	normal_simulation.state["players"][1]["facing"] = Vector2.RIGHT
+	normal_simulation.state["players"][2]["position"] = Vector2(150, 100)
+	normal_simulation.state["players"][3]["position"] = Vector2(180, 100)
+	assert(normal_simulation.handle_event(1, {"type": "attack"}))
+	assert(int(normal_simulation.state["players"][2]["hp"]) < 100)
+	assert(int(normal_simulation.state["players"][3]["hp"]) < 100)
+
+	var projectile_simulation := MatchSimulation.new()
+	projectile_simulation.set_match_mode("free_for_all")
+	projectile_simulation.state["players"][1]["position"] = Vector2(100, 100)
+	projectile_simulation.state["players"][2]["position"] = Vector2(150, 100)
+	projectile_simulation.state["players"][3]["position"] = Vector2(150, 100)
+	projectile_simulation.state["skill_projectiles"] = [{"projectile_id": 1, "owner_id": 1, "position": Vector2(150, 100), "velocity": Vector2.ZERO, "damage": 8, "lifetime": 1.0, "piercing": true, "delay": 0.0, "launched": true, "homing": false, "homing_time": 0.0}]
+	projectile_simulation._update_projectiles(0.0)
+	assert(int(projectile_simulation.state["players"][2]["hp"]) == 92)
+	assert(int(projectile_simulation.state["players"][3]["hp"]) == 92)
+	assert(projectile_simulation.state["skill_projectiles"][0]["hit_targets"] == [2, 3])
+
+	var spectator_simulation := MatchSimulation.new()
+	spectator_simulation.set_match_mode("free_for_all")
+	spectator_simulation.call("_apply_damage", 3, 100, "test", 1)
+	assert(bool(spectator_simulation.state["players"][3]["defeated"]))
+	assert(int(spectator_simulation.state["players"][3]["spectator_target_id"]) == 1)
+	assert(not spectator_simulation.handle_event(3, {"type": "attack"}))
+	spectator_simulation.call("_apply_damage", 1, 100, "test", 2)
+	assert(int(spectator_simulation.state["players"][3]["spectator_target_id"]) == 2)
+
+	var disconnect_session := MatchSession.new("ffa-disconnect-room", "free_for_all")
+	assert(disconnect_session.join(11, 1) == 1)
+	assert(disconnect_session.join(12, 2) == 2)
+	assert(disconnect_session.join(13, 3) == 3)
+	disconnect_session.phase = "match"
+	assert(disconnect_session.leave(13))
+	assert(disconnect_session.phase == "match")
+	assert(bool(disconnect_session.simulation.state["players"][3]["defeated"]))
 
 
 func _test_session_knockout_finish_phase() -> void:

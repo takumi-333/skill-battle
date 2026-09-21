@@ -15,6 +15,8 @@ signal snapshot_received(snapshot: Dictionary)
 var _http: HTTPRequest
 var _pending_action := ""
 var _join_data: Dictionary = {}
+var joined_slot := 0
+var reserved_slot := 0
 var sequence := 0
 var event_sequence := 0
 
@@ -36,8 +38,8 @@ func _ready() -> void:
 func refresh_rooms() -> void:
 	_request("GET", "/v1/rooms", "rooms")
 
-func create_room(name: String) -> void:
-	_request("POST", "/v1/rooms", "create", JSON.stringify({"name": name}))
+func create_room(name: String, match_mode: String = MatchProtocol.DEFAULT_MATCH_MODE) -> void:
+	_request("POST", "/v1/rooms", "create", JSON.stringify({"name": name, "match_mode": MatchProtocol.normalized_match_mode(match_mode)}))
 
 func join_room(room_id: String) -> void:
 	_request("POST", "/v1/rooms/%s/join" % room_id.uri_encode(), "join", "{}")
@@ -79,6 +81,8 @@ func _is_loopback_http_lobby_url(url: String) -> bool:
 
 func connect_reserved_room(connection: Dictionary) -> void:
 	_join_data = connection
+	joined_slot = 0
+	reserved_slot = int(connection.get("slot", 0))
 	var peer := ENetMultiplayerPeer.new()
 	var error := peer.create_client(str(connection["server_address"]), int(connection["server_port"]))
 	if error != OK:
@@ -103,6 +107,7 @@ func set_ready(is_ready: bool) -> void:
 
 @rpc("authority", "reliable")
 func joined_room(room_id: String, slot: int) -> void:
+	joined_slot = slot
 	joined.emit(room_id, slot)
 
 @rpc("authority", "reliable")

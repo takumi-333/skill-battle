@@ -108,3 +108,16 @@ def test_server_monitoring_keeps_latest_heartbeat_and_events(tmp_path):
     monitoring = db.server_monitoring()
     assert monitoring["heartbeat"]["details"]["active_rooms"] == 2
     assert monitoring["events"][0]["kind"] == "join_accepted"
+
+
+def test_free_for_all_room_reserves_three_slots(tmp_path):
+    db = LobbyDatabase(str(tmp_path / "lobby.db"))
+    first = db.create_room("ffa", "free_for_all")
+    room_id = first["room"]["id"]
+    second = db.reserve(room_id)
+    third = db.reserve(room_id)
+    assert first["room"]["match_mode"] == "free_for_all"
+    assert [first["slot"], second["slot"], third["slot"]] == [1, 2, 3]
+    assert db.reserve(room_id) is None
+    rooms = db.list_rooms()
+    assert rooms == [{"id": room_id, "name": "ffa", "status": "RESERVED", "match_mode": "free_for_all", "capacity": 3, "players": 3}]

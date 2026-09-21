@@ -165,17 +165,17 @@ func join_room(room_id: String, requested_slot: int, token: String) -> void:
 			_reject_and_disconnect(peer_id, room_id, requested_slot, "lobby_unavailable", "ロビー認証サービスを利用できません。")
 			return
 		# Explicit legacy development mode only. Public launchers always require consume.
-		_accept_consumed_join(peer_id, room_id, requested_slot)
+		_accept_consumed_join(peer_id, room_id, requested_slot, str(payload.get("match_mode", MatchProtocol.DEFAULT_MATCH_MODE)))
 		return
-	_start_consume_request(peer_id, room_id, requested_slot, str(payload["nonce"]))
+	_start_consume_request(peer_id, room_id, requested_slot, str(payload["nonce"]), str(payload.get("match_mode", MatchProtocol.DEFAULT_MATCH_MODE)))
 
 
-func _start_consume_request(peer_id: int, room_id: String, requested_slot: int, nonce: String) -> void:
+func _start_consume_request(peer_id: int, room_id: String, requested_slot: int, nonce: String, mode: String) -> void:
 	var request := HTTPRequest.new()
 	request.timeout = CONSUME_TIMEOUT_SECONDS
 	add_child(request)
 	pending_consume_requests[peer_id] = request
-	request.request_completed.connect(_on_consume_request_completed.bind(peer_id, room_id, requested_slot))
+	request.request_completed.connect(_on_consume_request_completed.bind(peer_id, room_id, requested_slot, mode))
 	var headers := PackedStringArray([
 		"Content-Type: application/json",
 		"X-Skill-Battle-Internal-Token: %s" % monitoring_token,
@@ -218,7 +218,7 @@ func _finish_lobby_reconciliation(succeeded: bool, failure_message: String) -> v
 	ready_for_joins = true
 
 
-func _on_consume_request_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray, peer_id: int, room_id: String, requested_slot: int) -> void:
+func _on_consume_request_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray, peer_id: int, room_id: String, requested_slot: int, mode: String) -> void:
 	var request: HTTPRequest = pending_consume_requests.get(peer_id)
 	pending_consume_requests.erase(peer_id)
 	if request != null:
@@ -234,17 +234,17 @@ func _on_consume_request_completed(result: int, response_code: int, _headers: Pa
 		unauthenticated_peer_deadlines.erase(peer_id)
 		_queue_room_status(room_id, "disconnected", requested_slot)
 		return
-	_accept_consumed_join(peer_id, room_id, requested_slot)
+	_accept_consumed_join(peer_id, room_id, requested_slot, mode)
 
 
-func _accept_consumed_join(peer_id: int, room_id: String, requested_slot: int) -> void:
+func _accept_consumed_join(peer_id: int, room_id: String, requested_slot: int, mode: String = MatchProtocol.DEFAULT_MATCH_MODE) -> void:
 	var session: MatchSession = sessions.get(room_id)
 	if session == null:
 		if sessions.size() >= MatchProtocol.MAX_ROOMS:
 			_reject_and_disconnect(peer_id, room_id, requested_slot, "room_limit", "サーバーのルーム上限に達しています。")
 			_queue_room_status(room_id, "disconnected", requested_slot)
 			return
-		session = MatchSession.new(room_id)
+		session = MatchSession.new(room_id, mode)
 		sessions[room_id] = session
 	var assigned := session.join(peer_id, requested_slot)
 	if assigned == 0:
@@ -560,7 +560,7 @@ func _flush_monitoring() -> void:
 	if str(update.get("route", "")) == "room_status":
 		path = "/internal/rooms/" + str(update["room_id"]).uri_encode() + "/status"
 		body = {"status": update["status"]}
-		if int(update.get("slot", 0)) in [1, 2]:
+		if int(update.get("slot", 0)) in [1, 2, 3]:
 			body["slot"] = int(update["slot"])
 	monitoring_in_flight_update = update
 	var error := monitoring_request.request(monitoring_url + path, headers, HTTPClient.METHOD_POST, JSON.stringify(body))

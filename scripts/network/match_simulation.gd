@@ -97,15 +97,20 @@ var _next_meteor_impact_id := 1
 var _next_presentation_id := 1
 var _trace_evaluator := TraceEvaluator.new()
 var _pending_visual_presentations: Array[Dictionary] = []
+var match_mode := MatchProtocol.DEFAULT_MATCH_MODE
 
 func _init() -> void:
 	reset()
 
-func reset() -> void:
+func reset(mode: String = match_mode) -> void:
+	match_mode = MatchProtocol.normalized_match_mode(mode)
 	_pending_visual_presentations.clear()
 	var initial := MatchState.new()
+	if match_mode == "duel":
+		initial.players.erase(3)
 	state = {
 		"players": initial.players.duplicate(true),
+		"match_mode": match_mode,
 		"time_remaining": MATCH_DURATION,
 		"match_over": false,
 		"winner_id": 0,
@@ -125,6 +130,31 @@ func reset() -> void:
 	}
 	configure_loadout(1, 0, "typist_trident")
 	configure_loadout(2, 1, "typist_trident")
+	configure_loadout(3, 2, "typist_trident")
+
+func set_match_mode(mode: String) -> void:
+	reset(mode)
+
+func active_slots() -> Array[int]:
+	return MatchProtocol.slots_for_mode(match_mode)
+
+func is_alive(slot: int) -> bool:
+	return state["players"].has(slot) and not bool(state["players"][slot].get("defeated", false))
+
+func living_opponents(slot: int) -> Array[int]:
+	var result: Array[int] = []
+	for candidate in active_slots():
+		if candidate != slot and is_alive(candidate):
+			result.append(candidate)
+	return result
+
+func _target_for(slot: int) -> int:
+	var candidates := living_opponents(slot)
+	if candidates.is_empty():
+		return 0
+	var origin := Vector2(state["players"][slot]["position"])
+	candidates.sort_custom(func(first: int, second: int) -> bool: return origin.distance_squared_to(Vector2(state["players"][first]["position"])) < origin.distance_squared_to(Vector2(state["players"][second]["position"])))
+	return candidates[0]
 
 func configure_loadout(slot: int, character: int, big_skill: String, display_name: String = "", small_skill_index: int = 0, skill3_index: int = 0) -> void:
 	if not state["players"].has(slot):
@@ -151,13 +181,21 @@ func configure_loadout(slot: int, character: int, big_skill: String, display_nam
 	player["skill3_id"] = "typist_golden_time_iii" if character == 0 and skill3_index == 1 else ("typist_hammer_spin" if character == 0 else ("arithmetic_hack_vision" if character == 1 and skill3_index == 0 else ("arithmetic_equation_domination" if character == 1 and skill3_index == 1 else ("chanter_skill3_0" if character == 2 and skill3_index == 0 else ("chanter_lunar_eclipse" if character == 2 and skill3_index == 1 else "")))))
 	player["typing_zone_time"] = 0.0
 	player["typing_zone_level"] = 0
-	player["position"] = Vector2(200, ARENA.get_center().y) if slot == 1 else Vector2(1480, ARENA.get_center().y)
-	player["facing"] = Vector2.RIGHT if slot == 1 else Vector2.LEFT
+	match slot:
+		1:
+			player["position"] = Vector2(200, ARENA.get_center().y)
+			player["facing"] = Vector2.RIGHT
+		2:
+			player["position"] = Vector2(1480, ARENA.get_center().y)
+			player["facing"] = Vector2.LEFT
+		3:
+			player["position"] = Vector2(ARENA.get_center().x, ARENA.size.y - 154.0)
+			player["facing"] = Vector2.UP
 	player["attack_facing"] = player["facing"]
 	state["players"][slot] = player
 
 func handle_event(slot: int, event: Dictionary) -> bool:
-	if bool(state["match_over"]):
+	if bool(state["match_over"]) or not is_alive(slot):
 		return false
 	var event_type := str(event["type"])
 	var payload: Variant = event.get("payload", null)
@@ -188,7 +226,7 @@ func step(delta: float, inputs: Dictionary) -> void:
 	if bool(state["match_over"]):
 		return
 	state["time_remaining"] = maxf(0.0, float(state["time_remaining"]) - delta)
-	for slot in [1, 2]:
+	for slot in active_slots():
 		_update_player(slot, delta, inputs.get(slot, {"move": Vector2.ZERO}))
 	_update_challenges(delta)
 	_update_projectiles(delta)
@@ -206,12 +244,17 @@ func step(delta: float, inputs: Dictionary) -> void:
 		_finish_by_hp()
 
 func finish_by_disconnect(leaving_slot: int) -> void:
+	if match_mode == "free_for_all":
+		_defeat_player(leaving_slot)
+		return
 	state["match_over"] = true
-	state["winner_id"] = 2 if leaving_slot == 1 else 1
+	state["winner_id"] = _target_for(leaving_slot)
 	state["status_text"] = "対戦相手との接続が切れました。"
 	state["arithmetic_point_collections"].clear()
 
 func _update_player(slot: int, delta: float, input: Dictionary) -> void:
+	if not is_alive(slot):
+		return
 	var player: Dictionary = state["players"][slot]
 	for key in ["attack_cooldown", "attack_time", "hit_time", "small_cooldown", "big_cooldown", "skill3_cooldown", "buff_time", "invisible_time", "invisible_flicker", "hack_vision_time", "typing_zone_time", "equation_lock_time"]:
 		player[key] = maxf(0.0, float(player.get(key, 0.0)) - delta)
@@ -236,7 +279,10 @@ func _update_player(slot: int, delta: float, input: Dictionary) -> void:
 		var lock_multiplier := EQUATION_DOMINATION_LOCK_SPEED_MULTIPLIER if float(player.get("equation_lock_time", 0.0)) > 0.0 else 1.0
 		var speed := PLAYER_SPEED * focus_multiplier * lock_multiplier * float(player.get("buff_speed_multiplier", 1.0)) * _arithmetic_movement_multiplier(player) * _hammer_speed_multiplier(slot)
 		var next_position := _clamp_to_arena(Vector2(player["position"]) + direction * speed * delta)
-		if not _players_overlap(next_position, Vector2(state["players"][_other(slot)]["position"])):
+		var overlaps := false
+		for opponent in living_opponents(slot):
+			overlaps = overlaps or _players_overlap(next_position, Vector2(state["players"][opponent]["position"]))
+		if not overlaps:
 			player["position"] = next_position
 			player["is_moving"] = true
 	state["players"][slot] = player
@@ -254,12 +300,18 @@ func _try_normal_attack(slot: int) -> bool:
 	player["attack_facing"] = player["facing"]
 	state["players"][slot] = player
 	_destroy_decoys_in_normal_attack(slot, Vector2(player["position"]), Vector2(player["facing"]))
-	var target_slot := _other(slot)
-	var target: Dictionary = state["players"][target_slot]
-	var offset: Vector2 = Vector2(target["position"]) - Vector2(player["position"])
-	if offset.length() <= NORMAL_RANGE and offset.length_squared() > 0.0 and Vector2(player["facing"]).dot(offset.normalized()) >= NORMAL_HALF_ANGLE_DOT:
-		_apply_damage(target_slot, _normal_attack_damage(player), "%sの斬撃" % str(player["name"]))
-		state["status_text"] = "%sの斬撃が%sに命中！" % [str(player["name"]), str(target["name"])]
+	var targets := living_opponents(slot)
+	if targets.is_empty():
+		return false
+	var hit_names: Array[String] = []
+	for target_slot in targets:
+		var target: Dictionary = state["players"][target_slot]
+		var offset: Vector2 = Vector2(target["position"]) - Vector2(player["position"])
+		if offset.length() <= NORMAL_RANGE and offset.length_squared() > 0.0 and Vector2(player["facing"]).dot(offset.normalized()) >= NORMAL_HALF_ANGLE_DOT:
+			_apply_damage(target_slot, _normal_attack_damage(player), "%sの斬撃" % str(player["name"]), slot)
+			hit_names.append(str(target["name"]))
+	if not hit_names.is_empty():
+		state["status_text"] = "%sの斬撃が%sに命中！" % [str(player["name"]), "・".join(hit_names)]
 	else:
 		if _award_hack_vision_miss(slot):
 			state["status_text"] = "%sの空振りを解析。妨害ポイント +0.5" % str(player["name"])
@@ -506,7 +558,7 @@ func _apply_challenge_cooldown(player: Dictionary, tier: String, skill: String) 
 		player["small_cooldown"] = _golden_time_cooldown(skill) if skill == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_COOLDOWN)
 
 func _start_forced_equation_challenge(owner: int) -> void:
-	var target := _other(owner)
+	var target := _nearest_living_opponent(owner)
 	if _has_forced_equation_challenge(target) or float(state["players"][target].get("equation_lock_time", 0.0)) > 0.0:
 		state["status_text"] = "方程式支配は対象の行動を拘束できなかった。"
 		return
@@ -609,7 +661,7 @@ func _spawn_skill(owner: int, score: int, challenge: Dictionary) -> void:
 					_spawn_projectile(owner, score, true, PI / 2.0 - TAU * float(shot) / 16.0, shot_delay, "", true)
 
 func _perfect_mapping_copy_candidates(owner: int) -> Array[String]:
-	var target := _other(owner)
+	var target := _nearest_living_opponent(owner)
 	if not state["players"].has(target):
 		return []
 	var player: Dictionary = state["players"][target]
@@ -714,7 +766,7 @@ func _spawn_chanter_skill3_volley(owner: int, score: int) -> void:
 	})
 
 func _spawn_meteor_shower(owner: int, score: int) -> void:
-	var target := _other(owner)
+	var target := _nearest_living_opponent(owner)
 	if not state["players"].has(target):
 		return
 	for pair_index in METEOR_PAIR_COUNT:
@@ -798,7 +850,7 @@ func _apply_typing_zone_input(owner: int, character: String) -> void:
 	var level := _typing_zone_level(player)
 	if level <= 0 or state["skill_projectiles"].size() >= MAX_PROJECTILES:
 		return
-	var target := _other(owner)
+	var target := _nearest_living_opponent(owner)
 	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
 	if direction.length_squared() <= 0.0:
 		direction = Vector2(player.get("facing", Vector2.RIGHT))
@@ -809,7 +861,7 @@ func _apply_typing_zone_input(owner: int, character: String) -> void:
 
 func _spawn_hack_vision_projectile(owner: int, score: int, suppress_interference_points: bool = false) -> void:
 	var player: Dictionary = state["players"][owner]
-	var target := _other(owner)
+	var target := _nearest_living_opponent(owner)
 	var direction := (Vector2(state["players"][target]["position"]) - Vector2(player["position"])).normalized()
 	if direction.length_squared() <= 0.0:
 		direction = Vector2(player["facing"])
@@ -824,7 +876,11 @@ func _update_projectiles(delta: float) -> void:
 			state["skill_projectiles"][index] = projectile
 			continue
 		var owner := int(projectile["owner_id"])
-		var target := _other(owner)
+		var target := _nearest_living_opponent(owner)
+		var targets := living_opponents(owner)
+		if target == 0:
+			state["skill_projectiles"].remove_at(index)
+			continue
 		if bool(projectile.get("fixed_direction", false)) and not bool(projectile["launched"]):
 			var fixed_source := Vector2(state["players"][owner]["position"])
 			var fixed_direction := Vector2(projectile["velocity"]).normalized()
@@ -852,21 +908,35 @@ func _update_projectiles(delta: float) -> void:
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
 				continue
-		var hit_target := _typist_hammer_shockwave_projectile_hits_player(projectile, target) if bool(projectile.get("typist_hammer_shockwave", false)) else _point_hits_player(Vector2(projectile["position"]), target, PROJECTILE_RADIUS)
-		if hit_target:
+		var hit_targets: Array[int] = []
+		var consumed := false
+		for previous_target in projectile.get("hit_targets", []):
+			hit_targets.append(int(previous_target))
+		for candidate in targets:
+			var hit_target := _typist_hammer_shockwave_projectile_hits_player(projectile, candidate) if bool(projectile.get("typist_hammer_shockwave", false)) else _point_hits_player(Vector2(projectile["position"]), candidate, PROJECTILE_RADIUS)
+			if not hit_target:
+				continue
 			if bool(projectile.get("hack_vision", false)):
-				var target_player: Dictionary = state["players"][target]
+				# Homing interference is intentionally single-target: it tracks the nearest living enemy.
+				if candidate != target:
+					continue
+				var target_player: Dictionary = state["players"][candidate]
 				target_player["hack_vision_time"] = maxf(float(target_player.get("hack_vision_time", 0.0)), float(projectile.get("hack_duration", 0.0)))
 				target_player["hack_vision_owner_id"] = owner
 				target_player["hack_vision_suppress_interference_points"] = bool(projectile.get("suppress_interference_points", false))
-				state["players"][target] = target_player
+				state["players"][candidate] = target_player
 				state["status_text"] = "%sの視界にノイズが走った！" % str(target_player["name"])
-			elif not bool(projectile.get("hit_target", false)):
-				_apply_damage(target, int(projectile["damage"]), "スキル弾")
-				projectile["hit_target"] = true
+			elif candidate not in hit_targets:
+				_apply_damage(candidate, int(projectile["damage"]), "スキル弾", owner)
+				hit_targets.append(candidate)
+				projectile["hit_target"] = true # Backward-compatible snapshot flag.
+				projectile["hit_targets"] = hit_targets
 			if not bool(projectile["piercing"]):
 				state["skill_projectiles"].remove_at(index)
-				continue
+				consumed = true
+				break
+		if consumed:
+			continue
 		if float(projectile["lifetime"]) <= 0.0 or not ARENA.grow(40.0).has_point(Vector2(projectile["position"])):
 			state["skill_projectiles"].remove_at(index)
 		else:
@@ -1053,7 +1123,8 @@ func _update_zones(delta: float) -> void:
 	for index in range(state["magic_zones"].size() - 1, -1, -1):
 		var zone: Dictionary = state["magic_zones"][index]
 		zone["delay"] = float(zone["delay"]) - delta
-		var target := _other(int(zone["owner_id"]))
+		var owner := int(zone["owner_id"])
+		var target := _nearest_living_opponent(owner)
 		if not bool(zone["spawned"]) and float(zone["delay"]) <= 0.0:
 			zone["position"] = state["players"][target]["position"]
 			zone["spawned"] = true
@@ -1067,8 +1138,9 @@ func _update_zones(delta: float) -> void:
 			var next_damage_time := float(zone.get("next_damage_time", CHANTER_ZONE_WARNING_DURATION))
 			var damage_interval := float(zone.get("damage_interval", CHANTER_ZONE_DAMAGE_INTERVAL))
 			while next_damage_time < active_duration and float(zone["elapsed"]) >= next_damage_time:
-				if _point_hits_chanter_zone(Vector2(zone["position"]), target):
-					_apply_damage(target, int(zone["damage"]), "月柱・昇華")
+				for candidate in living_opponents(owner):
+					if _point_hits_chanter_zone(Vector2(zone["position"]), candidate):
+						_apply_damage(candidate, int(zone["damage"]), "月柱・昇華", owner)
 				next_damage_time += damage_interval
 			zone["next_damage_time"] = next_damage_time
 		if bool(zone["spawned"]) and float(zone["lifetime"]) <= 0.0:
@@ -1097,9 +1169,9 @@ func _update_meteor_impacts(delta: float) -> void:
 		if not bool(impact.get("landed", false)) and float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)):
 			impact["landed"] = true
 			var owner := int(impact["owner_id"])
-			var target := _other(owner)
-			if state["players"].has(target) and _player_is_in_meteor_shadow(Vector2(impact["position"]), target):
-				_apply_damage(target, int(impact["damage"]), "流月雨")
+			for target in living_opponents(owner):
+				if _player_is_in_meteor_shadow(Vector2(impact["position"]), target):
+					_apply_damage(target, int(impact["damage"]), "流月雨", owner)
 		if float(impact["elapsed"]) >= float(impact.get("fall_duration", METEOR_FALL_DURATION)) + float(impact.get("ripple_duration", METEOR_RIPPLE_DURATION)):
 			state["meteor_impacts"].remove_at(index)
 		else:
@@ -1110,10 +1182,10 @@ func _release_trident(impact: Dictionary) -> void:
 	var score := int(impact["score"])
 	var facing := Vector2(impact["facing"]).normalized()
 	var landing := Vector2(impact["origin"]) + facing * (120.0 + float(score) * 0.25)
-	var target := _other(owner)
 	_destroy_decoy_at_point(owner, landing, 30.0)
-	if _point_hits_player(landing, target, 30.0):
-		_apply_damage(target, _trident_landing_damage(score), "三叉震槌の直撃")
+	for target in living_opponents(owner):
+		if _point_hits_player(landing, target, 30.0):
+			_apply_damage(target, _trident_landing_damage(score), "三叉震槌の直撃", owner)
 	for angle in [-PI / 2.0, -PI / 3.0, 0.0, PI / 3.0, PI / 2.0]:
 		_spawn_projectile_from(owner, score, landing, facing.rotated(angle), true)
 	if score >= 50:
@@ -1134,14 +1206,21 @@ func _update_shockwaves(delta: float) -> void:
 			wave["elapsed"] = float(wave["elapsed"]) + delta
 			wave["radius"] = float(wave.get("speed", 150.0)) * float(wave["elapsed"])
 			_destroy_decoys_in_radius(int(wave["owner_id"]), Vector2(wave["origin"]), float(wave["radius"]))
-			var target := _other(int(wave["owner_id"]))
-			if not bool(wave["hit"]) and Vector2(state["players"][target]["position"]).distance_to(Vector2(wave["origin"])) <= float(wave["radius"]) + PLAYER_RADIUS:
+			var hit_targets: Array[int] = []
+			for previous_target in wave.get("hit_targets", []):
+				hit_targets.append(int(previous_target))
+			var owner := int(wave["owner_id"])
+			for target in living_opponents(owner):
+				if target in hit_targets or Vector2(state["players"][target]["position"]).distance_to(Vector2(wave["origin"])) > float(wave["radius"]) + PLAYER_RADIUS:
+					continue
 				if int(wave["damage"]) > 0:
-					_apply_damage(target, int(wave["damage"]), "三叉震槌")
+					_apply_damage(target, int(wave["damage"]), "三叉震槌", owner)
 				var player: Dictionary = state["players"][target]
 				player["position"] = _clamp_to_arena(Vector2(player["position"]) + (Vector2(player["position"]) - Vector2(wave["origin"])).normalized() * float(wave["knockback"]))
 				state["players"][target] = player
-				wave["hit"] = true
+				hit_targets.append(target)
+			wave["hit_targets"] = hit_targets
+			wave["hit"] = not hit_targets.is_empty()
 		if float(wave["delay"]) <= 0.0 and float(wave["elapsed"]) >= float(wave["duration"]):
 			state["shockwaves"].remove_at(index)
 		else:
@@ -1160,10 +1239,14 @@ func _update_hammer_spins(delta: float) -> void:
 		state["players"][owner] = player
 		var tip := Vector2(player["position"]) + Vector2.from_angle(float(spin["angle"])) * (92.0 + float(spin["score"]) * 0.42)
 		_destroy_decoys_near_segment(owner, Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0)
-		var target := _other(owner)
-		if float(spin["hit_timer"]) <= 0.0 and _point_hits_segment(Vector2(state["players"][target]["position"]), Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0):
-			_apply_damage(target, 10 + floori(float(spin["score"]) * 0.2), "黄金大旋槌")
-			spin["hit_timer"] = 0.28
+		if float(spin["hit_timer"]) <= 0.0:
+			var hit_any := false
+			for target in living_opponents(owner):
+				if _point_hits_segment(Vector2(state["players"][target]["position"]), Vector2(player["position"]), tip, PLAYER_RADIUS + 12.0):
+					_apply_damage(target, 10 + floori(float(spin["score"]) * 0.2), "黄金大旋槌", owner)
+					hit_any = true
+			if hit_any:
+				spin["hit_timer"] = 0.28
 		if int(spin["score"]) >= 60 and float(spin["keycap_timer"]) <= 0.0:
 			if state["skill_projectiles"].size() < MAX_PROJECTILES:
 				var keycap_facing := Vector2(player["facing"])
@@ -1188,14 +1271,15 @@ func _update_lunar_eclipses(delta: float) -> void:
 		var eclipse: Dictionary = state["lunar_eclipses"][index]
 		eclipse["elapsed"] = float(eclipse["elapsed"]) + delta
 		var owner := int(eclipse["owner_id"])
-		var target := _other(owner)
 		var elapsed := float(eclipse["elapsed"])
 		while float(eclipse["next_pull_time"]) <= elapsed and float(eclipse["next_pull_time"]) <= LUNAR_ECLIPSE_DURATION:
-			_pull_lunar_eclipse_target(target, Vector2(eclipse["center"]), float(eclipse["pull_amount"]))
+			for target in living_opponents(owner):
+				_pull_lunar_eclipse_target(target, Vector2(eclipse["center"]), float(eclipse["pull_amount"]))
 			eclipse["next_pull_time"] = float(eclipse["next_pull_time"]) + LUNAR_ECLIPSE_PULL_INTERVAL
 		while float(eclipse["next_laser_hit_time"]) <= elapsed and float(eclipse["next_laser_hit_time"]) <= LUNAR_ECLIPSE_LASER_LAST_HIT_TIME:
-			if _lunar_eclipse_laser_hits(target, Vector2(eclipse["origin"]), Vector2(eclipse["facing"])):
-				_apply_damage(target, int(eclipse["damage"]), "月蝕・潮汐")
+			for target in living_opponents(owner):
+				if _lunar_eclipse_laser_hits(target, Vector2(eclipse["origin"]), Vector2(eclipse["facing"])):
+					_apply_damage(target, int(eclipse["damage"]), "月蝕・潮汐", owner)
 			eclipse["next_laser_hit_time"] = float(eclipse["next_laser_hit_time"]) + LUNAR_ECLIPSE_LASER_DAMAGE_INTERVAL
 		if elapsed >= float(eclipse["duration"]):
 			state["lunar_eclipses"].remove_at(index)
@@ -1255,25 +1339,75 @@ func _is_lunar_eclipse_active(slot: int) -> bool:
 			return true
 	return false
 
-func _apply_damage(target_slot: int, damage: int, _attack_name: String) -> void:
-	if bool(state["match_over"]):
+func _apply_damage(target_slot: int, damage: int, _attack_name: String, attacker_slot: int = 0) -> void:
+	if bool(state["match_over"]) or not is_alive(target_slot):
 		return
 	var target: Dictionary = state["players"][target_slot]
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
 	target["hit_time"] = 0.20
 	state["players"][target_slot] = target
 	if int(target["hp"]) <= 0:
+		if match_mode == "free_for_all":
+			_defeat_player(target_slot, attacker_slot)
+			return
 		state["match_over"] = true
-		state["winner_id"] = _other(target_slot)
-		state["status_text"] = "%sの勝利！" % str(state["players"][_other(target_slot)]["name"])
+		state["winner_id"] = _nearest_living_opponent(target_slot)
+		state["status_text"] = "%sの勝利！" % str(state["players"][_nearest_living_opponent(target_slot)]["name"])
 		state["arithmetic_point_collections"].clear()
+
+func _defeat_player(target_slot: int, attacker_slot: int = 0) -> void:
+	var target: Dictionary = state["players"][target_slot]
+	if bool(target.get("defeated", false)):
+		return
+	target["defeated"] = true
+	target["focused"] = false
+	target["is_moving"] = false
+	var remaining := living_opponents(target_slot)
+	target["placement"] = remaining.size() + 1
+	if attacker_slot in remaining:
+		target["spectator_target_id"] = attacker_slot
+	else:
+		target["spectator_target_id"] = remaining[0] if not remaining.is_empty() else 0
+	state["players"][target_slot] = target
+	state["challenges"].erase(target_slot)
+	_refresh_spectator_targets(target_slot)
+	if remaining.size() <= 1:
+		state["match_over"] = true
+		state["winner_id"] = remaining[0] if remaining.size() == 1 else 0
+		if state["winner_id"] != 0:
+			var winner: Dictionary = state["players"][state["winner_id"]]
+			winner["placement"] = 1
+			state["players"][state["winner_id"]] = winner
+		state["arithmetic_point_collections"].clear()
+
+func _refresh_spectator_targets(defeated_target: int = 0) -> void:
+	for slot in active_slots():
+		if not state["players"].has(slot):
+			continue
+		var spectator: Dictionary = state["players"][slot]
+		if not bool(spectator.get("defeated", false)):
+			continue
+		var current_target := int(spectator.get("spectator_target_id", 0))
+		if current_target != 0 and current_target != defeated_target and is_alive(current_target):
+			continue
+		var candidates := living_opponents(slot)
+		spectator["spectator_target_id"] = candidates[0] if not candidates.is_empty() else 0
+		state["players"][slot] = spectator
 
 func _finish_by_hp() -> void:
 	state["match_over"] = true
 	state["arithmetic_point_collections"].clear()
-	var p1 := int(state["players"][1]["hp"])
-	var p2 := int(state["players"][2]["hp"])
-	state["winner_id"] = 1 if p1 > p2 else (2 if p2 > p1 else 0)
+	var contenders := active_slots().filter(func(slot: int) -> bool: return is_alive(slot))
+	var high_score := -1
+	var leaders: Array[int] = []
+	for slot in contenders:
+		var hp := int(state["players"][slot]["hp"])
+		if hp > high_score:
+			high_score = hp
+			leaders = [slot]
+		elif hp == high_score:
+			leaders.append(slot)
+	state["winner_id"] = leaders[0] if leaders.size() == 1 else 0
 	state["status_text"] = "時間切れ、引き分け！" if int(state["winner_id"]) == 0 else "%sの勝利！" % str(state["players"][state["winner_id"]]["name"])
 
 func _score_challenge(challenge: Dictionary) -> int:
@@ -1419,8 +1553,8 @@ func _point_hits_segment(point: Vector2, start: Vector2, end: Vector2, padding: 
 func _clamp_to_arena(position_value: Vector2) -> Vector2:
 	return Vector2(clampf(position_value.x, 30.0, ARENA.size.x - 30.0), clampf(position_value.y, 30.0, ARENA.size.y - 30.0))
 
-func _other(slot: int) -> int:
-	return 2 if slot == 1 else 1
+func _nearest_living_opponent(slot: int) -> int:
+	return _target_for(slot)
 
 func _take_presentation_id() -> int:
 	var value := _next_presentation_id

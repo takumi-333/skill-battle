@@ -83,6 +83,7 @@ app = FastAPI(title="Skill Battle Lobby", version="2.0", lifespan=public_lifespa
 
 class CreateRoom(BaseModel):
     name: str = Field(min_length=1, max_length=48)
+    match_mode: str = Field(default="duel", pattern="^(duel|free_for_all)$")
 
 
 class JoinRoom(BaseModel):
@@ -91,12 +92,12 @@ class JoinRoom(BaseModel):
 
 class ConsumeNonce(BaseModel):
     nonce: str = Field(min_length=32, max_length=256)
-    slot: int = Field(ge=1, le=2)
+    slot: int = Field(ge=1, le=3)
 
 
 class RoomStatus(BaseModel):
     status: str = Field(pattern="^(connected|disconnected|running|closed)$")
-    slot: int | None = Field(default=None, ge=1, le=2)
+    slot: int | None = Field(default=None, ge=1, le=3)
 
 
 class ServerMonitoringUpdate(BaseModel):
@@ -224,7 +225,7 @@ def ticket(reservation: dict) -> dict:
     return {
         "room": room,
         "slot": reservation["slot"],
-        "token": issue(SECRET, room["id"], reservation["slot"], reservation["nonce"], TICKET_LIFETIME_SECONDS),
+        "token": issue(SECRET, room["id"], reservation["slot"], reservation["nonce"], TICKET_LIFETIME_SECONDS, room.get("match_mode", "duel")),
         "server_address": SERVER_ADDRESS,
         "server_port": SERVER_PORT,
     }
@@ -242,7 +243,7 @@ def list_rooms(_: str = Depends(require_public)) -> dict:
 
 @app.post("/v1/rooms")
 def create_room(body: CreateRoom, _: str = Depends(require_public)) -> dict:
-    reservation = _database_call(lambda: db.create_room(body.name.strip(), RESERVATION_LIFETIME_SECONDS, TICKET_LIFETIME_SECONDS))
+    reservation = _database_call(lambda: db.create_room(body.name.strip(), body.match_mode, RESERVATION_LIFETIME_SECONDS, TICKET_LIFETIME_SECONDS))
     return ticket(reservation)
 
 
