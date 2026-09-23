@@ -38,10 +38,6 @@ const EQUATION_DOMINATION_LOCK_SPEED_MULTIPLIER := 0.75
 const CHALLENGE_MISS_TIME_PENALTY := 1.8
 const PROJECTILE_RADIUS := 10.0
 const MAX_PROJECTILES := 320
-const TRACE_MIN_ELAPSED := 0.35
-const TRACE_MIN_POINTS := 8
-const TRACE_MIN_LENGTH := 80.0
-const TRACE_MAX_SEGMENT_LENGTH := 180.0
 const CHANTER_ZONE_WARNING_DURATION := 0.5
 const CHANTER_ZONE_DAMAGE_INTERVAL := 0.5
 const CHANTER_ZONE_RADIUS := 80.0
@@ -454,28 +450,21 @@ func _submit_trace(slot: int, trace: PackedVector2Array) -> bool:
 	var challenge: Dictionary = _challenge_for(slot)
 	if challenge.is_empty() or str(challenge["type"]) != "tracing":
 		return false
-	if not _valid_trace_submission(challenge, trace):
-		_end_challenge(slot, false, 0, "なぞり入力が無効です。")
-		return true
 	challenge["trace"] = trace
 	_set_challenge(slot, challenge)
 	var result := _trace_evaluator.evaluate(challenge["target"], trace)
-	if not bool(result.get("ng", true)) and int(result.get("score", 0)) >= 45:
-		_end_challenge(slot, true, int(result["score"]), "")
-	else:
-		_end_challenge(slot, false, 0, "なぞりに失敗した。")
+	var success := not bool(result.get("ng", true)) and int(result.get("score", 0)) >= 45
+	var score := int(result.get("score", 0)) if success else 0
+	_pending_visual_presentations.append({
+		"presentation_id": _take_presentation_id(),
+		"kind": "challenge_result",
+		"owner_slot": slot,
+		"challenge_id": int(challenge.get("id", 0)),
+		"success": success,
+		"score": score,
+	})
+	_end_challenge(slot, success, score, "" if success else "なぞりに失敗した。")
 	return true
-
-func _valid_trace_submission(challenge: Dictionary, trace: PackedVector2Array) -> bool:
-	if float(challenge.get("elapsed", 0.0)) < TRACE_MIN_ELAPSED or trace.size() < TRACE_MIN_POINTS:
-		return false
-	var length := 0.0
-	for index in range(1, trace.size()):
-		var segment := trace[index].distance_to(trace[index - 1])
-		if segment > TRACE_MAX_SEGMENT_LENGTH:
-			return false
-		length += segment
-	return length >= TRACE_MIN_LENGTH
 
 func _cancel_challenge(slot: int) -> bool:
 	var challenge := _challenge_for(slot)

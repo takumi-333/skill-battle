@@ -368,9 +368,10 @@ func _broadcast_session(session: MatchSession) -> void:
 		return
 	var presentations := session.take_presentations()
 	for peer_id in session.peer_slots.keys():
-		for presentation in presentations:
-			rpc_id(int(peer_id), "receive_skill_presentation", presentation)
 		var recipient_slot := int(session.peer_slots[peer_id])
+		for presentation in presentations:
+			if MatchProtocol.presentation_visible_to_slot(presentation, recipient_slot):
+				rpc_id(int(peer_id), "receive_skill_presentation", presentation)
 		rpc_id(int(peer_id), "receive_dedicated_snapshot", session.make_snapshot(recipient_slot, server_tick))
 
 

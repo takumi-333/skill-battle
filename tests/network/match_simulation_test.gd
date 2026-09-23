@@ -1,6 +1,7 @@
 extends SceneTree
 
 const TypistHammerShockwaveHitboxData = preload("res://scripts/data/typist_hammer_shockwave_hitbox.gd")
+const TracePointLimiterData = preload("res://scripts/trace_point_limiter.gd")
 
 func _init() -> void:
 	_test_state_and_normal_attack()
@@ -12,6 +13,9 @@ func _init() -> void:
 	_test_arithmetician_interference_points()
 	_test_arithmetician_equation_domination()
 	_test_chanter_skills()
+	_test_chanter_trace_validation_removal()
+	_test_chanter_slot_two_trace_tiers()
+	_test_trace_point_limiter()
 	_test_chanter_skill2_specification()
 	_test_chanter_meteor_shower()
 	_test_meteor_damage_matches_shadow_radius()
@@ -33,6 +37,7 @@ func _init() -> void:
 	_test_session_keeps_result_actions_after_admission_closes()
 	_test_dedicated_admission_timeout_and_status_retry_policy()
 	_test_snapshot_metadata_and_recipient_filtering()
+	_test_result_presentation_recipient_filtering()
 	_test_visual_snapshot_interpolation()
 	_test_delayed_keycap_targets_from_launch_position()
 	_test_decoy_flash_expires()
@@ -492,6 +497,11 @@ func _test_chanter_skills() -> void:
 	assert(big_simulation.handle_event(1, {"type": "challenge_trace", "payload": big_target}))
 	assert(big_simulation.state["skill_projectiles"].size() == 128)
 	assert(is_equal_approx(float(big_simulation.state["players"][1]["big_cooldown"]), 6.0))
+	var result_presentations := big_simulation.take_visual_presentations()
+	assert(result_presentations.size() == 1)
+	assert(str(result_presentations[0]["kind"]) == "challenge_result")
+	assert(int(result_presentations[0]["owner_slot"]) == 1)
+	assert(bool(result_presentations[0]["success"]))
 	# The clockwise and counter-clockwise sequences start together at the top
 	# and bottom respectively.
 	big_simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
@@ -499,6 +509,80 @@ func _test_chanter_skills() -> void:
 	var counterclockwise_projectile: Dictionary = big_simulation.state["skill_projectiles"][1]
 	assert(Vector2(clockwise_projectile["velocity"]).normalized().is_equal_approx(Vector2.UP))
 	assert(Vector2(counterclockwise_projectile["velocity"]).normalized().is_equal_approx(Vector2.DOWN))
+
+
+func _test_chanter_trace_validation_removal() -> void:
+	# Each trace crosses exactly one former hard limit while still matching its target.
+	var fast_target := _make_trace_line(49, 1000.0)
+	_assert_trace_success_with_custom_target(2, fast_target, fast_target, 0.1)
+
+	var sparse_target := _make_trace_line(49, 1000.0)
+	var sparse_trace := _make_trace_line(7, 1000.0)
+	_assert_trace_success_with_custom_target(2, sparse_target, sparse_trace, 0.4)
+
+	var short_target := _make_trace_line(49, 60.0)
+	_assert_trace_success_with_custom_target(2, short_target, short_target, 0.4)
+
+	var long_gap_target := _make_trace_line(49, 1600.0)
+	var long_gap_trace := _make_trace_line(8, 1600.0)
+	_assert_trace_success_with_custom_target(2, long_gap_target, long_gap_trace, 0.4)
+
+	var failure := MatchSimulation.new()
+	failure.configure_loadout(2, 2, "typist_trident")
+	assert(failure.handle_event(2, {"type": "small_skill"}))
+	failure.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	var failed_trace := _make_trace_line(49, 1000.0, Vector2(4000.0, 4000.0))
+	assert(failure.handle_event(2, {"type": "challenge_trace", "payload": failed_trace}))
+	assert(failure.state["challenges"].is_empty())
+	assert(failure.state["magic_zones"].is_empty())
+	assert(int(failure.state["players"][2]["skill_successes"]) == 0)
+	assert(float(failure.state["players"][2]["small_cooldown"]) > 0.0)
+	var failure_presentations := failure.take_visual_presentations()
+	assert(failure_presentations.size() == 1)
+	assert(str(failure_presentations[0]["kind"]) == "challenge_result")
+	assert(not bool(failure_presentations[0]["success"]))
+	assert(int(failure_presentations[0]["owner_slot"]) == 2)
+
+
+func _make_trace_line(point_count: int, length: float, offset := Vector2.ZERO) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in point_count:
+		points.append(offset + Vector2(100.0 + length * float(index) / float(point_count - 1), 172.0))
+	return points
+
+
+func _assert_trace_success_with_custom_target(slot: int, target: PackedVector2Array, trace: PackedVector2Array, elapsed: float) -> void:
+	var simulation := MatchSimulation.new()
+	simulation.configure_loadout(slot, 2, "typist_trident")
+	assert(simulation.handle_event(slot, {"type": "small_skill"}))
+	var challenge: Dictionary = simulation.state["challenges"][slot]
+	challenge["target"] = target
+	simulation.state["challenges"][slot] = challenge
+	simulation.step(elapsed, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+	assert(simulation.handle_event(slot, {"type": "challenge_trace", "payload": trace}))
+	assert(simulation.state["challenges"].is_empty())
+	assert(int(simulation.state["players"][slot]["skill_successes"]) == 1)
+	assert(simulation.state["magic_zones"].size() == 3)
+	var presentations := simulation.take_visual_presentations()
+	assert(presentations.size() == 1)
+	assert(str(presentations[0]["kind"]) == "challenge_result")
+	assert(int(presentations[0]["owner_slot"]) == slot)
+	assert(bool(presentations[0]["success"]))
+
+
+func _test_chanter_slot_two_trace_tiers() -> void:
+	for tier in ["small_skill", "big_skill", "skill3"]:
+		var simulation := MatchSimulation.new()
+		simulation.configure_loadout(2, 2, "typist_trident")
+		assert(simulation.handle_event(2, {"type": tier}))
+		simulation.step(0.4, {1: {"move": Vector2.ZERO}, 2: {"move": Vector2.ZERO}})
+		var target: PackedVector2Array = simulation.state["challenges"][2]["target"]
+		assert(simulation.handle_event(2, {"type": "challenge_trace", "payload": target}))
+		assert(simulation.state["challenges"].is_empty())
+		assert(int(simulation.state["players"][2]["skill_successes"]) == 1)
+		var cooldown_key := "skill3_cooldown" if tier == "skill3" else ("big_cooldown" if tier == "big_skill" else "small_cooldown")
+		assert(float(simulation.state["players"][2][cooldown_key]) > 0.0)
+		assert(not simulation.state["skill_projectiles"].is_empty() or not simulation.state["magic_zones"].is_empty())
 
 
 func _test_chanter_skill2_specification() -> void:
@@ -801,6 +885,11 @@ func _test_challenge_miss_sequence_and_snapshot() -> void:
 	assert(not snapshot_challenge.has("answer"))
 	assert(int(snapshot["server_tick"]) == 42)
 	assert(int(snapshot["input_acknowledgements"][1]) == 7)
+	assert(not (snapshot["challenges"][1] as Dictionary).has("answer"))
+	assert(not (snapshot["players"][1] as Dictionary).has("normal_damage"))
+	assert(not (snapshot["players"][1] as Dictionary).has("attack_damage_buff"))
+	assert(not (snapshot["players"][1] as Dictionary).has("interrupt_gauge"))
+	assert(is_equal_approx(MatchProtocol.TICK_SECONDS, 1.0 / 60.0))
 
 
 func _test_snapshot_metadata_and_recipient_filtering() -> void:
@@ -810,11 +899,32 @@ func _test_snapshot_metadata_and_recipient_filtering() -> void:
 	var snapshot := MatchProtocol.snapshot("test", simulation.state, "match", "", 1, 120, {1: 15, 2: 18})
 	assert(snapshot["challenges"].has(1))
 	assert(not snapshot["challenges"].has(2))
-	assert(not (snapshot["challenges"][1] as Dictionary).has("answer"))
-	assert(not (snapshot["players"][1] as Dictionary).has("normal_damage"))
-	assert(not (snapshot["players"][1] as Dictionary).has("attack_damage_buff"))
-	assert(not (snapshot["players"][1] as Dictionary).has("interrupt_gauge"))
-	assert(is_equal_approx(MatchProtocol.TICK_SECONDS, 1.0 / 60.0))
+
+
+func _test_result_presentation_recipient_filtering() -> void:
+	var private_result := {"kind": "challenge_result", "owner_slot": 2}
+	var public_skill := {"kind": "skill_projectiles"}
+	assert(MatchProtocol.presentation_visible_to_slot(private_result, 2))
+	assert(not MatchProtocol.presentation_visible_to_slot(private_result, 1))
+	assert(MatchProtocol.presentation_visible_to_slot(public_skill, 1))
+	assert(MatchProtocol.presentation_visible_to_slot(public_skill, 2))
+
+
+func _test_trace_point_limiter() -> void:
+	var dense_circle := PackedVector2Array()
+	for index in 2048:
+		var angle := float(index) * TAU / 2047.0
+		dense_circle.append(Vector2(430.0, 172.0) + Vector2.from_angle(angle) * 112.0)
+	var limited := TracePointLimiterData.limit_points(dense_circle, MatchProtocol.MAX_TRACE_POINTS)
+	assert(limited.size() <= MatchProtocol.MAX_TRACE_POINTS)
+	assert(limited.size() >= 2)
+	assert(limited[0].is_equal_approx(dense_circle[0]))
+	assert(limited[-1].is_equal_approx(dense_circle[-1]))
+	var evaluator := TraceEvaluator.new()
+	var target := MatchSimulation.new()._make_trace_target("small")
+	assert(int(evaluator.evaluate(target, limited)["score"]) >= 95)
+	assert(TracePointLimiterData.limit_points(PackedVector2Array([Vector2.ZERO]), 512).size() == 1)
+	assert(TracePointLimiterData.limit_points(dense_circle, 0).is_empty())
 
 
 func _test_chanter_skill3_event_driven_presentation() -> void:

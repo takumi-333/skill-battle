@@ -25,6 +25,7 @@ func _run() -> void:
 	_test_p2p_result_challenge_cleanup(prototype)
 	_test_dedicated_snapshot_ui(prototype)
 	_test_dedicated_trace_persistence(prototype)
+	await _test_dedicated_trace_result_feedback(prototype)
 	_test_dedicated_trident_landing_shake(prototype)
 	_test_dedicated_chanter_skill3_presentation(prototype)
 	_test_meteor_landing_anchor(prototype)
@@ -337,6 +338,71 @@ func _test_dedicated_trace_persistence(prototype: Node) -> void:
 	new_trace_snapshot["challenges"][1]["id"] = 32
 	prototype.call("_on_dedicated_snapshot_received", new_trace_snapshot)
 	assert((prototype.get("challenge_trace_points") as PackedVector2Array).is_empty())
+
+
+func _test_dedicated_trace_result_feedback(prototype: Node) -> void:
+	prototype.set("local_player_id", 2)
+	prototype.set("network_mode", "client")
+	var dedicated_connection: Node = prototype.get("dedicated_connection")
+	dedicated_connection.set("_join_data", {"room": {"id": "trace-result-test"}})
+	var players: Dictionary = prototype.get("players").duplicate(true)
+	players[2]["character_id"] = "chanter"
+	players[2]["visual_id"] = "chanter"
+	prototype.set("players", players)
+	var challenge := {
+		"id": 41, "owner": 2, "skill": "small_trace", "prompt": "円をなぞってください",
+		"typed": "", "type": "tracing", "limit": 0.0, "elapsed": 1.0,
+		"target": PackedVector2Array([Vector2(100, 100), Vector2(120, 100)]),
+		"trace": PackedVector2Array(), "miss_sequence": 0,
+	}
+	var active_snapshot := _make_minimal_match_snapshot(players, {2: challenge})
+	prototype.call("_on_dedicated_snapshot_received", active_snapshot)
+	prototype.set("dedicated_pending_trace_challenge_id", 41)
+	var ended_snapshot := _make_minimal_match_snapshot(players, {})
+	prototype.call("_on_dedicated_snapshot_received", ended_snapshot)
+	assert(bool(prototype.get_node("ChallengeLayer/Challenge").visible))
+
+	var failure_presentation := {
+		"presentation_id": 9001, "kind": "challenge_result", "owner_slot": 2,
+		"challenge_id": 41, "success": false, "score": 0,
+	}
+	prototype.call("receive_skill_presentation", failure_presentation)
+	assert(int(prototype.get("dedicated_trace_feedback_challenge_id")) == 41)
+	assert(int(prototype.get("dedicated_pending_trace_challenge_id")) == 0)
+	assert(float(prototype.get("challenge_miss_flash")) > 0.0)
+	var challenge_panel := prototype.get_node("ChallengeLayer/Challenge") as PanelContainer
+	assert(challenge_panel.modulate.r > challenge_panel.modulate.g)
+	prototype.call("receive_skill_presentation", failure_presentation)
+	assert(int(prototype.get("dedicated_trace_feedback_challenge_id")) == 41)
+	await create_timer(0.3).timeout
+	assert(not challenge_panel.visible)
+	assert(int(prototype.get("challenge_owner")) == 0)
+
+	challenge["id"] = 42
+	var success_snapshot := _make_minimal_match_snapshot(players, {2: challenge})
+	prototype.call("_on_dedicated_snapshot_received", success_snapshot)
+	prototype.set("dedicated_pending_trace_challenge_id", 42)
+	var success_presentation := {
+		"presentation_id": 9002, "kind": "challenge_result", "owner_slot": 2,
+		"challenge_id": 42, "success": true, "score": 100,
+	}
+	prototype.call("receive_skill_presentation", success_presentation)
+	assert(not challenge_panel.visible)
+	assert(int(prototype.get("challenge_owner")) == 0)
+
+
+func _make_minimal_match_snapshot(players: Dictionary, challenges: Dictionary) -> Dictionary:
+	return {
+		"players": players,
+		"time_remaining": 80.0,
+		"match_over": false,
+		"winner_id": 0,
+		"phase": "match",
+		"status_text": "tracing",
+		"ready": {1: false, 2: false},
+		"challenges": challenges,
+		"skill_projectiles": [], "magic_zones": [], "shockwaves": [], "trident_impacts": [], "decoys": [], "hammer_spins": [],
+	}
 
 
 func _test_dedicated_trident_landing_shake(prototype: Node) -> void:

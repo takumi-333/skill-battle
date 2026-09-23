@@ -435,6 +435,7 @@ const FOCUS_PARTICLE_SIZE := Vector2(16.0, 16.0)
 
 const MatchStateData = preload("res://scripts/match_state.gd")
 const TraceEvaluatorData = preload("res://scripts/trace_evaluator.gd")
+const TracePointLimiterData = preload("res://scripts/trace_point_limiter.gd")
 const KEY_CAP_PROJECTILE_SCENE: PackedScene = preload("res://scenes/effects/key_cap_projectile.tscn")
 const MenuLayoutData = preload("res://scripts/data/menu_layout.gd")
 const TypistHammerShockwaveHitboxData = preload("res://scripts/data/typist_hammer_shockwave_hitbox.gd")
@@ -584,6 +585,9 @@ var dedicated_challenge_type := ""
 var dedicated_challenge_limit := 0.0
 var dedicated_challenge_id := 0
 var dedicated_challenge_miss_sequence := 0
+var dedicated_pending_trace_challenge_id := 0
+var dedicated_trace_feedback_challenge_id := 0
+var dedicated_resolved_trace_challenge_id := 0
 var dedicated_round_id := -1
 var dedicated_trident_release_states: Dictionary = {}
 var dedicated_previous_snapshot: Dictionary = {}
@@ -3280,6 +3284,8 @@ func clear_active_challenge_state() -> void:
 	challenge_typed_characters = ""
 	challenge_trace_points.clear()
 	challenge_trace_drawing = false
+	dedicated_pending_trace_challenge_id = 0
+	dedicated_trace_feedback_challenge_id = 0
 	challenge_target_points.clear()
 	challenge_miss_flash = 0.0
 	challenge_shake = 0.0
@@ -4153,6 +4159,9 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 		return
 	var challenge: Dictionary = challenges.get(local_player_id, {})
 	if challenge.is_empty():
+		if dedicated_pending_trace_challenge_id > 0 or dedicated_trace_feedback_challenge_id > 0:
+			set_challenge_overlay_visible(true)
+			return
 		set_challenge_overlay_visible(false)
 		typing_input.text = ""
 		challenge_owner = 0
@@ -4163,8 +4172,20 @@ func _apply_dedicated_challenges_snapshot(challenges: Dictionary) -> void:
 		dedicated_challenge_miss_sequence = 0
 		return
 	var challenge_id := int(challenge.get("id", 0))
+	if challenge_id == dedicated_resolved_trace_challenge_id:
+		if dedicated_trace_feedback_challenge_id == challenge_id:
+			set_challenge_overlay_visible(true)
+		else:
+			set_challenge_overlay_visible(false)
+		return
 	var is_new_challenge := challenge_id != dedicated_challenge_id
 	if is_new_challenge:
+		if dedicated_resolved_trace_challenge_id != 0 and dedicated_resolved_trace_challenge_id != challenge_id:
+			dedicated_resolved_trace_challenge_id = 0
+		if dedicated_pending_trace_challenge_id != 0 and dedicated_pending_trace_challenge_id != challenge_id:
+			dedicated_pending_trace_challenge_id = 0
+		if dedicated_trace_feedback_challenge_id != 0 and dedicated_trace_feedback_challenge_id != challenge_id:
+			dedicated_trace_feedback_challenge_id = 0
 		dedicated_challenge_id = challenge_id
 		dedicated_challenge_miss_sequence = 0
 		# The server only receives the trace when the player releases the mouse.
@@ -4213,6 +4234,9 @@ func receive_dedicated_snapshot(snapshot: Dictionary) -> void:
 @rpc("authority", "reliable")
 func receive_skill_presentation(presentation: Dictionary) -> void:
 	var kind := str(presentation.get("kind", ""))
+	if kind == "challenge_result":
+		_apply_dedicated_trace_result(presentation)
+		return
 	if kind == "chanter_skill3_volley":
 		_start_dedicated_chanter_skill3_visual_volley(presentation)
 		return
@@ -4242,6 +4266,38 @@ func receive_skill_presentation(presentation: Dictionary) -> void:
 	var presentation_id := int(presentation.get("presentation_id", 0))
 	if presentation_id > 0 and not dedicated_hammer_presentation_angles.has(presentation_id):
 		dedicated_hammer_presentation_angles[presentation_id] = float(state.get("angle", 0.0))
+
+
+func _apply_dedicated_trace_result(presentation: Dictionary) -> void:
+	if not dedicated_connection or not dedicated_connection.has_pending_join() or int(presentation.get("owner_slot", 0)) != local_player_id:
+		return
+	var challenge_id := int(presentation.get("challenge_id", 0))
+	if challenge_id <= 0 or challenge_id != dedicated_pending_trace_challenge_id:
+		return
+	dedicated_pending_trace_challenge_id = 0
+	dedicated_resolved_trace_challenge_id = challenge_id
+	if bool(presentation.get("success", false)):
+		dedicated_trace_feedback_challenge_id = 0
+		if dedicated_challenge_id == challenge_id and challenge_owner == local_player_id:
+			clear_active_challenge_state()
+			dedicated_challenge_type = ""
+			dedicated_challenge_limit = 0.0
+			dedicated_challenge_id = 0
+			dedicated_challenge_miss_sequence = 0
+		return
+
+	dedicated_trace_feedback_challenge_id = challenge_id
+	trigger_challenge_miss_feedback(CHANTER_TRACE_FAILURE_FEEDBACK_DURATION)
+	update_challenge_ui(float(players.get(local_player_id, {}).get("challenge_elapsed", 0.0)))
+	await get_tree().create_timer(CHANTER_TRACE_FAILURE_FEEDBACK_DURATION).timeout
+	if dedicated_trace_feedback_challenge_id != challenge_id or dedicated_challenge_id != challenge_id or challenge_owner != local_player_id:
+		return
+	dedicated_trace_feedback_challenge_id = 0
+	clear_active_challenge_state()
+	dedicated_challenge_type = ""
+	dedicated_challenge_limit = 0.0
+	dedicated_challenge_id = 0
+	dedicated_challenge_miss_sequence = 0
 
 
 # DedicatedClientConnection sends these calls through this root node so that
@@ -6774,6 +6830,9 @@ func _input(event: InputEvent) -> void:
 			challenge_trace_drawing = false
 			stop_writing_sound()
 			if dedicated_connection and dedicated_connection.has_pending_join():
+				challenge_trace_points = TracePointLimiterData.limit_points(challenge_trace_points, MatchProtocol.MAX_TRACE_POINTS)
+				dedicated_pending_trace_challenge_id = dedicated_challenge_id
+				update_trace_canvas()
 				dedicated_connection.send_event("challenge_trace", challenge_trace_points)
 				return
 			if network_mode == "client":

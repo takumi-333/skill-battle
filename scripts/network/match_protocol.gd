@@ -69,6 +69,11 @@ static func valid_event(value: Variant, previous_sequence: int) -> bool:
 static func valid_display_name(value: Variant) -> bool:
 	return value is String and not (value as String).strip_edges().is_empty() and (value as String).length() <= MAX_DISPLAY_NAME_LENGTH
 
+
+static func presentation_visible_to_slot(presentation: Dictionary, recipient_slot: int) -> bool:
+	var owner_slot := int(presentation.get("owner_slot", 0))
+	return owner_slot == 0 or owner_slot == recipient_slot
+
 ## RPC/JSON deserialization returns an untyped Array even when every element
 ## is a Dictionary. Copy valid entries into a genuinely typed container before
 ## assigning them to client-side Array[Dictionary] state.
