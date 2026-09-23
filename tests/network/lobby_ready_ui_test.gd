@@ -209,7 +209,7 @@ func _test_dedicated_snapshot_ui(prototype: Node) -> void:
 	lobby_snapshot["connected_slots"] = [1]
 	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)
 	assert(str(prototype.get("screen")) == "online_waiting")
-	var opponent_preview := prototype.get_node("UIRoot/Lobby/PlayerTwoPreview") as TextureRect
+	var opponent_preview := prototype.get_node("UIRoot/Lobby/DuelLayout/PlayerTwoPreview") as TextureRect
 	assert(not opponent_preview.visible)
 	lobby_snapshot["connected_slots"] = [1, 2]
 	prototype.call("_on_dedicated_snapshot_received", lobby_snapshot)

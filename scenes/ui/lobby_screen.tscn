@@ -89,7 +89,16 @@ mouse_filter = 2
 texture = ExtResource("1_ec1gl")
 expand_mode = 1
 
-[node name="PlayerOneCard" type="TextureRect" parent="." unique_id=1031292369]
+[node name="DuelLayout" type="Control" parent="." unique_id=1756009906]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerOneCard" type="TextureRect" parent="DuelLayout" unique_id=1031292369]
 layout_mode = 0
 offset_left = 199.0
 offset_top = 148.0
@@ -99,7 +108,7 @@ mouse_filter = 2
 texture = ExtResource("2_kvtbc")
 expand_mode = 1
 
-[node name="PlayerTwoCard" type="TextureRect" parent="." unique_id=955862400]
+[node name="PlayerTwoCard" type="TextureRect" parent="DuelLayout" unique_id=955862400]
 layout_mode = 0
 offset_left = 681.0
 offset_top = 148.0
@@ -109,26 +118,18 @@ mouse_filter = 2
 texture = ExtResource("2_kvtbc")
 expand_mode = 1
 
-[node name="Title" type="Label" parent="." unique_id=349913415]
-layout_mode = 0
-offset_left = 20.0
-offset_top = 42.0
-offset_right = 1190.0
-offset_bottom = 90.0
-theme_override_font_sizes/font_size = 28
-horizontal_alignment = 1
-
-[node name="PlayerOnePreview" type="TextureRect" parent="." unique_id=117460151]
+[node name="PlayerOnePreview" type="TextureRect" parent="DuelLayout" unique_id=117460151]
 layout_mode = 0
 offset_left = 246.0
 offset_top = 232.0
 offset_right = 546.0
 offset_bottom = 452.0
 mouse_filter = 2
+texture = ExtResource("5_shadow")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PlayerTwoPreview" type="TextureRect" parent="." unique_id=1573346811]
+[node name="PlayerTwoPreview" type="TextureRect" parent="DuelLayout" unique_id=1573346811]
 layout_mode = 0
 offset_left = 736.0
 offset_top = 228.0
@@ -139,27 +140,31 @@ texture = ExtResource("5_shadow")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PlayerOneInfo" type="Label" parent="." unique_id=766903822]
+[node name="PlayerOneInfo" type="Label" parent="DuelLayout" unique_id=766903822]
 layout_mode = 0
 offset_left = 241.0
 offset_top = 183.0
 offset_right = 561.0
 offset_bottom = 235.0
 theme_override_font_sizes/font_size = 20
+text = "あなた
+プレイヤー1"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="PlayerTwoInfo" type="Label" parent="." unique_id=1019448470]
+[node name="PlayerTwoInfo" type="Label" parent="DuelLayout" unique_id=1019448470]
 layout_mode = 0
 offset_left = 731.0
 offset_top = 181.0
 offset_right = 1051.0
 offset_bottom = 233.0
 theme_override_font_sizes/font_size = 20
+text = "対戦相手
+プレイヤー2"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="PlayerOneStatus" type="Control" parent="." unique_id=1691566107]
+[node name="PlayerOneStatus" type="Control" parent="DuelLayout" unique_id=1691566107]
 anchors_preset = 0
 offset_left = 473.0
 offset_top = 192.0
@@ -167,7 +172,7 @@ offset_right = 521.0
 offset_bottom = 240.0
 script = ExtResource("3_nr3vt")
 
-[node name="PlayerTwoStatus" type="Control" parent="." unique_id=561997173]
+[node name="PlayerTwoStatus" type="Control" parent="DuelLayout" unique_id=561997173]
 anchors_preset = 0
 offset_left = 961.0
 offset_top = 192.0
@@ -175,7 +180,7 @@ offset_right = 1009.0
 offset_bottom = 240.0
 script = ExtResource("3_nr3vt")
 
-[node name="PlayerOneLeftFrame" type="TextureRect" parent="." unique_id=153933344]
+[node name="PlayerOneLeftFrame" type="TextureRect" parent="DuelLayout" unique_id=153933344]
 z_index = 1
 layout_mode = 0
 offset_left = 249.0
@@ -186,7 +191,7 @@ mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
-[node name="PlayerOneLeft" type="Button" parent="." unique_id=737602705]
+[node name="PlayerOneLeft" type="Button" parent="DuelLayout" unique_id=737602705]
 z_index = 10
 layout_mode = 0
 offset_left = 249.0
@@ -201,7 +206,7 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_5poiv")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_2cjbq")
 text = "◀"
 
-[node name="PlayerOneRightFrame" type="TextureRect" parent="." unique_id=466335135]
+[node name="PlayerOneRightFrame" type="TextureRect" parent="DuelLayout" unique_id=466335135]
 z_index = 1
 layout_mode = 0
 offset_left = 469.0
@@ -212,7 +217,7 @@ mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
-[node name="PlayerOneRight" type="Button" parent="." unique_id=1322728296]
+[node name="PlayerOneRight" type="Button" parent="DuelLayout" unique_id=1322728296]
 z_index = 10
 layout_mode = 0
 offset_left = 469.0
@@ -227,7 +232,7 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_vchkt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_txyw0")
 text = "▶"
 
-[node name="PlayerTwoLeftFrame" type="TextureRect" parent="." unique_id=94963022]
+[node name="PlayerTwoLeftFrame" type="TextureRect" parent="DuelLayout" unique_id=94963022]
 z_index = 1
 layout_mode = 0
 offset_left = 730.0
@@ -238,7 +243,7 @@ mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
-[node name="PlayerTwoLeft" type="Button" parent="." unique_id=587094037]
+[node name="PlayerTwoLeft" type="Button" parent="DuelLayout" unique_id=587094037]
 z_index = 10
 layout_mode = 0
 offset_left = 730.0
@@ -253,7 +258,7 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
 text = "◀"
 
-[node name="PlayerTwoRightFrame" type="TextureRect" parent="." unique_id=307338389]
+[node name="PlayerTwoRightFrame" type="TextureRect" parent="DuelLayout" unique_id=307338389]
 z_index = 1
 layout_mode = 0
 offset_left = 943.0
@@ -264,13 +269,38 @@ mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
+[node name="PlayerTwoRight" type="Button" parent="DuelLayout" unique_id=1990339313]
+z_index = 10
+layout_mode = 0
+offset_left = 943.0
+offset_top = 474.0
+offset_right = 1033.0
+offset_bottom = 520.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
+text = "▶"
+
+[node name="Title" type="Label" parent="." unique_id=349913415]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 42.0
+offset_right = 1190.0
+offset_bottom = 90.0
+theme_override_font_sizes/font_size = 28
+text = "オンライン対戦 - 待機画面"
+horizontal_alignment = 1
+
 [node name="_TextureRect_64833" type="TextureRect" parent="." unique_id=294841029]
 z_index = 1
 layout_mode = 0
 offset_left = 480.0
 offset_top = 597.0
 offset_right = 730.0
-offset_bottom = 662.0
+offset_bottom = 687.0
 mouse_filter = 2
 texture = ExtResource("4_avu5f")
 expand_mode = 1
@@ -286,21 +316,6 @@ offset_bottom = 666.0
 mouse_filter = 2
 texture = ExtResource("4_avu5f")
 expand_mode = 1
-
-[node name="PlayerTwoRight" type="Button" parent="." unique_id=1990339313]
-z_index = 10
-layout_mode = 0
-offset_left = 943.0
-offset_top = 474.0
-offset_right = 1033.0
-offset_bottom = 520.0
-theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
-theme_override_font_sizes/font_size = 20
-theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
-theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
-theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
-text = "▶"
 
 [node name="PlayerTwoReady" type="Button" parent="." unique_id=2002446452]
 visible = false
@@ -318,68 +333,260 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_t5ykj")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_e755i")
 text = "準備完了"
 
-[node name="PlayerThreeCard" type="TextureRect" parent="."]
+[node name="FfaLayout" type="Control" parent="." unique_id=919860103]
 visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerOneCard" type="TextureRect" parent="FfaLayout" unique_id=199462524]
 layout_mode = 0
-offset_left = 840.0
+offset_left = 108.0
+offset_top = 139.0
+offset_right = 468.0
+offset_bottom = 499.0
+mouse_filter = 2
+texture = ExtResource("2_kvtbc")
+expand_mode = 1
+
+[node name="PlayerTwoCard" type="TextureRect" parent="FfaLayout" unique_id=1552852222]
+layout_mode = 0
+offset_left = 456.0
+offset_top = 142.0
+offset_right = 816.0
+offset_bottom = 502.0
+mouse_filter = 2
+texture = ExtResource("2_kvtbc")
+expand_mode = 1
+
+[node name="PlayerThreeCard" type="TextureRect" parent="FfaLayout" unique_id=118255306]
+layout_mode = 0
+offset_left = 798.0
 offset_top = 140.0
-offset_right = 1200.0
+offset_right = 1158.0
 offset_bottom = 500.0
 mouse_filter = 2
 texture = ExtResource("2_kvtbc")
 expand_mode = 1
 
-[node name="PlayerThreePreview" type="TextureRect" parent="."]
-visible = false
+[node name="PlayerOnePreview" type="TextureRect" parent="FfaLayout" unique_id=2098902036]
 layout_mode = 0
-offset_left = 884.0
-offset_top = 206.0
-offset_right = 1156.0
-offset_bottom = 392.0
+offset_left = 140.0
+offset_top = 213.0
+offset_right = 436.0
+offset_bottom = 401.0
 mouse_filter = 2
 texture = ExtResource("5_shadow")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PlayerThreeInfo" type="Label" parent="."]
-visible = false
+[node name="PlayerTwoPreview" type="TextureRect" parent="FfaLayout" unique_id=1907689630]
 layout_mode = 0
-offset_left = 860.0
-offset_top = 154.0
-offset_right = 1180.0
-offset_bottom = 202.0
+offset_left = 488.0
+offset_top = 216.0
+offset_right = 784.0
+offset_bottom = 404.0
+mouse_filter = 2
+texture = ExtResource("5_shadow")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerThreePreview" type="TextureRect" parent="FfaLayout" unique_id=1404938102]
+layout_mode = 0
+offset_left = 830.0
+offset_top = 214.0
+offset_right = 1126.0
+offset_bottom = 402.0
+mouse_filter = 2
+texture = ExtResource("5_shadow")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerOneInfo" type="Label" parent="FfaLayout" unique_id=649925271]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 155.0
+offset_right = 448.0
+offset_bottom = 212.0
 theme_override_font_sizes/font_size = 18
+text = "あなた
+プレイヤー1"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="PlayerThreeStatus" type="Control" parent="."]
-visible = false
+[node name="PlayerTwoInfo" type="Label" parent="FfaLayout" unique_id=1096335820]
 layout_mode = 0
-offset_left = 1120.0
-offset_top = 160.0
-offset_right = 1168.0
-offset_bottom = 208.0
+offset_left = 476.0
+offset_top = 158.0
+offset_right = 796.0
+offset_bottom = 215.0
+theme_override_font_sizes/font_size = 18
+text = "対戦相手
+プレイヤー2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerThreeInfo" type="Label" parent="FfaLayout" unique_id=2054232285]
+layout_mode = 0
+offset_left = 818.0
+offset_top = 156.0
+offset_right = 1138.0
+offset_bottom = 213.0
+theme_override_font_sizes/font_size = 18
+text = "対戦相手
+プレイヤー3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerOneStatus" type="Control" parent="FfaLayout" unique_id=433557951]
+anchors_preset = 0
+offset_left = 346.0
+offset_top = 162.0
+offset_right = 394.0
+offset_bottom = 210.0
 script = ExtResource("3_nr3vt")
 
-[node name="PlayerThreeLeftFrame" type="TextureRect" parent="."]
-visible = false
+[node name="PlayerTwoStatus" type="Control" parent="FfaLayout" unique_id=163879058]
+anchors_preset = 0
+offset_left = 722.0
+offset_top = 164.0
+offset_right = 770.0
+offset_bottom = 212.0
+script = ExtResource("3_nr3vt")
+
+[node name="PlayerThreeStatus" type="Control" parent="FfaLayout" unique_id=592126183]
+anchors_preset = 0
+offset_left = 1064.0
+offset_top = 162.0
+offset_right = 1112.0
+offset_bottom = 210.0
+script = ExtResource("3_nr3vt")
+
+[node name="PlayerOneLeftFrame" type="TextureRect" parent="FfaLayout" unique_id=2005020857]
 z_index = 1
 layout_mode = 0
-offset_left = 880.0
+offset_left = 151.0
 offset_top = 420.0
-offset_right = 970.0
+offset_right = 231.0
 offset_bottom = 466.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
-[node name="PlayerThreeLeft" type="Button" parent="."]
-visible = false
+[node name="PlayerOneLeft" type="Button" parent="FfaLayout" unique_id=2085670233]
 z_index = 10
 layout_mode = 0
-offset_left = 880.0
+offset_left = 150.0
+offset_top = 419.0
+offset_right = 230.0
+offset_bottom = 465.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_bjg73")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_bu4jf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
+text = "◀"
+
+[node name="PlayerOneRightFrame" type="TextureRect" parent="FfaLayout" unique_id=862524867]
+z_index = 1
+layout_mode = 0
+offset_left = 341.0
 offset_top = 420.0
-offset_right = 970.0
+offset_right = 421.0
+offset_bottom = 466.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerOneRight" type="Button" parent="FfaLayout" unique_id=1909490514]
+z_index = 10
+layout_mode = 0
+offset_left = 346.0
+offset_top = 419.0
+offset_right = 426.0
+offset_bottom = 465.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
+text = "▶"
+
+[node name="PlayerTwoLeftFrame" type="TextureRect" parent="FfaLayout" unique_id=720551807]
+z_index = 1
+layout_mode = 0
+offset_left = 498.0
+offset_top = 422.0
+offset_right = 578.0
+offset_bottom = 468.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerTwoLeft" type="Button" parent="FfaLayout" unique_id=1448576345]
+z_index = 10
+layout_mode = 0
+offset_left = 498.0
+offset_top = 422.0
+offset_right = 578.0
+offset_bottom = 468.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_bjg73")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_bu4jf")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
+text = "◀"
+
+[node name="PlayerTwoRightFrame" type="TextureRect" parent="FfaLayout" unique_id=731127875]
+z_index = 1
+layout_mode = 0
+offset_left = 694.0
+offset_top = 422.0
+offset_right = 774.0
+offset_bottom = 468.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerTwoRight" type="Button" parent="FfaLayout" unique_id=693107454]
+z_index = 10
+layout_mode = 0
+offset_left = 694.0
+offset_top = 422.0
+offset_right = 774.0
+offset_bottom = 468.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_ids8r")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_dnhof")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_1v6qk")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_augu2")
+text = "▶"
+
+[node name="PlayerThreeLeftFrame" type="TextureRect" parent="FfaLayout" unique_id=1174771598]
+z_index = 1
+layout_mode = 0
+offset_left = 840.0
+offset_top = 420.0
+offset_right = 920.0
+offset_bottom = 466.0
+mouse_filter = 2
+texture = ExtResource("4_kvtbc")
+expand_mode = 1
+
+[node name="PlayerThreeLeft" type="Button" parent="FfaLayout" unique_id=1803975574]
+z_index = 10
+layout_mode = 0
+offset_left = 840.0
+offset_top = 420.0
+offset_right = 920.0
 offset_bottom = 466.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
@@ -389,25 +596,23 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_o7ddy")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_0loja")
 text = "◀"
 
-[node name="PlayerThreeRightFrame" type="TextureRect" parent="."]
-visible = false
+[node name="PlayerThreeRightFrame" type="TextureRect" parent="FfaLayout" unique_id=809997186]
 z_index = 1
 layout_mode = 0
-offset_left = 1070.0
+offset_left = 1036.0
 offset_top = 420.0
-offset_right = 1160.0
+offset_right = 1116.0
 offset_bottom = 466.0
 mouse_filter = 2
 texture = ExtResource("4_kvtbc")
 expand_mode = 1
 
-[node name="PlayerThreeRight" type="Button" parent="."]
-visible = false
+[node name="PlayerThreeRight" type="Button" parent="FfaLayout" unique_id=1569861005]
 z_index = 10
 layout_mode = 0
-offset_left = 1070.0
+offset_left = 1036.0
 offset_top = 420.0
-offset_right = 1160.0
+offset_right = 1116.0
 offset_bottom = 466.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
@@ -420,10 +625,10 @@ text = "▶"
 [node name="PlayerOneReady" type="Button" parent="." unique_id=146356369]
 z_index = 10
 layout_mode = 0
-offset_left = 480.0
-offset_top = 598.0
-offset_right = 730.0
-offset_bottom = 656.0
+offset_left = 506.0
+offset_top = 606.0
+offset_right = 699.0
+offset_bottom = 668.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_vc5cj")
@@ -438,7 +643,7 @@ layout_mode = 0
 offset_left = 1000.0
 offset_top = 598.0
 offset_right = 1248.0
-offset_bottom = 656.0
+offset_bottom = 684.0
 mouse_filter = 2
 texture = ExtResource("4_avu5f")
 expand_mode = 1
@@ -447,10 +652,10 @@ expand_mode = 1
 visible = false
 z_index = 10
 layout_mode = 0
-offset_left = 1000.0
-offset_top = 598.0
-offset_right = 1248.0
-offset_bottom = 656.0
+offset_left = 1022.0
+offset_top = 609.0
+offset_right = 1214.0
+offset_bottom = 662.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_vc5cj")

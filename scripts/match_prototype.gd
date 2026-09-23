@@ -3249,10 +3249,13 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	arithmetic_multiplier_label.visible = is_visible and arithmetic_multiplier_label.visible
 	opponent_hp_bar.visible = is_visible
 	opponent_one_label.visible = is_visible
-	opponent_two_hp_bar.visible = false
-	opponent_two_label.visible = false
+	if opponent_two_hp_bar:
+		opponent_two_hp_bar.visible = false
+	if opponent_two_label:
+		opponent_two_label.visible = false
 	opponent_one_arithmetic_multiplier_label.visible = false
-	opponent_two_arithmetic_multiplier_label.visible = false
+	if opponent_two_arithmetic_multiplier_label:
+		opponent_two_arithmetic_multiplier_label.visible = false
 	timer_label.visible = is_visible
 	status_label.visible = false
 	controls_label.visible = is_visible and network_mode == "practice"
@@ -3513,91 +3516,63 @@ func _apply_user_display_name_to_local_player() -> void:
 
 func create_lobby_ui() -> void:
 	lobby_panel = $UIRoot/Lobby
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	style.border_color = Color("8fa8e8")
-	style.set_border_width_all(0)
-	style.corner_radius_top_left = 12
-	style.corner_radius_top_right = 12
-	style.corner_radius_bottom_left = 12
-	style.corner_radius_bottom_right = 12
-	lobby_panel.add_theme_stylebox_override("panel", style)
 	lobby_label = $UIRoot/Lobby/Title
-	lobby_p1_preview = $UIRoot/Lobby/PlayerOnePreview
-	lobby_p2_preview = $UIRoot/Lobby/PlayerTwoPreview
-	lobby_p3_preview = $UIRoot/Lobby/PlayerThreePreview
-	lobby_p1_info = $UIRoot/Lobby/PlayerOneInfo
-	lobby_p2_info = $UIRoot/Lobby/PlayerTwoInfo
-	lobby_p3_info = $UIRoot/Lobby/PlayerThreeInfo
-	lobby_p1_status_icon = $UIRoot/Lobby/PlayerOneStatus
-	lobby_p2_status_icon = $UIRoot/Lobby/PlayerTwoStatus
-	lobby_p3_status_icon = $UIRoot/Lobby/PlayerThreeStatus
-	lobby_p1_left = $UIRoot/Lobby/PlayerOneLeft
-	lobby_p1_right = $UIRoot/Lobby/PlayerOneRight
+	lobby_duel_layout = $UIRoot/Lobby/DuelLayout
+	lobby_ffa_layout = $UIRoot/Lobby/FfaLayout
 	lobby_p1_ready = $UIRoot/Lobby/PlayerOneReady
-	lobby_p2_left = $UIRoot/Lobby/PlayerTwoLeft
-	lobby_p2_right = $UIRoot/Lobby/PlayerTwoRight
 	lobby_p2_ready = $UIRoot/Lobby/PlayerTwoReady
-	lobby_p3_left = $UIRoot/Lobby/PlayerThreeLeft
-	lobby_p3_right = $UIRoot/Lobby/PlayerThreeRight
-	lobby_p1_left_frame = $UIRoot/Lobby/PlayerOneLeftFrame
-	lobby_p1_right_frame = $UIRoot/Lobby/PlayerOneRightFrame
-	lobby_p2_left_frame = $UIRoot/Lobby/PlayerTwoLeftFrame
-	lobby_p2_right_frame = $UIRoot/Lobby/PlayerTwoRightFrame
-	lobby_p3_left_frame = $UIRoot/Lobby/PlayerThreeLeftFrame
-	lobby_p3_right_frame = $UIRoot/Lobby/PlayerThreeRightFrame
 	lobby_start_button = $UIRoot/Lobby/StartButton
-	lobby_start_button.text = "ゲーム開始"
 	lobby_home_button = $UIRoot/Lobby/HomeButton
-	for button in [lobby_p1_left, lobby_p1_right, lobby_p1_ready, lobby_p2_left, lobby_p2_right, lobby_p2_ready, lobby_p3_left, lobby_p3_right, lobby_start_button, lobby_home_button]:
-		style_menu_button(button)
-	connect_button_once(lobby_p1_left, func(): set_lobby_selection(_local_lobby_slot(), -1))
-	connect_button_once(lobby_p1_right, func(): set_lobby_selection(_local_lobby_slot(), 1))
+	_connect_lobby_layout_buttons(lobby_duel_layout)
+	_connect_lobby_layout_buttons(lobby_ffa_layout)
+	_select_lobby_layout(false)
 	connect_button_once(lobby_p1_ready, toggle_local_lobby_ready)
-	connect_button_once(lobby_p2_left, func(): set_lobby_selection(_local_lobby_slot(2), -1))
-	connect_button_once(lobby_p2_right, func(): set_lobby_selection(_local_lobby_slot(2), 1))
 	connect_button_once(lobby_p2_ready, toggle_local_lobby_ready)
-	connect_button_once(lobby_p3_left, func(): set_lobby_selection(3, -1))
-	connect_button_once(lobby_p3_right, func(): set_lobby_selection(3, 1))
 	connect_button_once(lobby_start_button, start_lobby_match)
 	connect_button_once(lobby_home_button, return_to_home)
 
 
-func make_lobby_info(info_position: Vector2, info_size: Vector2) -> Label:
-	var label := Label.new()
-	label.position = info_position
-	label.size = info_size
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 20)
-	lobby_panel.add_child(label)
-	return label
+func _connect_lobby_layout_buttons(layout: Control) -> void:
+	var p1_left := layout.get_node("PlayerOneLeft") as Button
+	var p1_right := layout.get_node("PlayerOneRight") as Button
+	var p2_left := layout.get_node("PlayerTwoLeft") as Button
+	var p2_right := layout.get_node("PlayerTwoRight") as Button
+	connect_button_once(p1_left, func(): set_lobby_selection(_local_lobby_slot(), -1))
+	connect_button_once(p1_right, func(): set_lobby_selection(_local_lobby_slot(), 1))
+	connect_button_once(p2_left, func(): set_lobby_selection(_local_lobby_slot(2), -1))
+	connect_button_once(p2_right, func(): set_lobby_selection(_local_lobby_slot(2), 1))
+	if layout.has_node("PlayerThreeLeft"):
+		var p3_left := layout.get_node("PlayerThreeLeft") as Button
+		var p3_right := layout.get_node("PlayerThreeRight") as Button
+		connect_button_once(p3_left, func(): set_lobby_selection(3, -1))
+		connect_button_once(p3_right, func(): set_lobby_selection(3, 1))
 
 
-func make_lobby_button(button_text: String, button_position: Vector2, callback: Callable, button_size := Vector2(90, 46)) -> Button:
-	if button_text == "準備完了":
-		add_menu_texture(lobby_panel, UI_BUTTON_READY, button_position, button_size)
-		var ready_button := Button.new()
-		ready_button.text = button_text
-		ready_button.position = button_position
-		ready_button.size = button_size
-		ready_button.add_theme_font_size_override("font_size", 20)
-		ready_button.add_theme_color_override("font_color", Color("fff0c9"))
-		ready_button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-		ready_button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-		ready_button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
-		ready_button.pressed.connect(callback)
-		lobby_panel.add_child(ready_button)
-		return ready_button
-	return add_menu_asset_button(lobby_panel, button_text, button_position, button_size, callback, button_size.x >= 180.0)
-
-
-func make_status_icon(icon_position: Vector2) -> StatusIcon:
-	var icon := StatusIcon.new()
-	icon.position = icon_position
-	icon.size = Vector2(48, 48)
-	lobby_panel.add_child(icon)
-	return icon
+func _select_lobby_layout(is_ffa: bool) -> void:
+	lobby_duel_layout.visible = not is_ffa
+	lobby_ffa_layout.visible = is_ffa
+	var layout := lobby_ffa_layout if is_ffa else lobby_duel_layout
+	lobby_p1_preview = layout.get_node("PlayerOnePreview") as TextureRect
+	lobby_p2_preview = layout.get_node("PlayerTwoPreview") as TextureRect
+	lobby_p3_preview = layout.get_node_or_null("PlayerThreePreview") as TextureRect
+	lobby_p1_info = layout.get_node("PlayerOneInfo") as Label
+	lobby_p2_info = layout.get_node("PlayerTwoInfo") as Label
+	lobby_p3_info = layout.get_node_or_null("PlayerThreeInfo") as Label
+	lobby_p1_status_icon = layout.get_node("PlayerOneStatus") as Control
+	lobby_p2_status_icon = layout.get_node("PlayerTwoStatus") as Control
+	lobby_p3_status_icon = layout.get_node_or_null("PlayerThreeStatus") as Control
+	lobby_p1_left = layout.get_node("PlayerOneLeft") as Button
+	lobby_p1_right = layout.get_node("PlayerOneRight") as Button
+	lobby_p2_left = layout.get_node("PlayerTwoLeft") as Button
+	lobby_p2_right = layout.get_node("PlayerTwoRight") as Button
+	lobby_p3_left = layout.get_node_or_null("PlayerThreeLeft") as Button
+	lobby_p3_right = layout.get_node_or_null("PlayerThreeRight") as Button
+	lobby_p1_left_frame = layout.get_node("PlayerOneLeftFrame") as TextureRect
+	lobby_p1_right_frame = layout.get_node("PlayerOneRightFrame") as TextureRect
+	lobby_p2_left_frame = layout.get_node("PlayerTwoLeftFrame") as TextureRect
+	lobby_p2_right_frame = layout.get_node("PlayerTwoRightFrame") as TextureRect
+	lobby_p3_left_frame = layout.get_node_or_null("PlayerThreeLeftFrame") as TextureRect
+	lobby_p3_right_frame = layout.get_node_or_null("PlayerThreeRightFrame") as TextureRect
 
 
 func set_lobby_selection(player_id: int, step: int) -> void:
@@ -5367,7 +5342,7 @@ func refresh_lobby_label() -> void:
 	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	var local_side := _local_lobby_slot()
 	var is_ffa := _lobby_slots().size() == 3
-	_apply_lobby_card_layout(is_ffa)
+	_select_lobby_layout(is_ffa)
 	lobby_label.text = "オンライン対戦 - 3人対戦" if is_ffa else "オンライン対戦 - 待機画面"
 	var slots: Array[int] = []
 	var slot_count := 3 if is_ffa else 2
@@ -5388,9 +5363,6 @@ func refresh_lobby_label() -> void:
 		else:
 			previews[index].texture = SHADOW_IDLE_TEXTURE
 		set_lobby_status_icon(status_icons[index], _lobby_ready(slot), is_present)
-	lobby_p3_preview.visible = is_ffa and lobby_p3_preview.visible
-	lobby_p3_info.visible = is_ffa
-	lobby_p3_status_icon.visible = is_ffa and lobby_p3_status_icon.visible
 	for button in [lobby_p1_left, lobby_p1_right]:
 		button.visible = local_side == 1
 	for frame in [lobby_p1_left_frame, lobby_p1_right_frame]:
@@ -5399,10 +5371,11 @@ func refresh_lobby_label() -> void:
 		button.visible = local_side == 2
 	for frame in [lobby_p2_left_frame, lobby_p2_right_frame]:
 		frame.visible = local_side == 2
-	for button in [lobby_p3_left, lobby_p3_right]:
-		button.visible = is_ffa and local_side == 3
-	for frame in [lobby_p3_left_frame, lobby_p3_right_frame]:
-		frame.visible = is_ffa and local_side == 3
+	if is_ffa:
+		for button in [lobby_p3_left, lobby_p3_right]:
+			button.visible = local_side == 3
+		for frame in [lobby_p3_left_frame, lobby_p3_right_frame]:
+			frame.visible = local_side == 3
 	var is_dedicated_lobby := dedicated_connection != null and dedicated_connection.has_pending_join()
 	if is_dedicated_lobby:
 		lobby_p1_ready.visible = local_side in [1, 3]
@@ -5437,42 +5410,6 @@ func refresh_lobby_label() -> void:
 		lobby_debug_log("lobby refreshed; mode=%s side=%d connected=%s p1_ready=%s p2_ready=%s p3_ready=%s ready_visible=%s ready_disabled=%s home_visible=%s home_disabled=%s" % [network_mode, local_side, str(remote_connected), str(p1_ready), str(p2_ready), str(p3_ready), str(lobby_p1_ready.visible), str(lobby_p1_ready.disabled), str(lobby_home_button.visible), str(lobby_home_button.disabled)])
 
 
-func _set_lobby_rect(control: Control, position_value: Vector2, size_value: Vector2) -> void:
-	control.position = position_value
-	control.size = size_value
-
-
-func _apply_lobby_card_layout(is_ffa: bool) -> void:
-	var card_nodes: Array[Control] = [$UIRoot/Lobby/PlayerOneCard, $UIRoot/Lobby/PlayerTwoCard, $UIRoot/Lobby/PlayerThreeCard]
-	var previews: Array[Control] = [lobby_p1_preview, lobby_p2_preview, lobby_p3_preview]
-	var infos: Array[Control] = [lobby_p1_info, lobby_p2_info, lobby_p3_info]
-	var statuses: Array[Control] = [lobby_p1_status_icon, lobby_p2_status_icon, lobby_p3_status_icon]
-	var left_frames: Array[Control] = [lobby_p1_left_frame, lobby_p2_left_frame, lobby_p3_left_frame]
-	var left_buttons: Array[Control] = [lobby_p1_left, lobby_p2_left, lobby_p3_left]
-	var right_frames: Array[Control] = [lobby_p1_right_frame, lobby_p2_right_frame, lobby_p3_right_frame]
-	var right_buttons: Array[Control] = [lobby_p1_right, lobby_p2_right, lobby_p3_right]
-	var card_positions := [Vector2(80.0, 140.0), Vector2(460.0, 140.0), Vector2(840.0, 140.0)] if is_ffa else [Vector2(199.0, 148.0), Vector2(681.0, 148.0), Vector2(840.0, 140.0)]
-	var card_sizes := [Vector2(360.0, 360.0), Vector2(360.0, 360.0), Vector2(360.0, 360.0)] if is_ffa else [Vector2(400.0, 420.0), Vector2(400.0, 420.0), Vector2(360.0, 360.0)]
-	var preview_positions := [Vector2(112.0, 214.0), Vector2(492.0, 214.0), Vector2(872.0, 214.0)] if is_ffa else [Vector2(246.0, 232.0), Vector2(736.0, 228.0), Vector2(884.0, 206.0)]
-	var preview_sizes := [Vector2(296.0, 188.0), Vector2(296.0, 188.0), Vector2(296.0, 188.0)] if is_ffa else [Vector2(300.0, 220.0), Vector2(300.0, 220.0), Vector2(272.0, 186.0)]
-	var info_positions := [Vector2(100.0, 156.0), Vector2(480.0, 156.0), Vector2(860.0, 156.0)] if is_ffa else [Vector2(241.0, 183.0), Vector2(731.0, 181.0), Vector2(860.0, 154.0)]
-	var info_sizes := [Vector2(320.0, 48.0), Vector2(320.0, 48.0), Vector2(320.0, 48.0)] if is_ffa else [Vector2(320.0, 52.0), Vector2(320.0, 52.0), Vector2(320.0, 48.0)]
-	var status_positions := [Vector2(346.0, 162.0), Vector2(726.0, 162.0), Vector2(1106.0, 162.0)] if is_ffa else [Vector2(473.0, 192.0), Vector2(961.0, 192.0), Vector2(1120.0, 160.0)]
-	var left_positions := [Vector2(122.0, 420.0), Vector2(502.0, 420.0), Vector2(882.0, 420.0)] if is_ffa else [Vector2(249.0, 476.0), Vector2(730.0, 476.0), Vector2(880.0, 420.0)]
-	var right_positions := [Vector2(318.0, 420.0), Vector2(698.0, 420.0), Vector2(1078.0, 420.0)] if is_ffa else [Vector2(469.0, 476.0), Vector2(943.0, 474.0), Vector2(1078.0, 420.0)]
-	for index in 3:
-		var show_card := index < 2 or is_ffa
-		card_nodes[index].visible = show_card
-		_set_lobby_rect(card_nodes[index], card_positions[index], card_sizes[index])
-		_set_lobby_rect(previews[index], preview_positions[index], preview_sizes[index])
-		_set_lobby_rect(infos[index], info_positions[index], info_sizes[index])
-		_set_lobby_rect(statuses[index], status_positions[index], Vector2(48.0, 48.0))
-		_set_lobby_rect(left_frames[index], left_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
-		_set_lobby_rect(left_buttons[index], left_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
-		_set_lobby_rect(right_frames[index], right_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
-		_set_lobby_rect(right_buttons[index], right_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
-
-
 func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> void:
 	icon.visible = is_present
 	if is_present:
@@ -5486,7 +5423,10 @@ func is_remote_lobby_player_connected(local_side: int) -> bool:
 
 
 func get_local_lobby_ready_button() -> Button:
-	return lobby_p2_ready if _local_lobby_slot() == 2 else lobby_p1_ready
+	var local_slot := _local_lobby_slot()
+	if dedicated_connection == null or not dedicated_connection.has_pending_join():
+		local_slot = local_player_id if local_player_id in [1, 2] else local_slot
+	return lobby_p2_ready if local_slot == 2 else lobby_p1_ready
 
 
 func _lobby_player_display_name(player_id: int, selection: int) -> String:
@@ -5751,17 +5691,6 @@ func end_trace_challenge_from_result(trace_result: Dictionary) -> void:
 		end_active_challenge(false, trace_score, "なぞりに失敗した。")
 
 
-func make_hud_label(label_position: Vector2, alignment: HorizontalAlignment) -> Label:
-	var label := Label.new()
-	label.position = label_position
-	label.size = Vector2(420, 44)
-	label.horizontal_alignment = alignment
-	label.add_theme_font_size_override("font_size", 22)
-	label.add_theme_color_override("font_color", Color("f1f5ff"))
-	hud_root.add_child(label)
-	return label
-
-
 func update_hack_vision_overlay() -> void:
 	if hack_vision_overlay == null:
 		return
@@ -5796,7 +5725,7 @@ func update_hud() -> void:
 	var opponent_player: Dictionary = players.get(opponent_ids[0], {}) if not opponent_ids.is_empty() else {}
 	var opponent_two_player: Dictionary = players.get(opponent_ids[1], {}) if opponent_ids.size() > 1 else {}
 	configure_skill_icons(own_player)
-	player_one_label.text = "HP %d / 100" % int(own_player["hp"])
+	player_one_label.text = "%s  HP %d / 100" % [match_player_display_name(hud_player_id), int(own_player["hp"])]
 	hp_bar.value = int(own_player["hp"])
 	var is_arithmetician := str(own_player.get("character_id", "")) == "arithmetic"
 	arithmetic_multiplier_label.visible = is_arithmetician
@@ -5807,13 +5736,16 @@ func update_hud() -> void:
 		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
 		opponent_one_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[0]), int(opponent_player.get("hp", 0))]
 	var has_second_opponent := not opponent_two_player.is_empty()
-	opponent_two_hp_bar.visible = has_second_opponent
-	opponent_two_label.visible = has_second_opponent
-	if has_second_opponent:
+	if opponent_two_hp_bar:
+		opponent_two_hp_bar.visible = has_second_opponent
+	if opponent_two_label:
+		opponent_two_label.visible = has_second_opponent
+	if has_second_opponent and opponent_two_hp_bar and opponent_two_label:
 		opponent_two_hp_bar.value = int(opponent_two_player.get("hp", 0))
-		opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
+	opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
 	_update_opponent_arithmetic_multiplier(opponent_one_arithmetic_multiplier_label, opponent_player)
-	_update_opponent_arithmetic_multiplier(opponent_two_arithmetic_multiplier_label, opponent_two_player)
+	if opponent_two_arithmetic_multiplier_label:
+		_update_opponent_arithmetic_multiplier(opponent_two_arithmetic_multiplier_label, opponent_two_player)
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		var equation_locked := float(own_player.get("equation_lock_time", 0.0)) > 0.0

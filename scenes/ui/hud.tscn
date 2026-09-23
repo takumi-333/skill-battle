@@ -288,17 +288,26 @@ anchors_preset = 0
 offset_right = 1280.0
 offset_bottom = 720.0
 
-[node name="PlayerOneLabel" type="Label" parent="." unique_id=1993157830]
+[node name="DuelLayout" type="Control" parent="." unique_id=1683885983]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerOneLabel" type="Label" parent="DuelLayout" unique_id=96181630]
 layout_mode = 0
 offset_left = 370.0
 offset_top = 36.0
 offset_right = 610.0
 offset_bottom = 78.0
 theme_override_font_sizes/font_size = 24
-text = "HP 100 / 100"
+text = "プレイヤー1  HP 100 / 100"
 vertical_alignment = 1
 
-[node name="HPBar" type="ProgressBar" parent="." unique_id=1922176511]
+[node name="HPBar" type="ProgressBar" parent="DuelLayout" unique_id=99096754]
 layout_mode = 0
 offset_left = 40.0
 offset_top = 45.0
@@ -309,7 +318,7 @@ theme_override_styles/fill = SubResource("StyleBoxFlat_jscy8")
 value = 100.0
 show_percentage = false
 
-[node name="OpponentHPBar" type="ProgressBar" parent="."]
+[node name="OpponentHPBar" type="ProgressBar" parent="DuelLayout" unique_id=1898182917]
 layout_mode = 0
 offset_left = 780.0
 offset_top = 49.0
@@ -320,7 +329,7 @@ theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
 value = 100.0
 show_percentage = false
 
-[node name="OpponentOneLabel" type="Label" parent="."]
+[node name="OpponentOneLabel" type="Label" parent="DuelLayout" unique_id=1951815171]
 layout_mode = 0
 offset_left = 780.0
 offset_top = 19.0
@@ -328,34 +337,11 @@ offset_right = 1080.0
 offset_bottom = 45.0
 theme_override_colors/font_color = Color(1, 0.65, 0.68, 1)
 theme_override_font_sizes/font_size = 16
-text = "対戦相手  HP 100 / 100"
+text = "プレイヤー2  HP 100 / 100"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="OpponentTwoHPBar" type="ProgressBar" parent="."]
-layout_mode = 0
-offset_left = 780.0
-offset_top = 108.0
-offset_right = 1080.0
-offset_bottom = 132.0
-theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
-theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
-value = 100.0
-show_percentage = false
-
-[node name="OpponentTwoLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 780.0
-offset_top = 78.0
-offset_right = 1080.0
-offset_bottom = 104.0
-theme_override_colors/font_color = Color(0.78, 0.58, 1, 1)
-theme_override_font_sizes/font_size = 16
-text = "対戦相手  HP 100 / 100"
-horizontal_alignment = 2
-vertical_alignment = 1
-
-[node name="OpponentOneArithmeticMultiplier" type="Label" parent="."]
+[node name="OpponentOneArithmeticMultiplier" type="Label" parent="DuelLayout" unique_id=2032572825]
 layout_mode = 0
 offset_left = 780.0
 offset_top = 77.0
@@ -366,7 +352,105 @@ theme_override_font_sizes/font_size = 18
 text = "f(x) = x"
 horizontal_alignment = 2
 
-[node name="OpponentTwoArithmeticMultiplier" type="Label" parent="."]
+[node name="ArithmeticMultiplier" type="Label" parent="DuelLayout" unique_id=1542163446]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 72.0
+offset_right = 350.0
+offset_bottom = 98.0
+theme_override_colors/font_color = Color(0.454902, 0.596078, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "f(x) = x"
+
+[node name="FfaLayout" type="Control" parent="." unique_id=798565905]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerOneLabel" type="Label" parent="FfaLayout" unique_id=1993157830]
+layout_mode = 0
+offset_left = 370.0
+offset_top = 36.0
+offset_right = 610.0
+offset_bottom = 78.0
+theme_override_font_sizes/font_size = 24
+text = "プレイヤー1  HP 100 / 100"
+vertical_alignment = 1
+
+[node name="HPBar" type="ProgressBar" parent="FfaLayout" unique_id=1922176511]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 45.0
+offset_right = 350.0
+offset_bottom = 69.0
+theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_jscy8")
+value = 100.0
+show_percentage = false
+
+[node name="OpponentHPBar" type="ProgressBar" parent="FfaLayout" unique_id=1777822597]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 49.0
+offset_right = 1080.0
+offset_bottom = 73.0
+theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
+value = 100.0
+show_percentage = false
+
+[node name="OpponentOneLabel" type="Label" parent="FfaLayout" unique_id=1430161426]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 19.0
+offset_right = 1080.0
+offset_bottom = 45.0
+theme_override_colors/font_color = Color(1, 0.65, 0.68, 1)
+theme_override_font_sizes/font_size = 16
+text = "プレイヤー2  HP 100 / 100"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="OpponentTwoHPBar" type="ProgressBar" parent="FfaLayout" unique_id=1088922590]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 108.0
+offset_right = 1080.0
+offset_bottom = 132.0
+theme_override_styles/background = SubResource("StyleBoxFlat_yc10j")
+theme_override_styles/fill = SubResource("StyleBoxFlat_opponent_hp")
+value = 100.0
+show_percentage = false
+
+[node name="OpponentTwoLabel" type="Label" parent="FfaLayout" unique_id=1436902272]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 78.0
+offset_right = 1080.0
+offset_bottom = 104.0
+theme_override_colors/font_color = Color(0.78, 0.58, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "プレイヤー3  HP 100 / 100"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="OpponentOneArithmeticMultiplier" type="Label" parent="FfaLayout" unique_id=363360544]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 77.0
+offset_right = 1080.0
+offset_bottom = 103.0
+theme_override_colors/font_color = Color(0.454902, 0.596078, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "f(x) = x"
+horizontal_alignment = 2
+
+[node name="OpponentTwoArithmeticMultiplier" type="Label" parent="FfaLayout" unique_id=1677838920]
 layout_mode = 0
 offset_left = 780.0
 offset_top = 136.0
@@ -377,7 +461,7 @@ theme_override_font_sizes/font_size = 18
 text = "f(x) = x"
 horizontal_alignment = 2
 
-[node name="ArithmeticMultiplier" type="Label" parent="."]
+[node name="ArithmeticMultiplier" type="Label" parent="FfaLayout" unique_id=367543329]
 layout_mode = 0
 offset_left = 40.0
 offset_top = 72.0
@@ -414,9 +498,8 @@ offset_right = 500.0
 offset_bottom = 648.0
 theme_override_colors/font_color = Color(0.7176471, 0.75686276, 0.84705883, 1)
 theme_override_font_sizes/font_size = 15
-text = "移動: 矢印キー  通常攻撃: 1
-スキル1/2/3: 2・3・4  課題中止: Esc"
-horizontal_alignment = 0
+text = "移動: 矢印キー  通常攻撃: 1 / クリック
+スキル1/2/3: 2・3・4 / クリック  課題中止: Esc"
 
 [node name="HomeButton" type="Button" parent="." unique_id=1036284805]
 z_index = 10

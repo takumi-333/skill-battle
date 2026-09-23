@@ -27,25 +27,34 @@ func _run() -> void:
 	player_three["visual_id"] = "chanter"
 	prototype.players[3] = player_three
 	prototype.refresh_lobby_label()
-	assert(prototype.get_node("UIRoot/Lobby/PlayerOnePreview").visible)
-	assert(str(prototype.get_node("UIRoot/Lobby/PlayerOneInfo").text).begins_with("あなた"))
-	assert(prototype.get_node("UIRoot/Lobby/PlayerThreeCard").visible)
+	var duel_layout: Control = prototype.get_node("UIRoot/Lobby/DuelLayout")
+	var ffa_layout: Control = prototype.get_node("UIRoot/Lobby/FfaLayout")
+	var ffa_card_position := (ffa_layout.get_node("PlayerOneCard") as Control).position
+	assert(not duel_layout.visible)
+	assert(ffa_layout.visible)
+	assert(ffa_layout.get_node("PlayerOnePreview").visible)
+	assert(str(ffa_layout.get_node("PlayerOneInfo").text).begins_with("あなた"))
+	assert(ffa_layout.get_node("PlayerThreeCard").visible)
 	assert(prototype.get_node("UIRoot/Lobby/PlayerOneReady").visible)
 	assert(prototype.get_node("UIRoot/Lobby/StartButton").visible)
-	assert(prototype.get_node("UIRoot/Lobby/PlayerTwoPreview").texture == SHADOW_IDLE_TEXTURE)
-	assert(prototype.get_node("UIRoot/Lobby/PlayerThreePreview").texture == SHADOW_IDLE_TEXTURE)
-	assert(prototype.get_node("UIRoot/Lobby/PlayerOneCard").position.is_equal_approx(Vector2(80, 140)))
+	assert(ffa_layout.get_node("PlayerTwoPreview").texture == SHADOW_IDLE_TEXTURE)
+	assert(ffa_layout.get_node("PlayerThreePreview").texture == SHADOW_IDLE_TEXTURE)
+	assert(ffa_card_position.is_equal_approx(Vector2(80, 140)))
+	prototype.refresh_lobby_label()
+	assert((ffa_layout.get_node("PlayerOneCard") as Control).position.is_equal_approx(ffa_card_position))
 
 	prototype.dedicated_match_mode = "duel"
 	prototype.dedicated_connected_slots.clear()
 	prototype.dedicated_connected_slots.append(1)
 	prototype.dedicated_connected_slots.append(2)
 	prototype.refresh_lobby_label()
-	assert(prototype.get_node("UIRoot/Lobby/PlayerOneCard").position.is_equal_approx(Vector2(199, 148)))
-	assert(prototype.get_node("UIRoot/Lobby/PlayerOneCard").size.is_equal_approx(Vector2(400, 420)))
-	assert(prototype.get_node("UIRoot/Lobby/PlayerTwoPreview").position.is_equal_approx(Vector2(736, 228)))
-	assert(prototype.get_node("UIRoot/Lobby/PlayerTwoPreview").texture == SHADOW_IDLE_TEXTURE)
-	assert(not prototype.get_node("UIRoot/Lobby/PlayerThreeCard").visible)
+	assert(duel_layout.visible)
+	assert(not ffa_layout.visible)
+	assert(duel_layout.get_node("PlayerOneCard").position.is_equal_approx(Vector2(199, 148)))
+	assert(duel_layout.get_node("PlayerOneCard").size.is_equal_approx(Vector2(400, 420)))
+	assert(duel_layout.get_node("PlayerTwoPreview").position.is_equal_approx(Vector2(736, 228)))
+	assert(duel_layout.get_node("PlayerTwoPreview").texture == SHADOW_IDLE_TEXTURE)
+	assert(not duel_layout.has_node("PlayerThreeCard"))
 	var local_player: Dictionary = prototype.players[1]
 	local_player["defeated"] = true
 	local_player["spectator_target_id"] = 2
