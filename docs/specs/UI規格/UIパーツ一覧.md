@@ -95,7 +95,7 @@ Godotで `scenes/main.tscn` を開き、ルートの `MatchPrototype` ノード�
 | 管理名 | 種別 | 規格・状態 | 使用画面 | 配置先 | 状況 |
 | --- | --- | --- | --- | --- | --- |
 | `ui_logo_title` | タイトルロゴ | 透過PNG、`1536x1024px`。`SKILL BATTLERS` の二段ロゴ。タイトル画面では横幅 `480～640px` を基準に表示する。 | タイトル | `res://assets/ui/logo_title.png` | 制作済み |
-| `ui_background_menu` | メニュー背景 | `1680x945px`、文字なし。暗い地下ストリートの壁、鎖、床の反射を含む。画面全体を覆う `16:9` 背景として表示する。 | タイトル、ホーム、オンライン、ロビー、練習、デバッグ | `res://assets/ui/menu_background.png` | 制作済み |
+| `ui_background_menu` | メニュー背景 | `1680x945px`、文字なし。暗い地下ストリートの壁、鎖、床の反射を含む。画面全体を覆う `16:9` 背景として表示する。 | タイトル、ホーム、オンライン、ロビー、練習、CPU対戦設定、チュートリアル説明 | `res://assets/ui/menu_background.png` | 制作済み |
 | `ui_button_primary` | 主ボタン | 透過PNG、`1774x887px`（余白込みの原寸）。画面上の基準サイズ：幅 `360～420px`、高さ `72～88px`。文字なしの背景素材。通常、ホバー／フォーカス、押下、無効の状態は実装側で表現する。 | ホーム、各種メニュー | `res://assets/ui/button_primary.png` | 制作済み |
 | `ui_button_secondary` | 副ボタン | 透過PNG、`2118x742px`（余白込みの原寸）。画面上の基準サイズ：幅 `120～180px`、高さ `48～56px`。文字なしの背景素材。通常、ホバー／フォーカス、押下、無効の状態は実装側で表現する。 | 全サブ画面 | `res://assets/ui/button_secondary.png` | 制作済み |
 | `ui_icon_back` | 戻るアイコン | `24px`、`32px`、`48px` の正方形。 | 全サブ画面 | 未作成 | 要制作 |

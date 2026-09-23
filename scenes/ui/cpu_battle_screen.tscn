@@ -1,0 +1,116 @@
+[gd_scene format=3]
+
+[node name="CpuBattle" type="Panel"]
+offset_right = 1280.0
+offset_bottom = 720.0
+
+[node name="Title" type="Label" parent="."]
+offset_left = 130.0
+offset_top = 62.0
+offset_right = 1150.0
+offset_bottom = 120.0
+theme_override_font_sizes/font_size = 36
+text = "CPU対戦"
+horizontal_alignment = 1
+
+[node name="PlayerLabel" type="Label" parent="."]
+offset_left = 160.0
+offset_top = 190.0
+offset_right = 570.0
+offset_bottom = 235.0
+theme_override_font_sizes/font_size = 26
+text = "あなたのキャラクター"
+horizontal_alignment = 1
+
+[node name="PlayerPrev" type="Button" parent="."]
+offset_left = 170.0
+offset_top = 285.0
+offset_right = 240.0
+offset_bottom = 355.0
+text = "◀"
+
+[node name="PlayerName" type="Label" parent="."]
+offset_left = 245.0
+offset_top = 280.0
+offset_right = 485.0
+offset_bottom = 360.0
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerNext" type="Button" parent="."]
+offset_left = 490.0
+offset_top = 285.0
+offset_right = 560.0
+offset_bottom = 355.0
+text = "▶"
+
+[node name="OpponentLabel" type="Label" parent="."]
+offset_left = 710.0
+offset_top = 190.0
+offset_right = 1120.0
+offset_bottom = 235.0
+theme_override_font_sizes/font_size = 26
+text = "CPUのキャラクター"
+horizontal_alignment = 1
+
+[node name="OpponentPrev" type="Button" parent="."]
+offset_left = 720.0
+offset_top = 285.0
+offset_right = 790.0
+offset_bottom = 355.0
+text = "◀"
+
+[node name="OpponentName" type="Label" parent="."]
+offset_left = 795.0
+offset_top = 280.0
+offset_right = 1035.0
+offset_bottom = 360.0
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="OpponentNext" type="Button" parent="."]
+offset_left = 1040.0
+offset_top = 285.0
+offset_right = 1110.0
+offset_bottom = 355.0
+text = "▶"
+
+[node name="LevelLabel" type="Label" parent="."]
+offset_left = 340.0
+offset_top = 405.0
+offset_right = 940.0
+offset_bottom = 450.0
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+
+[node name="LevelPrev" type="Button" parent="."]
+offset_left = 395.0
+offset_top = 465.0
+offset_right = 475.0
+offset_bottom = 525.0
+text = "◀"
+
+[node name="LevelNext" type="Button" parent="."]
+offset_left = 805.0
+offset_top = 465.0
+offset_right = 885.0
+offset_bottom = 525.0
+text = "▶"
+
+[node name="StartButton" type="Button" parent="."]
+offset_left = 760.0
+offset_top = 590.0
+offset_right = 1110.0
+offset_bottom = 655.0
+theme_override_font_sizes/font_size = 26
+text = "対戦開始"
+
+[node name="BackButton" type="Button" parent="."]
+offset_left = 170.0
+offset_top = 590.0
+offset_right = 520.0
+offset_bottom = 655.0
+theme_override_font_sizes/font_size = 24
+text = "ホームへ戻る"

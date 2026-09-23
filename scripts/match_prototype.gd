@@ -604,9 +604,28 @@ const USER_SETTINGS_HOME_BUTTON_PATHS := [
 	"UIRoot/Home/OnlineButton",
 	"UIRoot/Home/PracticeButton",
 	"UIRoot/Home/CharacterButton",
-	"UIRoot/Home/DebugButton",
+	"UIRoot/Home/CpuButton",
+	"UIRoot/Home/TutorialButton",
 	"UIRoot/Home/SettingsButton",
 ]
+var cpu_panel: Panel
+var tutorial_panel: Panel
+var cpu_player_selection := 0
+var cpu_opponent_selection := 0
+var cpu_level := 1
+var cpu_move_direction := Vector2.ZERO
+var cpu_decision_timer := 0.0
+var cpu_action_timer := 0.0
+var cpu_challenge_slot := 0
+var cpu_challenge_remaining := 0.0
+var cpu_challenge_duration := 0.0
+var cpu_forced_timer := 0.0
+var cpu_forced_source := 0
+var tutorial_step := 0
+var tutorial_start_position := Vector2.ZERO
+var tutorial_last_score := 0
+var tutorial_requested_slot := -1
+var tutorial_hint_label: Label
 @export var lobby_api_url := ""
 @export var lobby_access_token := ""
 @export var allow_insecure_lobby_url := false
@@ -621,7 +640,6 @@ var user_settings_access_token_input: LineEdit
 var user_settings_validation: Label
 var user_settings_home_button_states: Dictionary = {}
 var practice_panel: Panel
-var debug_panel: Panel
 var character_panel: Panel
 var character_background: TextureRect
 var character_portrait: TextureRect
@@ -651,17 +669,8 @@ var character_skill_detail_slot: int = -1
 var character_skill_detail_candidate: int = -1
 var title_logo: TextureRect
 var practice_selection: int = 0
-var debug_p1_selection: int = 0
-var debug_p2_selection: int = 1
 var practice_preview: Label
-var debug_preview: Label
 var practice_portrait: TextureRect
-var debug_p1_portrait: TextureRect
-var debug_p2_portrait: TextureRect
-var debug_p1_name: Label
-var debug_p2_name: Label
-var debug_control_p1_button: Button
-var debug_control_p2_button: Button
 var lobby_p1_preview: TextureRect
 var lobby_p2_preview: TextureRect
 var lobby_p3_preview: TextureRect
@@ -771,7 +780,8 @@ func _ready() -> void:
 		"title": title_panel,
 		"home": home_panel,
 		"practice_select": practice_panel,
-		"debug_select": debug_panel,
+		"cpu_select": cpu_panel,
+		"tutorial_intro": tutorial_panel,
 		"character": character_panel,
 		"connection": network_panel,
 		"online_waiting": lobby_panel,
@@ -1156,7 +1166,7 @@ func _process(delta: float) -> void:
 	update_match_start_prompt(visual_delta)
 	update_battle_bgm_focus()
 	update_hack_vision_overlay()
-	if screen == "title" or screen == "home" or screen == "practice_select" or screen == "debug_select":
+	if screen in ["title", "home", "practice_select", "cpu_select", "tutorial_intro"]:
 		if screen == "title":
 			title_animation_elapsed += delta
 			update_title_prompt_blink()
@@ -1208,6 +1218,10 @@ func _process(delta: float) -> void:
 		return
 
 	match_state.time_remaining = maxf(0.0, match_state.time_remaining - delta)
+	if network_mode in ["cpu", "tutorial"]:
+		update_cpu_ai(delta)
+		if network_mode == "tutorial":
+			update_tutorial_progress()
 	update_player(1, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
 	if network_mode != "practice":
 		update_player(2, delta, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
@@ -1244,13 +1258,13 @@ func _process(delta: float) -> void:
 			request_skill_activation(2, 1)
 		if Input.is_key_pressed(KEY_4):
 			request_skill_activation(3, 1)
-		if network_mode != "host" and Input.is_key_pressed(KEY_1):
+		if network_mode == "practice" and Input.is_key_pressed(KEY_1):
 			request_skill_activation(0, 2)
-		if network_mode != "host" and Input.is_key_pressed(KEY_2):
+		if network_mode == "practice" and Input.is_key_pressed(KEY_2):
 			request_skill_activation(1, 2)
-		if network_mode != "host" and Input.is_key_pressed(KEY_3):
+		if network_mode == "practice" and Input.is_key_pressed(KEY_3):
 			request_skill_activation(2, 2)
-		if network_mode != "host" and Input.is_key_pressed(KEY_4):
+		if network_mode == "practice" and Input.is_key_pressed(KEY_4):
 			request_skill_activation(3, 2)
 	if network_mode == "host":
 		if bool(remote_input["attack"]):
@@ -1280,6 +1294,8 @@ func update_player(player_id: int, delta: float, left_key, right_key, up_key, do
 		player["is_moving"] = false
 	elif network_mode == "local" and player_id != debug_controlled_player_id:
 		direction = Vector2.ZERO
+	elif network_mode in ["cpu", "tutorial"] and player_id == 2:
+		direction = cpu_move_direction
 	elif network_mode == "host" and player_id == 2:
 		direction = remote_input["move"]
 	else:
@@ -1349,6 +1365,8 @@ func try_attack(player_id: int) -> void:
 	var target_center := get_player_hitbox_center(target["position"])
 	if hit_area.intersects_player_hitbox(target_center, PLAYER_HITBOX_RADIUS_X, PLAYER_HITBOX_RADIUS_Y):
 		apply_damage(target_id, normal_attack_damage(player), "%sの斬撃" % player["name"])
+		if network_mode == "tutorial" and player_id == 1 and tutorial_step == 1:
+			tutorial_step = 2
 		if phase != "finish":
 			status_text = "%sの斬撃が%sに命中！" % [player["name"], target["name"]]
 	else:
@@ -1896,11 +1914,20 @@ func end_active_challenge(success: bool, score: int, failure_message: String) ->
 	if success:
 		spawn_character_skill(owner_id, score, is_big)
 		status_text = "%sの%sが発動！ スコア %d点" % [player["name"], "スキル3" if is_skill3 else ("スキル2" if is_big else "スキル1"), score]
+		if network_mode == "tutorial" and owner_id == 1 and tutorial_step in [2, 3, 4] and tutorial_requested_slot == tutorial_step - 1:
+			tutorial_last_score = score
+			tutorial_step += 1
+			if tutorial_step == 5:
+				for participant_id in [1, 2]:
+					var participant: Dictionary = players[participant_id]
+					participant["hp"] = 100
+					players[participant_id] = participant
 	else:
 		status_text = failure_message
 	if _is_trace_challenge() and not last_trace_result.is_empty():
 		append_trace_result_to_status()
 	challenge_owner = 0
+	tutorial_requested_slot = -1
 	challenge_skill = ""
 	challenge_trace_points.clear()
 	challenge_trace_drawing = false
@@ -1913,6 +1940,10 @@ func start_forced_equation_challenge(source_id: int) -> void:
 	if challenge_owner != 0:
 		return
 	var target_id := 2 if source_id == 1 else 1
+	if target_id == 2 and network_mode in ["cpu", "tutorial"]:
+		cpu_forced_source = source_id
+		cpu_forced_timer = [5.0, 3.5, 2.3][cpu_level - 1]
+		return
 	var target: Dictionary = players[target_id]
 	if float(target.get("equation_lock_time", 0.0)) > 0.0:
 		return
@@ -2960,6 +2991,8 @@ func clamp_to_arena(position_value: Vector2) -> Vector2:
 func apply_damage(target_id: int, damage: int, _attack_name: String) -> void:
 	var target: Dictionary = players[target_id]
 	target["hp"] = maxi(0, int(target["hp"]) - damage)
+	if network_mode == "tutorial" and target_id == 2 and tutorial_step < 5:
+		target["hp"] = maxi(20, int(target["hp"]))
 	target["hit_time"] = 0.20
 	players[target_id] = target
 	emit_shared_sound(&"damage")
@@ -3061,7 +3094,7 @@ func request_return_to_lobby() -> void:
 			return
 		rpc_id(1, "receive_remote_result_action", "lobby")
 		return
-	if network_mode == "local" or network_mode == "practice":
+	if network_mode in ["local", "practice", "cpu", "tutorial"]:
 		show_home()
 		return
 	if network_mode == "host":
@@ -3170,6 +3203,7 @@ func create_hud() -> void:
 	_select_hud_layout(false)
 	timer_label = hud_root.get_node("Timer") as Label
 	status_label = hud_root.get_node("Status") as Label
+	tutorial_hint_label = hud_root.get_node("TutorialHint") as Label
 
 	controls_label = hud_root.get_node("Controls") as Label
 	gameplay_home_button = hud_root.get_node("HomeButton") as Button
@@ -3226,6 +3260,8 @@ func request_skill_activation(slot: int, owner_id := 0) -> void:
 	if network_mode == "client":
 		pending_client_skill_requests[slot] = true
 		return
+	if network_mode == "tutorial" and slot > 0 and owner_id in [0, 1]:
+		tutorial_requested_slot = slot
 	_activate_skill_slot(owner_id if owner_id > 0 else get_hud_player_id(), slot)
 
 
@@ -3260,8 +3296,9 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 		opponent_two_arithmetic_multiplier_label.visible = false
 	timer_label.visible = is_visible
 	status_label.visible = false
+	tutorial_hint_label.visible = is_visible and network_mode == "tutorial"
 	controls_label.visible = is_visible and network_mode == "practice"
-	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local"]
+	gameplay_home_button.visible = is_visible and network_mode in ["practice", "local", "cpu", "tutorial"]
 	for widget in skill_widgets:
 		widget.set("visible", is_visible)
 
@@ -4433,15 +4470,18 @@ func create_navigation_ui() -> void:
 	var online_button := $UIRoot/Home/OnlineButton as Button
 	var practice_button := $UIRoot/Home/PracticeButton as Button
 	var character_button := $UIRoot/Home/CharacterButton as Button
-	var home_debug_button := $UIRoot/Home/DebugButton as Button
-	for button in [online_button, practice_button, character_button, home_debug_button]:
+	var home_cpu_button := $UIRoot/Home/CpuButton as Button
+	var home_tutorial_button := $UIRoot/Home/TutorialButton as Button
+	for button in [online_button, practice_button, character_button, home_cpu_button, home_tutorial_button]:
 		style_menu_button(button, 30 if button == online_button else 20)
 	connect_button_once(online_button, show_online_menu)
 	connect_button_once(practice_button, show_practice_select)
 	connect_button_once(character_button, show_character_screen)
-	connect_button_once(home_debug_button, show_debug_select)
+	connect_button_once(home_cpu_button, show_cpu_select)
+	connect_button_once(home_tutorial_button, show_tutorial_intro)
 	character_button.tooltip_text = "Open character customization"
 	create_user_settings_ui()
+	create_cpu_and_tutorial_ui()
 
 	practice_panel = make_menu_panel(NodePath("UIRoot/Practice"), Color("71d6ba"))
 	practice_preview = $UIRoot/Practice/Preview
@@ -4461,39 +4501,6 @@ func create_navigation_ui() -> void:
 		practice_start_button.pressed.connect(start_practice)
 		practice_back_button.pressed.connect(show_home)
 		practice_panel.set_meta("ui_callbacks_bound", true)
-
-	debug_panel = make_menu_panel(NodePath("UIRoot/Debug"), Color("ffc45e"))
-	debug_preview = $UIRoot/Debug/Preview
-	debug_preview.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	debug_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	debug_preview.add_theme_font_size_override("font_size", 25)
-	debug_p1_name = $UIRoot/Debug/P1Name
-	debug_p2_name = $UIRoot/Debug/P2Name
-	debug_p1_portrait = $UIRoot/Debug/P1Portrait
-	debug_p2_portrait = $UIRoot/Debug/P2Portrait
-	var debug_p1_prev_button := $UIRoot/Debug/P1Prev as Button
-	var debug_p1_next_button := $UIRoot/Debug/P1Next as Button
-	var debug_p2_prev_button := $UIRoot/Debug/P2Prev as Button
-	var debug_p2_next_button := $UIRoot/Debug/P2Next as Button
-	for button in [debug_p1_prev_button, debug_p1_next_button, debug_p2_prev_button, debug_p2_next_button]:
-		style_menu_button(button)
-	if not debug_panel.has_meta("ui_callbacks_bound"):
-		debug_p1_prev_button.pressed.connect(func(): change_debug_selection(1, -1))
-		debug_p1_next_button.pressed.connect(func(): change_debug_selection(1, 1))
-		debug_p2_prev_button.pressed.connect(func(): change_debug_selection(2, -1))
-		debug_p2_next_button.pressed.connect(func(): change_debug_selection(2, 1))
-		debug_panel.set_meta("ui_callbacks_bound", true)
-	debug_control_p1_button = $UIRoot/Debug/ControlP1
-	debug_control_p2_button = $UIRoot/Debug/ControlP2
-	var debug_start_button := $UIRoot/Debug/StartButton as Button
-	var debug_back_button := $UIRoot/Debug/BackButton as Button
-	for button in [debug_control_p1_button, debug_control_p2_button, debug_start_button, debug_back_button]:
-		style_menu_button(button)
-	connect_button_once(debug_control_p1_button, func(): set_debug_controlled_player(1))
-	connect_button_once(debug_control_p2_button, func(): set_debug_controlled_player(2))
-	connect_button_once(debug_start_button, start_debug_match)
-	connect_button_once(debug_back_button, show_home)
-
 
 func character_names() -> Array[String]:
 	return ["打鍵士", "算術士", "詠唱者"]
@@ -4526,16 +4533,6 @@ func update_selection_labels() -> void:
 	if practice_preview:
 		practice_preview.text = names[practice_selection]
 		practice_portrait.texture = get_idle_texture(visual_ids[practice_selection])
-	if debug_preview:
-		debug_preview.text = ""
-		debug_p1_name.text = "P1  %s%s" % [names[debug_p1_selection], "（操作対象）" if debug_controlled_player_id == 1 else ""]
-		debug_p2_name.text = "P2  %s%s" % [names[debug_p2_selection], "（操作対象）" if debug_controlled_player_id == 2 else ""]
-		debug_p1_portrait.texture = get_idle_texture(visual_ids[debug_p1_selection])
-		debug_p2_portrait.texture = get_idle_texture(visual_ids[debug_p2_selection])
-		if debug_control_p1_button:
-			debug_control_p1_button.text = "P1を操作 ✓" if debug_controlled_player_id == 1 else "P1を操作"
-		if debug_control_p2_button:
-			debug_control_p2_button.text = "P2を操作 ✓" if debug_controlled_player_id == 2 else "P2を操作"
 
 
 func show_title() -> void:
@@ -4603,9 +4600,253 @@ func show_practice_select() -> void:
 	apply_screen_state("practice_select")
 
 
-func show_debug_select() -> void:
-	update_selection_labels()
-	apply_screen_state("debug_select")
+func show_cpu_select() -> void:
+	update_cpu_selection_labels()
+	apply_screen_state("cpu_select")
+
+
+func show_tutorial_intro() -> void:
+	apply_screen_state("tutorial_intro")
+
+
+func create_cpu_and_tutorial_ui() -> void:
+	cpu_panel = $UIRoot/CpuBattle as Panel
+	tutorial_panel = $UIRoot/Tutorial as Panel
+	for panel in [cpu_panel, tutorial_panel]:
+		var panel_style := StyleBoxFlat.new()
+		panel_style.bg_color = Color(0.06, 0.10, 0.18, 0.84)
+		panel_style.border_color = Color("8fa8e8")
+		panel_style.set_border_width_all(2)
+		panel.add_theme_stylebox_override("panel", panel_style)
+	for name in ["PlayerPrev", "PlayerNext", "OpponentPrev", "OpponentNext", "LevelPrev", "LevelNext", "StartButton", "BackButton"]:
+		style_menu_button(cpu_panel.get_node(name) as Button)
+	for name in ["StartButton", "BackButton"]:
+		style_menu_button(tutorial_panel.get_node(name) as Button)
+	connect_button_once($UIRoot/CpuBattle/PlayerPrev as Button, func(): change_cpu_selection("player", -1))
+	connect_button_once($UIRoot/CpuBattle/PlayerNext as Button, func(): change_cpu_selection("player", 1))
+	connect_button_once($UIRoot/CpuBattle/OpponentPrev as Button, func(): change_cpu_selection("opponent", -1))
+	connect_button_once($UIRoot/CpuBattle/OpponentNext as Button, func(): change_cpu_selection("opponent", 1))
+	connect_button_once($UIRoot/CpuBattle/LevelPrev as Button, func(): change_cpu_selection("level", -1))
+	connect_button_once($UIRoot/CpuBattle/LevelNext as Button, func(): change_cpu_selection("level", 1))
+	connect_button_once($UIRoot/CpuBattle/StartButton as Button, start_cpu_match)
+	connect_button_once($UIRoot/CpuBattle/BackButton as Button, show_home)
+	connect_button_once($UIRoot/Tutorial/StartButton as Button, start_tutorial_match)
+	connect_button_once($UIRoot/Tutorial/BackButton as Button, show_home)
+	update_cpu_selection_labels()
+
+
+func change_cpu_selection(kind: String, step: int) -> void:
+	match kind:
+		"player":
+			cpu_player_selection = posmod(cpu_player_selection + step, 3)
+		"opponent":
+			cpu_opponent_selection = posmod(cpu_opponent_selection + step, 3)
+		"level":
+			cpu_level = clampi(cpu_level + step, 1, 3)
+	update_cpu_selection_labels()
+
+
+func update_cpu_selection_labels() -> void:
+	if cpu_panel == null:
+		return
+	var names := character_names()
+	($UIRoot/CpuBattle/PlayerName as Label).text = names[cpu_player_selection]
+	($UIRoot/CpuBattle/OpponentName as Label).text = names[cpu_opponent_selection]
+	($UIRoot/CpuBattle/LevelLabel as Label).text = "CPU レベル %d  （%s）" % [cpu_level, ["弱い", "標準", "強い"][cpu_level - 1]]
+
+
+func start_cpu_match() -> void:
+	network_mode = "cpu"
+	dedicated_match_mode = MatchProtocol.DEFAULT_MATCH_MODE
+	local_player_id = 1
+	p1_selection = cpu_player_selection
+	p2_selection = cpu_opponent_selection
+	prepare_match_start()
+	reset_cpu_ai()
+
+
+func start_tutorial_match() -> void:
+	network_mode = "tutorial"
+	dedicated_match_mode = MatchProtocol.DEFAULT_MATCH_MODE
+	local_player_id = 1
+	p1_selection = cpu_player_selection
+	p2_selection = 0
+	prepare_match_start()
+	reset_cpu_ai()
+	tutorial_step = 0
+	tutorial_last_score = 0
+	tutorial_requested_slot = -1
+	var player: Dictionary = players[1]
+	player["position"] = Vector2(660.0, ARENA.get_center().y)
+	players[1] = player
+	var opponent: Dictionary = players[2]
+	opponent["position"] = Vector2(930.0, ARENA.get_center().y)
+	players[2] = opponent
+	tutorial_start_position = player["position"]
+
+
+func reset_cpu_ai() -> void:
+	cpu_move_direction = Vector2.ZERO
+	cpu_decision_timer = 0.8
+	cpu_action_timer = 2.0
+	cpu_challenge_slot = 0
+	cpu_challenge_remaining = 0.0
+	cpu_challenge_duration = 0.0
+	cpu_forced_timer = 0.0
+	cpu_forced_source = 0
+
+
+func update_cpu_ai(delta: float) -> void:
+	if phase != "match" or not players.has(1) or not players.has(2):
+		return
+	var cpu: Dictionary = players[2]
+	var human: Dictionary = players[1]
+	if int(cpu["hp"]) <= 0 or int(human["hp"]) <= 0:
+		cpu_move_direction = Vector2.ZERO
+		return
+	if cpu_forced_timer > 0.0:
+		cpu_forced_timer -= delta
+		if cpu_forced_timer <= 0.0:
+			if randf() > [0.4, 0.7, 0.9][cpu_level - 1]:
+				cpu["equation_lock_time"] = EQUATION_DOMINATION_LOCK_DURATION
+				cpu["equation_lock_owner_id"] = cpu_forced_source
+				players[2] = cpu
+			cpu_forced_source = 0
+	if cpu_challenge_slot > 0:
+		cpu_challenge_remaining = maxf(0.0, cpu_challenge_remaining - delta)
+		cpu["challenge_elapsed"] = cpu_challenge_duration - cpu_challenge_remaining
+		players[2] = cpu
+		cpu_move_direction = Vector2.ZERO
+		if cpu_challenge_remaining <= 0.0 and challenge_owner == 0:
+			finish_cpu_challenge()
+		return
+	cpu_decision_timer -= delta
+	cpu_action_timer -= delta
+	if cpu_decision_timer > 0.0:
+		return
+	cpu_decision_timer = [0.9, 0.55, 0.3][cpu_level - 1] + randf_range(0.0, 0.2)
+	var to_human: Vector2 = Vector2(human["position"]) - Vector2(cpu["position"])
+	var distance := to_human.length()
+	var direction := to_human.normalized() if distance > 0.0 else Vector2.LEFT
+	var desired_distance: float = [125.0, 170.0, 200.0][cpu_level - 1]
+	if network_mode == "tutorial" and tutorial_step < 5:
+		cpu_move_direction = direction if distance > 110.0 else Vector2.ZERO
+		cpu["facing"] = direction
+		players[2] = cpu
+		return
+	var strafing := direction.rotated(PI * 0.5 * (-1.0 if randi_range(0, 1) == 0 else 1.0))
+	cpu_move_direction = direction if distance > desired_distance else (strafing if distance > 95.0 else -direction)
+	if cpu_level == 1 and randf() < 0.32:
+		cpu_move_direction = Vector2.ZERO
+	cpu["facing"] = direction.rotated(randf_range(-0.3, 0.3) * float(4 - cpu_level))
+	players[2] = cpu
+	if cpu_action_timer > 0.0 or float(cpu.get("equation_lock_time", 0.0)) > 0.0:
+		return
+	cpu_action_timer = [3.2, 2.3, 1.6][cpu_level - 1] + randf_range(0.0, 1.0)
+	if distance < 180.0 and randf() < 0.65:
+		try_attack(2)
+		return
+	var slot := randi_range(1, 3)
+	var cooldown_key: String = ["", "small_cooldown", "big_cooldown", "skill3_cooldown"][slot]
+	if float(cpu.get(cooldown_key, 0.0)) <= 0.0 and not bool(cpu["focused"]):
+		start_cpu_challenge(slot)
+	elif distance < 180.0:
+		try_attack(2)
+
+
+func start_cpu_challenge(slot: int) -> void:
+	var cpu: Dictionary = players[2]
+	cpu_challenge_slot = slot
+	cpu_challenge_duration = [5.2, 3.4, 2.0][cpu_level - 1] + randf_range(-0.3, 0.3)
+	cpu_challenge_remaining = cpu_challenge_duration
+	cpu["focused"] = true
+	cpu["challenge_elapsed"] = 0.0
+	players[2] = cpu
+	status_text = "CPUがスキル%dの課題を解いている" % slot
+
+
+func finish_cpu_challenge() -> void:
+	var slot := cpu_challenge_slot
+	cpu_challenge_slot = 0
+	var cpu: Dictionary = players[2]
+	cpu["focused"] = false
+	cpu["challenge_elapsed"] = 0.0
+	cpu["challenge_total_time"] = float(cpu["challenge_total_time"]) + cpu_challenge_duration
+	var skill_name := cpu_skill_name(cpu, slot)
+	var cooldown_key: String = ["", "small_cooldown", "big_cooldown", "skill3_cooldown"][slot]
+	var cooldown := TYPING_SKILL_COOLDOWN
+	if slot == 1:
+		cooldown = TYPIST_GOLDEN_TIME_I_COOLDOWN if skill_name == "small_typing_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(cpu.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
+	elif slot == 2:
+		cooldown = TYPIST_GOLDEN_TIME_II_COOLDOWN if skill_name == "big_typing_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if skill_name == "big_arithmetic_perfect_mapping" else (10.0 if str(cpu.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(cpu.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(cpu.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
+	else:
+		cooldown = TYPIST_GOLDEN_TIME_III_COOLDOWN if skill_name == "skill3_typing_golden_time_iii" else (ARITHMETICIAN_EQUATION_DOMINATION_COOLDOWN if skill_name == "skill3_arithmetic_equation_domination" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(cpu.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if skill_name == "skill3_trace_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(cpu.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN))))
+	cpu[cooldown_key] = cooldown
+	var success: bool = randf() < [0.55, 0.78, 0.94][cpu_level - 1]
+	var score := randi_range([32, 55, 72][cpu_level - 1], [60, 79, 94][cpu_level - 1])
+	if success:
+		cpu["skill_successes"] = int(cpu["skill_successes"]) + 1
+		cpu["score_total"] = int(cpu["score_total"]) + score
+		cpu["best_score"] = maxi(int(cpu["best_score"]), score)
+		cpu["challenge_count"] = int(cpu["challenge_count"]) + 1
+		cpu["challenge_score_total"] = int(cpu["challenge_score_total"]) + score
+		cpu["challenge_best_score"] = maxi(int(cpu["challenge_best_score"]), score)
+	players[2] = cpu
+	if not success:
+		status_text = "CPUは課題に失敗した"
+		return
+	var previous_skill := challenge_skill
+	var previous_typed := challenge_typed_characters
+	challenge_skill = skill_name
+	challenge_typed_characters = "CPUAI"
+	spawn_character_skill(2, score, slot == 2)
+	challenge_skill = previous_skill
+	challenge_typed_characters = previous_typed
+	status_text = "CPUのスキル%dが発動（%d点）" % [slot, score]
+
+
+func cpu_skill_name(cpu: Dictionary, slot: int) -> String:
+	var character := str(cpu.get("character_id", ""))
+	if character == "blade":
+		if slot == 1:
+			return "small_typing_golden_time_i" if str(cpu.get("small_skill_id", "")) == "typist_golden_time_i" else "small_typing"
+		if slot == 2:
+			return "big_typing_golden_time_ii" if str(cpu.get("big_skill_id", "")) == "typist_golden_time_ii" else "big_typing"
+		return "skill3_typing_golden_time_iii" if str(cpu.get("skill3_id", "")) == "typist_golden_time_iii" else "skill3_typing"
+	if character == "arithmetic":
+		if slot == 1:
+			return "small_arithmetic"
+		if slot == 2:
+			return "big_arithmetic_perfect_mapping" if str(cpu.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else "big_arithmetic"
+		return "skill3_arithmetic_equation_domination" if str(cpu.get("skill3_id", "")) == "arithmetic_equation_domination" else "skill3_arithmetic_hack_vision"
+	if slot == 1:
+		return "small_trace"
+	if slot == 2:
+		return "big_trace"
+	return "skill3_trace_lunar_eclipse" if str(cpu.get("skill3_id", "")) == "chanter_lunar_eclipse" else "skill3_trace"
+
+
+func update_tutorial_progress() -> void:
+	if tutorial_step != 0 or not players.has(1):
+		return
+	if Vector2(players[1]["position"]).distance_to(tutorial_start_position) >= 60.0:
+		tutorial_step = 1
+
+
+func tutorial_hint() -> String:
+	match tutorial_step:
+		0:
+			return "移動：矢印キーで動いてみましょう"
+		1:
+			return "通常攻撃：相手に近づき、1キーまたは左下のアイコンをクリックして命中させましょう"
+		2:
+			return "スキル1：2キーまたはアイコンをクリックし、課題を解きましょう"
+		3:
+			return "前の課題は%d点。高得点ほど効果が強くなります。次は3キーかアイコンでスキル2" % tutorial_last_score
+		4:
+			return "前の課題は%d点。次は4キーかアイコンでスキル3を使いましょう" % tutorial_last_score
+		_:
+			return "自由対戦：前回は%d点。高得点ほどスキルが強くなります。CPUを倒しましょう" % tutorial_last_score
 
 
 func show_character_unavailable() -> void:
@@ -4941,32 +5182,11 @@ func change_practice_selection(step: int) -> void:
 	update_selection_labels()
 
 
-func change_debug_selection(player_id: int, step: int) -> void:
-	if player_id == 1:
-		debug_p1_selection = posmod(debug_p1_selection + step, 3)
-	else:
-		debug_p2_selection = posmod(debug_p2_selection + step, 3)
-	update_selection_labels()
-
-
-func set_debug_controlled_player(player_id: int) -> void:
-	debug_controlled_player_id = 2 if player_id == 2 else 1
-	update_selection_labels()
-
-
 func start_practice() -> void:
 	network_mode = "practice"
 	local_player_id = 1
 	p1_selection = practice_selection
 	p2_selection = practice_selection
-	prepare_match_start()
-
-
-func start_debug_match() -> void:
-	network_mode = "local"
-	local_player_id = debug_controlled_player_id
-	p1_selection = debug_p1_selection
-	p2_selection = debug_p2_selection
 	prepare_match_start()
 
 
@@ -4984,10 +5204,6 @@ func show_connection() -> void:
 		dedicated_connection.refresh_rooms()
 	network_back_button.visible = true
 	apply_screen_state("connection")
-
-
-func start_local_debug() -> void:
-	show_debug_select()
 
 
 func start_host(match_mode: String = MatchProtocol.DEFAULT_MATCH_MODE) -> void:
@@ -5538,6 +5754,21 @@ func prepare_match_start() -> void:
 	players = match_state.players
 	configure_player(1, p1_selection)
 	configure_player(2, p2_selection)
+	if network_mode in ["cpu", "tutorial"]:
+		reset_cpu_ai()
+		var opponent: Dictionary = players[2]
+		opponent["name"] = "CPU %s" % character_names()[p2_selection]
+		opponent["has_display_name"] = true
+		players[2] = opponent
+		if network_mode == "tutorial":
+			tutorial_step = 0
+			tutorial_requested_slot = -1
+			var learner: Dictionary = players[1]
+			learner["position"] = Vector2(660.0, ARENA.get_center().y)
+			players[1] = learner
+			opponent["position"] = Vector2(930.0, ARENA.get_center().y)
+			players[2] = opponent
+			tutorial_start_position = learner["position"]
 	if players.has(3):
 		configure_player(3, p3_selection)
 	phase = "countdown"
@@ -5777,6 +6008,9 @@ func update_hud() -> void:
 		status_label.visible = true
 	else:
 		status_label.visible = false
+	if network_mode == "tutorial":
+		tutorial_hint_label.text = tutorial_hint()
+		tutorial_hint_label.visible = true
 	var opponent_ids: Array[int] = []
 	for player_id in players.keys():
 		var slot := int(player_id)
@@ -6728,7 +6962,7 @@ func _input(event: InputEvent) -> void:
 			play_ui_click()
 			show_home()
 			return
-	if screen == "home" or screen == "practice_select" or screen == "debug_select" or screen == "connection":
+	if screen in ["home", "practice_select", "cpu_select", "tutorial_intro", "connection"]:
 		return
 	if phase == "match" and is_local_player_spectating():
 		# A defeated FFA player only observes; challenge keyboard and mouse input are ignored too.
@@ -6757,7 +6991,7 @@ func _input(event: InputEvent) -> void:
 				_process_typing_character(String.chr(event.unicode))
 				get_viewport().set_input_as_handled()
 				return
-		if event.keycode == KEY_ESCAPE and phase == "match" and challenge_owner == 0 and network_mode in ["practice", "local"]:
+		if event.keycode == KEY_ESCAPE and phase == "match" and challenge_owner == 0 and network_mode in ["practice", "local", "cpu", "tutorial"]:
 			return_to_home()
 			return
 		if phase == "lobby":

@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[node name="Tutorial" type="Panel"]
+offset_right = 1280.0
+offset_bottom = 720.0
+
+[node name="Title" type="Label" parent="."]
+offset_left = 130.0
+offset_top = 60.0
+offset_right = 1150.0
+offset_bottom = 115.0
+theme_override_font_sizes/font_size = 36
+text = "対戦チュートリアル"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="."]
+offset_left = 180.0
+offset_top = 160.0
+offset_right = 1100.0
+offset_bottom = 495.0
+theme_override_font_sizes/font_size = 25
+text = "矢印キーで移動し、相手に通常攻撃を当てましょう。\n\n1は通常攻撃、2・3・4はスキル1・2・3です。画面下のアイコンをクリックしても使えます。\nスキル課題は速く正確に解くほど高得点になり、威力や持続時間などの効果が強くなります。\n\n操作を順に試した後、CPUとの対戦で勝敗まで体験できます。"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StartButton" type="Button" parent="."]
+offset_left = 765.0
+offset_top = 585.0
+offset_right = 1110.0
+offset_bottom = 655.0
+theme_override_font_sizes/font_size = 25
+text = "チュートリアル開始"
+
+[node name="BackButton" type="Button" parent="."]
+offset_left = 170.0
+offset_top = 585.0
+offset_right = 515.0
+offset_bottom = 655.0
+theme_override_font_sizes/font_size = 24
+text = "ホームへ戻る"

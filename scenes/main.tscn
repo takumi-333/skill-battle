@@ -15,9 +15,10 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/title_screen.tscn" id="21_dgi5k"]
 [ext_resource type="PackedScene" uid="uid://b0p7ned1tbk0q" path="res://scenes/ui/home_screen.tscn" id="23_j8jky"]
 [ext_resource type="PackedScene" uid="uid://ivc74gheh83m" path="res://scenes/ui/practice_screen.tscn" id="25_kmb1v"]
-[ext_resource type="PackedScene" uid="uid://dryw4nkuq3y4u" path="res://scenes/ui/debug_screen.tscn" id="26_fuf3a"]
 [ext_resource type="PackedScene" uid="uid://db64jtnbdduy2" path="res://scenes/ui/character_screen.tscn" id="27_character"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hack_vision_overlay.tscn" id="28_hack_vision"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cpu_battle_screen.tscn" id="29_cpu"]
+[ext_resource type="PackedScene" path="res://scenes/ui/tutorial_screen.tscn" id="30_tutorial"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jkv2x"]
 bg_color = Color(0, 0, 0, 0)
@@ -46,10 +47,6 @@ border_color = Color(0.56078434, 0.65882355, 0.9098039, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gqmmt"]
 bg_color = Color(0, 0, 0, 0)
 border_color = Color(0.44313726, 0.8392157, 0.7294118, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yc10j"]
-bg_color = Color(0, 0, 0, 0)
-border_color = Color(1, 0.76862746, 0.36862746, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jscy8"]
 bg_color = Color(0.06666667, 0.105882354, 0.20392157, 0.9098039)
@@ -111,11 +108,13 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_0ld40")
 visible = false
 theme_override_styles/panel = SubResource("StyleBoxFlat_gqmmt")
 
-[node name="Debug" parent="UIRoot" unique_id=12031905 instance=ExtResource("26_fuf3a")]
-visible = false
-theme_override_styles/panel = SubResource("StyleBoxFlat_yc10j")
-
 [node name="Character" parent="UIRoot" unique_id=1631461301 instance=ExtResource("27_character")]
+
+[node name="CpuBattle" parent="UIRoot" instance=ExtResource("29_cpu")]
+visible = false
+
+[node name="Tutorial" parent="UIRoot" instance=ExtResource("30_tutorial")]
+visible = false
 
 [node name="HUDLayer" type="CanvasLayer" parent="."]
 layer = 4

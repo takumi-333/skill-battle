@@ -31,7 +31,7 @@ func show_screen(next_screen: String) -> void:
 		active_panel.visible = true
 	var is_gameplay_screen := next_screen in ["match", "countdown"]
 	hud_root.visible = is_gameplay_screen
-	var show_menu_background := next_screen in ["title", "home", "practice_select", "debug_select", "connection", "online_waiting", "debug_waiting"]
+	var show_menu_background := next_screen in ["title", "home", "practice_select", "cpu_select", "tutorial_intro", "connection", "online_waiting", "debug_waiting"]
 	menu_background_root.visible = show_menu_background
 	menu_background.visible = show_menu_background
 	title_logo.visible = next_screen == "title"
