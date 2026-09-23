@@ -99,6 +99,7 @@ shader_parameter/icon_scale = 0.6
 custom_minimum_size = Vector2(112, 112)
 offset_right = 112.0
 offset_bottom = 112.0
+pivot_offset = Vector2(56, 56)
 preview_frame = ExtResource("2_frame")
 preview_hole_mask = ExtResource("3_mask")
 

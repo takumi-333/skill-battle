@@ -69,17 +69,17 @@ layout_mode = 0
 offset_left = 195.0
 offset_top = 166.0
 offset_right = 1009.0
-offset_bottom = 318.0
+offset_bottom = 352.0
 mouse_filter = 2
 texture = ExtResource("2_lw472")
 expand_mode = 1
 
 [node name="AddressInput" type="LineEdit" parent="." unique_id=1316522400]
 layout_mode = 0
-offset_left = 273.0
-offset_top = 211.0
-offset_right = 937.0
-offset_bottom = 263.0
+offset_left = 276.0
+offset_top = 229.0
+offset_right = 940.0
+offset_bottom = 281.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_styles/normal = SubResource("StyleBoxEmpty_input")
 theme_override_styles/read_only = SubResource("StyleBoxEmpty_input")
@@ -89,10 +89,10 @@ placeholder_text = "新規ルーム名"
 [node name="HostButtonFrame" type="TextureRect" parent="." unique_id=529069943]
 z_index = -1
 layout_mode = 0
-offset_left = 194.0
-offset_top = 350.0
-offset_right = 474.0
-offset_bottom = 470.0
+offset_left = 276.0
+offset_top = 344.0
+offset_right = 556.0
+offset_bottom = 464.0
 mouse_filter = 2
 texture = ExtResource("1_ni7ru")
 expand_mode = 1
@@ -100,51 +100,51 @@ expand_mode = 1
 [node name="HostButton" type="Button" parent="." unique_id=1754858644]
 z_index = 10
 layout_mode = 0
-offset_left = 218.0
-offset_top = 370.0
-offset_right = 458.0
-offset_bottom = 440.0
+offset_left = 300.0
+offset_top = 364.0
+offset_right = 540.0
+offset_bottom = 434.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
-theme_override_font_sizes/font_size = 23
+theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ksmap")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_ygd8o")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_2s0kr")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_xaipn")
-text = "ルームを作成"
+text = "ルームを作成（２人）"
 
-[node name="FreeForAllButtonFrame" type="TextureRect" parent="."]
+[node name="FreeForAllButtonFrame" type="TextureRect" parent="." unique_id=839944277]
 z_index = -1
 layout_mode = 0
-offset_left = 478.0
-offset_top = 350.0
-offset_right = 738.0
-offset_bottom = 470.0
+offset_left = 284.0
+offset_top = 442.0
+offset_right = 544.0
+offset_bottom = 562.0
 mouse_filter = 2
 texture = ExtResource("1_ni7ru")
 expand_mode = 1
 
-[node name="FreeForAllButton" type="Button" parent="."]
+[node name="FreeForAllButton" type="Button" parent="." unique_id=334641081]
 z_index = 10
 layout_mode = 0
-offset_left = 492.0
-offset_top = 370.0
-offset_right = 734.0
-offset_bottom = 440.0
+offset_left = 312.0
+offset_top = 467.0
+offset_right = 529.8
+offset_bottom = 530.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ksmap")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_ygd8o")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_2s0kr")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_xaipn")
-text = "オンライン 1 vs 1 vs 1"
+text = "ルームを作成（３人）"
 
 [node name="JoinButtonFrame" type="TextureRect" parent="." unique_id=356575392]
 z_index = -1
 layout_mode = 0
-offset_left = 733.0
-offset_top = 351.0
-offset_right = 1013.0
-offset_bottom = 481.0
+offset_left = 629.0
+offset_top = 294.0
+offset_right = 909.0
+offset_bottom = 626.0
 mouse_filter = 2
 texture = ExtResource("1_ni7ru")
 expand_mode = 1
@@ -152,10 +152,10 @@ expand_mode = 1
 [node name="JoinButton" type="Button" parent="." unique_id=1884841892]
 z_index = 10
 layout_mode = 0
-offset_left = 753.0
-offset_top = 376.0
-offset_right = 993.0
-offset_bottom = 446.0
+offset_left = 651.0
+offset_top = 379.0
+offset_right = 891.0
+offset_bottom = 523.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 23
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ndrjj")
@@ -166,29 +166,27 @@ text = "ルームに参加"
 
 [node name="Status" type="Label" parent="." unique_id=1235855470]
 layout_mode = 0
-offset_left = 281.0
-offset_top = 501.0
-offset_right = 961.0
-offset_bottom = 541.0
+offset_left = 285.0
+offset_top = 548.0
+offset_right = 965.0
+offset_bottom = 588.0
 theme_override_font_sizes/font_size = 20
 horizontal_alignment = 1
 
-[node name="RoomListModal" type="Control" parent="."]
+[node name="RoomListModal" type="Control" parent="." unique_id=259162401]
 visible = false
 z_index = 30
-layout_mode = 0
+anchors_preset = 0
 offset_right = 1280.0
 offset_bottom = 720.0
-mouse_filter = 0
 
-[node name="Dimmer" type="ColorRect" parent="RoomListModal"]
+[node name="Dimmer" type="ColorRect" parent="RoomListModal" unique_id=1990077107]
 layout_mode = 0
 offset_right = 1280.0
 offset_bottom = 720.0
-mouse_filter = 0
 color = Color(0, 0, 0, 0.68)
 
-[node name="PanelFill" type="ColorRect" parent="RoomListModal"]
+[node name="PanelFill" type="ColorRect" parent="RoomListModal" unique_id=1584063774]
 z_index = 1
 layout_mode = 0
 offset_left = 165.0
@@ -198,7 +196,7 @@ offset_bottom = 642.0
 mouse_filter = 2
 color = Color(0.025, 0.04, 0.11, 0.96)
 
-[node name="PanelFrame" type="TextureRect" parent="RoomListModal"]
+[node name="PanelFrame" type="TextureRect" parent="RoomListModal" unique_id=900007043]
 z_index = 2
 layout_mode = 0
 offset_left = 130.0
@@ -209,50 +207,50 @@ mouse_filter = 2
 texture = ExtResource("1_sxcx5")
 expand_mode = 1
 
-[node name="Title" type="Label" parent="RoomListModal"]
+[node name="Title" type="Label" parent="RoomListModal" unique_id=1647567476]
 z_index = 3
 layout_mode = 0
 offset_left = 280.0
-offset_top = 112.0
+offset_top = 130.0
 offset_right = 1000.0
-offset_bottom = 158.0
+offset_bottom = 176.0
 theme_override_font_sizes/font_size = 28
 text = "公開ルーム一覧"
 horizontal_alignment = 1
 
-[node name="RoomRowsScroll" type="ScrollContainer" parent="RoomListModal"]
+[node name="RoomRowsScroll" type="ScrollContainer" parent="RoomListModal" unique_id=1319945200]
 z_index = 3
 layout_mode = 0
-offset_left = 245.0
-offset_top = 180.0
-offset_right = 1035.0
-offset_bottom = 510.0
+offset_left = 290.0
+offset_top = 181.0
+offset_right = 998.6061
+offset_bottom = 477.0
 mouse_filter = 0
 horizontal_scroll_mode = 0
 
-[node name="RoomRows" type="VBoxContainer" parent="RoomListModal/RoomRowsScroll"]
+[node name="RoomRows" type="VBoxContainer" parent="RoomListModal/RoomRowsScroll" unique_id=853363290]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12
 
-[node name="RefreshButtonFrame" type="TextureRect" parent="RoomListModal"]
+[node name="RefreshButtonFrame" type="TextureRect" parent="RoomListModal" unique_id=107398803]
 z_index = 3
 layout_mode = 0
-offset_left = 300.0
-offset_top = 544.0
-offset_right = 580.0
-offset_bottom = 608.0
+offset_left = 302.0
+offset_top = 465.0
+offset_right = 582.0
+offset_bottom = 575.0
 mouse_filter = 2
 texture = ExtResource("1_ni7ru")
 expand_mode = 1
 
-[node name="RefreshButton" type="Button" parent="RoomListModal"]
+[node name="RefreshButton" type="Button" parent="RoomListModal" unique_id=1711870323]
 z_index = 4
 layout_mode = 0
-offset_left = 300.0
-offset_top = 544.0
-offset_right = 580.0
-offset_bottom = 608.0
+offset_left = 304.0
+offset_top = 484.0
+offset_right = 584.0
+offset_bottom = 548.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ndrjj")
@@ -261,24 +259,24 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_11yus")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_b6ruc")
 text = "一覧を更新"
 
-[node name="CloseButtonFrame" type="TextureRect" parent="RoomListModal"]
+[node name="CloseButtonFrame" type="TextureRect" parent="RoomListModal" unique_id=801299030]
 z_index = 3
 layout_mode = 0
-offset_left = 700.0
-offset_top = 544.0
-offset_right = 980.0
-offset_bottom = 608.0
+offset_left = 704.0
+offset_top = 465.0
+offset_right = 984.0
+offset_bottom = 574.0
 mouse_filter = 2
 texture = ExtResource("1_ni7ru")
 expand_mode = 1
 
-[node name="CloseButton" type="Button" parent="RoomListModal"]
+[node name="CloseButton" type="Button" parent="RoomListModal" unique_id=1339602241]
 z_index = 4
 layout_mode = 0
-offset_left = 700.0
-offset_top = 544.0
-offset_right = 980.0
-offset_bottom = 608.0
+offset_left = 712.0
+offset_top = 484.0
+offset_right = 992.0
+offset_bottom = 548.0
 theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
 theme_override_font_sizes/font_size = 20
 theme_override_styles/normal = SubResource("StyleBoxEmpty_ndrjj")

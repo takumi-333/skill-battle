@@ -3,8 +3,12 @@ extends Control
 
 class_name HudSkillDiamondWidget
 
+signal activation_requested(slot: int)
+
 const WIDGET_FONT: FontFile = preload("res://resources/DotGothic16/DotGothic16-Regular.ttf")
 const SPACE_KEY_TEXTURE: Texture2D = preload("res://assets/ui/skill_icons/skill_placeholder_square.png")
+const HOVER_SCALE := 1.045
+const PRESSED_SCALE := 0.965
 
 @export var preview_frame: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_ready.png")
 @export var preview_hole_mask: Texture2D = preload("res://assets/ui/skill_diamond_frames/skill_diamond_large_hole_mask.png")
@@ -27,6 +31,12 @@ var icon_material: ShaderMaterial
 var background_material: ShaderMaterial
 var badge_disc: BadgeDisc
 var equation_lock_overlay: TextureRect
+var interaction_mask_image: Image
+var skill_slot := -1
+var interaction_enabled := false
+var is_hovering := false
+var is_pressing := false
+var interaction_tween: Tween
 
 class BadgeDisc extends Control:
 	var center_ratio := Vector2(0.5, 0.78)
@@ -38,6 +48,13 @@ class BadgeDisc extends Control:
 func _ready() -> void:
 	if icon_rect == null:
 		_build_layers()
+	if not mouse_entered.is_connected(_on_mouse_entered):
+		mouse_entered.connect(_on_mouse_entered)
+	if not mouse_exited.is_connected(_on_mouse_exited):
+		mouse_exited.connect(_on_mouse_exited)
+	if not gui_input.is_connected(_on_gui_input):
+		gui_input.connect(_on_gui_input)
+	_refresh_interaction_visuals(false)
 	if Engine.is_editor_hint():
 		_apply_preview()
 
@@ -47,6 +64,7 @@ func _apply_preview() -> void:
 
 func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_texture: Texture2D, hole_mask: Texture2D, hole_center: Vector2, badge_center: Vector2, badge_radius: float, theme_color: Color) -> void:
 	frame_texture = texture
+	interaction_mask_image = hole_mask.get_image() if hole_mask != null else null
 	_build_layers()
 	background_rect.texture = _make_background(theme_color)
 	icon_rect.texture = icon_texture
@@ -63,6 +81,49 @@ func configure(texture: Texture2D, binding: String, widget_size: Vector2, icon_t
 	background_material.set_shader_parameter("hole_mask", hole_mask)
 	queue_redraw()
 
+
+func configure_interaction(slot: int) -> void:
+	skill_slot = slot
+
+
+func set_interaction_enabled(enabled: bool) -> void:
+	interaction_enabled = enabled
+	if not interaction_enabled:
+		is_hovering = false
+		is_pressing = false
+	mouse_filter = Control.MOUSE_FILTER_STOP if interaction_enabled else Control.MOUSE_FILTER_IGNORE
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if interaction_enabled else Control.CURSOR_ARROW
+	_refresh_interaction_visuals()
+
+
+func contains_input_point(global_point: Vector2) -> bool:
+	if not interaction_enabled or not is_visible_in_tree():
+		return false
+	var global_rect := get_global_rect()
+	if not global_rect.has_point(global_point) or global_rect.size.x <= 0.0 or global_rect.size.y <= 0.0:
+		return false
+	var normalized := (global_point - global_rect.position) / global_rect.size
+	return _has_point(normalized * size)
+
+
+func _has_point(point: Vector2) -> bool:
+	if not interaction_enabled or size.x <= 0.0 or size.y <= 0.0:
+		return false
+	var normalized := Vector2(point.x / size.x, point.y / size.y)
+	if normalized.x < 0.0 or normalized.x > 1.0 or normalized.y < 0.0 or normalized.y > 1.0:
+		return false
+	# The authored mask is also used by the UI shaders to discard the
+	# transparent corners, so sampling it keeps hover/click geometry in sync
+	# with the visible diamond instead of treating the whole Control rectangle
+	# as interactive.
+	if interaction_mask_image != null and not interaction_mask_image.is_empty():
+		var pixel := Vector2i(
+			clampi(int(normalized.x * interaction_mask_image.get_width()), 0, interaction_mask_image.get_width() - 1),
+			clampi(int(normalized.y * interaction_mask_image.get_height()), 0, interaction_mask_image.get_height() - 1)
+		)
+		return interaction_mask_image.get_pixelv(pixel).a >= 0.5
+	return absf(normalized.x - 0.5) + absf(normalized.y - 0.5) <= 0.5
+
 func set_cooldown(remaining: float, duration: float, is_unavailable: bool = false) -> void:
 	if icon_material == null:
 		return
@@ -78,6 +139,55 @@ func set_equation_lock(locked: bool) -> void:
 		push_warning("EquationDominationLockOverlay must be authored in the skill diamond scene.")
 		return
 	equation_lock_overlay.visible = locked
+
+
+func _on_mouse_entered() -> void:
+	if not interaction_enabled:
+		return
+	is_hovering = true
+	_refresh_interaction_visuals()
+
+
+func _on_mouse_exited() -> void:
+	is_hovering = false
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		is_pressing = false
+	_refresh_interaction_visuals()
+
+
+func _on_gui_input(event: InputEvent) -> void:
+	if not interaction_enabled or not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if event.pressed:
+		is_pressing = true
+		_refresh_interaction_visuals()
+		accept_event()
+		if skill_slot >= 0:
+			activation_requested.emit(skill_slot)
+		return
+	is_pressing = false
+	_refresh_interaction_visuals()
+	accept_event()
+
+
+func _refresh_interaction_visuals(animate := true) -> void:
+	var target_scale := Vector2.ONE
+	var target_modulate := Color.WHITE
+	if interaction_enabled and is_pressing:
+		target_scale *= PRESSED_SCALE
+		target_modulate = Color(1.18, 1.18, 1.18, 1.0)
+	elif interaction_enabled and is_hovering:
+		target_scale *= HOVER_SCALE
+		target_modulate = Color(1.12, 1.12, 1.12, 1.0)
+	if interaction_tween and interaction_tween.is_valid():
+		interaction_tween.kill()
+	if not animate or not is_inside_tree():
+		scale = target_scale
+		modulate = target_modulate
+		return
+	interaction_tween = create_tween().set_parallel()
+	interaction_tween.tween_property(self, "scale", target_scale, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	interaction_tween.tween_property(self, "modulate", target_modulate, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _build_layers() -> void:
 	if icon_rect != null:

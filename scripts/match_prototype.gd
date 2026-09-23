@@ -512,6 +512,7 @@ var debug_controlled_player_id: int = 1
 var remote_input: Dictionary = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false}
 var network_sync_elapsed: float = 0.0
 var pending_client_input: Dictionary = {}
+var pending_client_skill_requests := [false, false, false, false]
 var network_target_players: Dictionary = {}
 var character_animation_elapsed: float = 0.0
 var title_animation_elapsed: float = 0.0
@@ -531,6 +532,8 @@ var challenge_trace_canvas: Control
 var typing_input: LineEdit
 var lobby_panel: Panel
 var lobby_label: Label
+var lobby_duel_layout: Control
+var lobby_ffa_layout: Control
 var result_panel: Panel
 var result_label: Label
 var result_rematch_button: Button
@@ -553,6 +556,8 @@ var match_start_prompt_label: Label
 var network_back_button: Button
 var lobby_home_button: Button
 var gameplay_home_button: Button
+var hud_duel_layout: Control
+var hud_ffa_layout: Control
 var hp_bar: ProgressBar
 var opponent_hp_bar: ProgressBar
 var opponent_two_hp_bar: ProgressBar
@@ -1219,30 +1224,30 @@ func _process(delta: float) -> void:
 
 	if network_mode == "local":
 		if Input.is_key_pressed(KEY_1):
-			try_attack(debug_controlled_player_id)
+			request_skill_activation(0, debug_controlled_player_id)
 		if Input.is_key_pressed(KEY_2):
-			start_small_skill(debug_controlled_player_id)
+			request_skill_activation(1, debug_controlled_player_id)
 		if Input.is_key_pressed(KEY_3):
-			start_big_skill(debug_controlled_player_id)
+			request_skill_activation(2, debug_controlled_player_id)
 		if Input.is_key_pressed(KEY_4):
-			start_skill3(debug_controlled_player_id)
+			request_skill_activation(3, debug_controlled_player_id)
 	else:
 		if Input.is_key_pressed(KEY_1):
-			try_attack(1)
+			request_skill_activation(0, 1)
 		if Input.is_key_pressed(KEY_2):
-			start_small_skill(1)
+			request_skill_activation(1, 1)
 		if Input.is_key_pressed(KEY_3):
-			start_big_skill(1)
+			request_skill_activation(2, 1)
 		if Input.is_key_pressed(KEY_4):
-			start_skill3(1)
+			request_skill_activation(3, 1)
 		if network_mode != "host" and Input.is_key_pressed(KEY_1):
-			try_attack(2)
+			request_skill_activation(0, 2)
 		if network_mode != "host" and Input.is_key_pressed(KEY_2):
-			start_small_skill(2)
+			request_skill_activation(1, 2)
 		if network_mode != "host" and Input.is_key_pressed(KEY_3):
-			start_big_skill(2)
+			request_skill_activation(2, 2)
 		if network_mode != "host" and Input.is_key_pressed(KEY_4):
-			start_skill3(2)
+			request_skill_activation(3, 2)
 	if network_mode == "host":
 		if bool(remote_input["attack"]):
 			try_attack(2)
@@ -3156,69 +3161,33 @@ func result_player_display_name(player_id: int) -> String:
 
 
 func create_hud() -> void:
-	player_one_label = hud_root.get_node("PlayerOneLabel") as Label
-	player_one_label.text = "HP 100 / 100"
-	player_one_label.add_theme_font_size_override("font_size", 24)
-	hp_bar = hud_root.get_node("HPBar") as ProgressBar
-	hp_bar.min_value = 0.0
-	hp_bar.max_value = 100.0
-	hp_bar.value = 100.0
-	hp_bar.show_percentage = false
-	arithmetic_multiplier_label = hud_root.get_node("ArithmeticMultiplier") as Label
-	arithmetic_multiplier_label.visible = false
-	opponent_hp_bar = hud_root.get_node("OpponentHPBar") as ProgressBar
-	opponent_hp_bar.min_value = 0.0
-	opponent_hp_bar.max_value = 100.0
-	opponent_hp_bar.value = 100.0
-	opponent_hp_bar.show_percentage = false
-	opponent_one_label = hud_root.get_node("OpponentOneLabel") as Label
-	opponent_two_hp_bar = hud_root.get_node("OpponentTwoHPBar") as ProgressBar
-	opponent_two_hp_bar.min_value = 0.0
-	opponent_two_hp_bar.max_value = 100.0
-	opponent_two_hp_bar.value = 100.0
-	opponent_two_hp_bar.show_percentage = false
-	opponent_two_label = hud_root.get_node("OpponentTwoLabel") as Label
-	opponent_one_arithmetic_multiplier_label = hud_root.get_node("OpponentOneArithmeticMultiplier") as Label
-	opponent_one_arithmetic_multiplier_label.visible = false
-	opponent_two_arithmetic_multiplier_label = hud_root.get_node("OpponentTwoArithmeticMultiplier") as Label
-	opponent_two_arithmetic_multiplier_label.visible = false
-	var hp_background := StyleBoxFlat.new()
-	hp_background.bg_color = Color("070b14")
-	hp_background.border_color = Color("39435f")
-	hp_background.set_border_width_all(2)
-	var hp_fill := StyleBoxFlat.new()
-	hp_fill.bg_color = Color("52d6ad")
-	hp_fill.corner_radius_top_left = 3
-	hp_fill.corner_radius_top_right = 3
-	hp_fill.corner_radius_bottom_left = 3
-	hp_fill.corner_radius_bottom_right = 3
-	hp_bar.add_theme_stylebox_override("background", hp_background)
-	hp_bar.add_theme_stylebox_override("fill", hp_fill)
-	var opponent_hp_fill := StyleBoxFlat.new()
-	opponent_hp_fill.bg_color = Color("f05558")
-	opponent_hp_fill.corner_radius_top_left = 3
-	opponent_hp_fill.corner_radius_top_right = 3
-	opponent_hp_fill.corner_radius_bottom_left = 3
-	opponent_hp_fill.corner_radius_bottom_right = 3
-	opponent_hp_bar.add_theme_stylebox_override("background", hp_background)
-	opponent_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
-	opponent_two_hp_bar.add_theme_stylebox_override("background", hp_background)
-	opponent_two_hp_bar.add_theme_stylebox_override("fill", opponent_hp_fill)
+	hud_duel_layout = hud_root.get_node("DuelLayout") as Control
+	hud_ffa_layout = hud_root.get_node("FfaLayout") as Control
+	_select_hud_layout(false)
 	timer_label = hud_root.get_node("Timer") as Label
 	status_label = hud_root.get_node("Status") as Label
-	status_label.add_theme_font_size_override("font_size", 16)
 
 	controls_label = hud_root.get_node("Controls") as Label
-	controls_label.text = "移動: 矢印キー  通常攻撃: 1\nスキル1/2/3: 2・3・4  課題中止: Esc"
-	controls_label.add_theme_font_size_override("font_size", 15)
-	controls_label.add_theme_color_override("font_color", Color("b7c1d8"))
 	gameplay_home_button = hud_root.get_node("HomeButton") as Button
-	style_menu_button(gameplay_home_button)
-	gameplay_home_button.add_theme_font_size_override("font_size", 18)
 	if not gameplay_home_button.pressed.is_connected(return_to_home):
 		gameplay_home_button.pressed.connect(return_to_home)
 	create_skill_hud()
 	create_challenge_ui()
+
+
+func _select_hud_layout(is_ffa: bool) -> void:
+	hud_duel_layout.visible = not is_ffa
+	hud_ffa_layout.visible = is_ffa
+	var layout := hud_ffa_layout if is_ffa else hud_duel_layout
+	player_one_label = layout.get_node("PlayerOneLabel") as Label
+	hp_bar = layout.get_node("HPBar") as ProgressBar
+	arithmetic_multiplier_label = layout.get_node("ArithmeticMultiplier") as Label
+	opponent_hp_bar = layout.get_node("OpponentHPBar") as ProgressBar
+	opponent_one_label = layout.get_node("OpponentOneLabel") as Label
+	opponent_two_hp_bar = layout.get_node_or_null("OpponentTwoHPBar") as ProgressBar
+	opponent_two_label = layout.get_node_or_null("OpponentTwoLabel") as Label
+	opponent_one_arithmetic_multiplier_label = layout.get_node("OpponentOneArithmeticMultiplier") as Label
+	opponent_two_arithmetic_multiplier_label = layout.get_node_or_null("OpponentTwoArithmeticMultiplier") as Label
 
 
 func create_skill_hud() -> void:
@@ -3237,7 +3206,35 @@ func create_skill_hud() -> void:
 		var widget := slot.get_node("SkillDiamondWidgetPrefab") as Node
 		var preview_icons: Array[Texture2D] = [SKILL_EMPTY_ICON, SKILL_TYPIST_KEYCAP, SKILL_TYPIST_TRIDENT, SKILL_EMPTY_ICON]
 		widget.call("configure", definition["texture"], definition["binding"], definition["size"], preview_icons[skill_widgets.size()], definition["mask"], definition["center"], definition["badge"], definition["badge_radius"], SKILL_THEME_TYPIST)
+		widget.call("configure_interaction", skill_widgets.size())
+		if not widget.is_connected("activation_requested", _on_skill_widget_activation_requested):
+			widget.connect("activation_requested", _on_skill_widget_activation_requested)
 		skill_widgets.append(widget)
+
+
+func _on_skill_widget_activation_requested(slot: int) -> void:
+	request_skill_activation(slot)
+
+
+func request_skill_activation(slot: int, owner_id := 0) -> void:
+	if slot < 0 or slot >= 4 or phase != "match" or challenge_owner != 0 or is_local_player_spectating():
+		return
+	if network_mode == "client":
+		pending_client_skill_requests[slot] = true
+		return
+	_activate_skill_slot(owner_id if owner_id > 0 else get_hud_player_id(), slot)
+
+
+func _activate_skill_slot(owner_id: int, slot: int) -> void:
+	match slot:
+		0:
+			try_attack(owner_id)
+		1:
+			start_small_skill(owner_id)
+		2:
+			start_big_skill(owner_id)
+		3:
+			start_skill3(owner_id)
 
 
 func set_gameplay_hud_visible(is_visible: bool) -> void:
@@ -3776,9 +3773,9 @@ func create_network_ui() -> void:
 	var free_for_all_button: Button = $UIRoot/Connection/FreeForAllButton
 	var join_button: Button = $UIRoot/Connection/JoinButton
 	network_back_button = $UIRoot/Connection/BackButton
-	host_button.text = "オンライン 1 vs 1"
+	host_button.text = "ルームを作成（２人）"
 	for button in [host_button, free_for_all_button, join_button, network_back_button, network_refresh_button, network_room_list_close_button]:
-		style_menu_button(button, 23 if button != network_back_button else 20)
+		style_menu_button(button, 20 if button in [host_button, free_for_all_button] else (23 if button != network_back_button else 20))
 	connect_button_once(host_button, start_host)
 	connect_button_once(free_for_all_button, start_host.bind("free_for_all"))
 	connect_button_once(join_button, open_room_list_modal)
@@ -5003,6 +5000,7 @@ func process_client_network_input(_delta: float) -> void:
 		return
 	if is_local_player_spectating():
 		pending_client_input = {"move": Vector2.ZERO, "attack": false, "small": false, "big": false, "skill3": false}
+		pending_client_skill_requests.fill(false)
 		for action in ["attack", "small_skill", "big_skill", "skill3"]:
 			dedicated_action_down[action] = false
 		if dedicated_connection:
@@ -5011,12 +5009,17 @@ func process_client_network_input(_delta: float) -> void:
 	var move := Vector2.ZERO
 	move.x = float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT))
 	move.y = float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP))
+	for slot in 4:
+		if Input.is_key_pressed([KEY_1, KEY_2, KEY_3, KEY_4][slot]):
+			request_skill_activation(slot)
+	var requested_skills: Array = pending_client_skill_requests.duplicate()
+	pending_client_skill_requests.fill(false)
 	pending_client_input = {
 		"move": move.normalized() if move.length_squared() > 0.0 else Vector2.ZERO,
-		"attack": Input.is_key_pressed(KEY_1),
-		"small": Input.is_key_pressed(KEY_2),
-		"big": Input.is_key_pressed(KEY_3),
-		"skill3": Input.is_key_pressed(KEY_4),
+		"attack": bool(requested_skills[0]),
+		"small": bool(requested_skills[1]),
+		"big": bool(requested_skills[2]),
+		"skill3": bool(requested_skills[3]),
 	}
 	if dedicated_connection:
 		dedicated_connection.send_input(pending_client_input["move"])
@@ -5706,6 +5709,7 @@ func update_hack_vision_overlay() -> void:
 
 
 func update_hud() -> void:
+	_select_hud_layout(dedicated_match_mode == "free_for_all")
 	var hud_player_id := get_hud_player_id()
 	if not players.has(hud_player_id):
 		return
@@ -5742,20 +5746,33 @@ func update_hud() -> void:
 		opponent_two_label.visible = has_second_opponent
 	if has_second_opponent and opponent_two_hp_bar and opponent_two_label:
 		opponent_two_hp_bar.value = int(opponent_two_player.get("hp", 0))
-	opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
+		opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
 	_update_opponent_arithmetic_multiplier(opponent_one_arithmetic_multiplier_label, opponent_player)
 	if opponent_two_arithmetic_multiplier_label:
 		_update_opponent_arithmetic_multiplier(opponent_two_arithmetic_multiplier_label, opponent_two_player)
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		var equation_locked := float(own_player.get("equation_lock_time", 0.0)) > 0.0
-		skill_widgets[0].call("set_cooldown", float(own_player["attack_cooldown"]), normal_attack_cooldown(own_player), is_focused or equation_locked or typing_zone_level(own_player) > 0)
+		var skills_can_receive_mouse := phase == "match" and challenge_owner == 0 and not is_local_player_spectating()
+		var attack_unavailable := is_focused or equation_locked or typing_zone_level(own_player) > 0
+		var attack_remaining := float(own_player["attack_cooldown"])
+		skill_widgets[0].call("set_cooldown", attack_remaining, normal_attack_cooldown(own_player), attack_unavailable)
+		skill_widgets[0].call("set_interaction_enabled", skills_can_receive_mouse and not attack_unavailable and attack_remaining <= 0.0)
 		var small_cooldown_duration := TYPIST_GOLDEN_TIME_I_COOLDOWN if str(own_player.get("small_skill_id", "")) == "typist_golden_time_i" else (CHANTER_SKILL1B_COOLDOWN if str(own_player.get("small_skill_id", "")) == "chanter_small_1" else TYPING_SKILL_COOLDOWN)
-		skill_widgets[1].call("set_cooldown", float(own_player["small_cooldown"]), small_cooldown_duration, is_focused or equation_locked)
+		var small_unavailable := is_focused or equation_locked
+		var small_remaining := float(own_player["small_cooldown"])
+		skill_widgets[1].call("set_cooldown", small_remaining, small_cooldown_duration, small_unavailable)
+		skill_widgets[1].call("set_interaction_enabled", skills_can_receive_mouse and not small_unavailable and small_remaining <= 0.0)
 		var big_cooldown_duration := TYPIST_GOLDEN_TIME_II_COOLDOWN if str(own_player.get("big_skill_id", "")) == "typist_golden_time_ii" else (ARITHMETICIAN_PERFECT_MAPPING_COOLDOWN if str(own_player.get("big_skill_id", "")) == "arithmetic_perfect_mapping" else (10.0 if str(own_player.get("big_skill_id", "")) == "typist_keycap_ii" else (CHANTER_METEOR_SHOWER_COOLDOWN if str(own_player.get("big_skill_id", "")) == "chanter_big_1" else (CHANTER_SKILL2_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else BIG_TYPING_SKILL_COOLDOWN))))
-		skill_widgets[2].call("set_cooldown", float(own_player["big_cooldown"]), big_cooldown_duration, is_focused or equation_locked)
+		var big_unavailable := is_focused or equation_locked
+		var big_remaining := float(own_player["big_cooldown"])
+		skill_widgets[2].call("set_cooldown", big_remaining, big_cooldown_duration, big_unavailable)
+		skill_widgets[2].call("set_interaction_enabled", skills_can_receive_mouse and not big_unavailable and big_remaining <= 0.0)
 		var skill3_cooldown_duration := TYPIST_GOLDEN_TIME_III_COOLDOWN if str(own_player.get("skill3_id", "")) == "typist_golden_time_iii" else (ARITHMETICIAN_HACK_VISION_COOLDOWN if str(own_player.get("character_id", "")) == "arithmetic" else (CHANTER_LUNAR_ECLIPSE_COOLDOWN if str(own_player.get("skill3_id", "")) == "chanter_lunar_eclipse" else (CHANTER_SKILL3_COOLDOWN if str(own_player.get("character_id", "")) == "chanter" else TYPIST_SKILL3_COOLDOWN)))
-		skill_widgets[3].call("set_cooldown", float(own_player.get("skill3_cooldown", 0.0)), skill3_cooldown_duration, is_focused or equation_locked)
+		var skill3_unavailable := is_focused or equation_locked
+		var skill3_remaining := float(own_player.get("skill3_cooldown", 0.0))
+		skill_widgets[3].call("set_cooldown", skill3_remaining, skill3_cooldown_duration, skill3_unavailable)
+		skill_widgets[3].call("set_interaction_enabled", skills_can_receive_mouse and not skill3_unavailable and skill3_remaining <= 0.0)
 		for widget in skill_widgets:
 			widget.call("set_equation_lock", equation_locked)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
@@ -6642,6 +6659,9 @@ func _input(event: InputEvent) -> void:
 					lobby_debug_log("client ready click handled manually")
 					toggle_local_lobby_ready()
 				return
+		if _request_skill_from_hud_mouse(event):
+			get_viewport().set_input_as_handled()
+			return
 	if screen == "title":
 		if (event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_SPACE, KEY_ENTER]) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 			play_ui_click()
@@ -6764,6 +6784,21 @@ func _input(event: InputEvent) -> void:
 			challenge_trace_points.append(event.position - challenge_trace_canvas.global_position)
 			note_challenge_trace_motion()
 			update_trace_canvas()
+
+
+func _request_skill_from_hud_mouse(event: InputEventMouseButton) -> bool:
+	if not event.pressed or event.button_index != MOUSE_BUTTON_LEFT or phase != "match" or challenge_owner != 0 or is_local_player_spectating():
+		return false
+	# HUD slots can overlap slightly; later siblings are drawn on top, so test
+	# them first to match the visual stacking order.
+	for slot in range(skill_widgets.size() - 1, -1, -1):
+		var widget := skill_widgets[slot] as Control
+		if widget == null or not widget.visible or not bool(widget.get("interaction_enabled")):
+			continue
+		if bool(widget.call("contains_input_point", event.position)):
+			request_skill_activation(slot)
+			return true
+	return false
 
 
 func evaluate_trace() -> int:
