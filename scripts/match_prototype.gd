@@ -559,7 +559,8 @@ var opponent_two_hp_bar: ProgressBar
 var opponent_one_label: Label
 var opponent_two_label: Label
 var arithmetic_multiplier_label: Label
-var opponent_arithmetic_multiplier_label: Label
+var opponent_one_arithmetic_multiplier_label: Label
+var opponent_two_arithmetic_multiplier_label: Label
 var skill_widgets: Array[Node] = []
 var skill_hud_signature := ""
 var network_panel: Panel
@@ -3177,8 +3178,10 @@ func create_hud() -> void:
 	opponent_two_hp_bar.value = 100.0
 	opponent_two_hp_bar.show_percentage = false
 	opponent_two_label = hud_root.get_node("OpponentTwoLabel") as Label
-	opponent_arithmetic_multiplier_label = hud_root.get_node("OpponentArithmeticMultiplier") as Label
-	opponent_arithmetic_multiplier_label.visible = false
+	opponent_one_arithmetic_multiplier_label = hud_root.get_node("OpponentOneArithmeticMultiplier") as Label
+	opponent_one_arithmetic_multiplier_label.visible = false
+	opponent_two_arithmetic_multiplier_label = hud_root.get_node("OpponentTwoArithmeticMultiplier") as Label
+	opponent_two_arithmetic_multiplier_label.visible = false
 	var hp_background := StyleBoxFlat.new()
 	hp_background.bg_color = Color("070b14")
 	hp_background.border_color = Color("39435f")
@@ -3248,7 +3251,8 @@ func set_gameplay_hud_visible(is_visible: bool) -> void:
 	opponent_one_label.visible = is_visible
 	opponent_two_hp_bar.visible = false
 	opponent_two_label.visible = false
-	opponent_arithmetic_multiplier_label.visible = is_visible and opponent_arithmetic_multiplier_label.visible
+	opponent_one_arithmetic_multiplier_label.visible = false
+	opponent_two_arithmetic_multiplier_label.visible = false
 	timer_label.visible = is_visible
 	status_label.visible = false
 	controls_label.visible = is_visible and network_mode == "practice"
@@ -5380,9 +5384,7 @@ func refresh_lobby_label() -> void:
 		previews[index].visible = is_present
 		infos[index].text = "あなた\n%s" % names[selection] if is_local else ("対戦相手\n%s" % _remote_lobby_display_name(slot) if is_present else "参加待ち")
 		if is_present:
-			var synchronized_player: Dictionary = players.get(slot, {})
-			var remote_visual := str(synchronized_player.get("visual_id", visual_ids[selection]))
-			previews[index].texture = get_idle_texture(visual_ids[selection]) if is_local else get_idle_texture(remote_visual)
+			previews[index].texture = get_idle_texture(visual_ids[selection]) if is_local else SHADOW_IDLE_TEXTURE
 		else:
 			previews[index].texture = SHADOW_IDLE_TEXTURE
 		set_lobby_status_icon(status_icons[index], _lobby_ready(slot), is_present)
@@ -5449,20 +5451,26 @@ func _apply_lobby_card_layout(is_ffa: bool) -> void:
 	var left_buttons: Array[Control] = [lobby_p1_left, lobby_p2_left, lobby_p3_left]
 	var right_frames: Array[Control] = [lobby_p1_right_frame, lobby_p2_right_frame, lobby_p3_right_frame]
 	var right_buttons: Array[Control] = [lobby_p1_right, lobby_p2_right, lobby_p3_right]
-	var columns := [80.0, 460.0, 840.0] if is_ffa else [199.0, 681.0, 840.0]
+	var card_positions := [Vector2(80.0, 140.0), Vector2(460.0, 140.0), Vector2(840.0, 140.0)] if is_ffa else [Vector2(199.0, 148.0), Vector2(681.0, 148.0), Vector2(840.0, 140.0)]
+	var card_sizes := [Vector2(360.0, 360.0), Vector2(360.0, 360.0), Vector2(360.0, 360.0)] if is_ffa else [Vector2(400.0, 420.0), Vector2(400.0, 420.0), Vector2(360.0, 360.0)]
+	var preview_positions := [Vector2(112.0, 214.0), Vector2(492.0, 214.0), Vector2(872.0, 214.0)] if is_ffa else [Vector2(246.0, 232.0), Vector2(736.0, 228.0), Vector2(884.0, 206.0)]
+	var preview_sizes := [Vector2(296.0, 188.0), Vector2(296.0, 188.0), Vector2(296.0, 188.0)] if is_ffa else [Vector2(300.0, 220.0), Vector2(300.0, 220.0), Vector2(272.0, 186.0)]
+	var info_positions := [Vector2(100.0, 156.0), Vector2(480.0, 156.0), Vector2(860.0, 156.0)] if is_ffa else [Vector2(241.0, 183.0), Vector2(731.0, 181.0), Vector2(860.0, 154.0)]
+	var info_sizes := [Vector2(320.0, 48.0), Vector2(320.0, 48.0), Vector2(320.0, 48.0)] if is_ffa else [Vector2(320.0, 52.0), Vector2(320.0, 52.0), Vector2(320.0, 48.0)]
+	var status_positions := [Vector2(346.0, 162.0), Vector2(726.0, 162.0), Vector2(1106.0, 162.0)] if is_ffa else [Vector2(473.0, 192.0), Vector2(961.0, 192.0), Vector2(1120.0, 160.0)]
+	var left_positions := [Vector2(122.0, 420.0), Vector2(502.0, 420.0), Vector2(882.0, 420.0)] if is_ffa else [Vector2(249.0, 476.0), Vector2(730.0, 476.0), Vector2(880.0, 420.0)]
+	var right_positions := [Vector2(318.0, 420.0), Vector2(698.0, 420.0), Vector2(1078.0, 420.0)] if is_ffa else [Vector2(469.0, 476.0), Vector2(943.0, 474.0), Vector2(1078.0, 420.0)]
 	for index in 3:
 		var show_card := index < 2 or is_ffa
 		card_nodes[index].visible = show_card
-		if is_ffa:
-			var x := float(columns[index])
-			_set_lobby_rect(card_nodes[index], Vector2(x, 140.0), Vector2(360.0, 360.0))
-			_set_lobby_rect(previews[index], Vector2(x + 32.0, 214.0), Vector2(296.0, 188.0))
-			_set_lobby_rect(infos[index], Vector2(x + 20.0, 156.0), Vector2(320.0, 48.0))
-			_set_lobby_rect(statuses[index], Vector2(x + 266.0, 162.0), Vector2(48.0, 48.0))
-			_set_lobby_rect(left_frames[index], Vector2(x + 42.0, 420.0), Vector2(80.0, 46.0))
-			_set_lobby_rect(left_buttons[index], Vector2(x + 42.0, 420.0), Vector2(80.0, 46.0))
-			_set_lobby_rect(right_frames[index], Vector2(x + 238.0, 420.0), Vector2(80.0, 46.0))
-			_set_lobby_rect(right_buttons[index], Vector2(x + 238.0, 420.0), Vector2(80.0, 46.0))
+		_set_lobby_rect(card_nodes[index], card_positions[index], card_sizes[index])
+		_set_lobby_rect(previews[index], preview_positions[index], preview_sizes[index])
+		_set_lobby_rect(infos[index], info_positions[index], info_sizes[index])
+		_set_lobby_rect(statuses[index], status_positions[index], Vector2(48.0, 48.0))
+		_set_lobby_rect(left_frames[index], left_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
+		_set_lobby_rect(left_buttons[index], left_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
+		_set_lobby_rect(right_frames[index], right_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
+		_set_lobby_rect(right_buttons[index], right_positions[index], Vector2(80.0, 46.0) if is_ffa else Vector2(90.0, 46.0))
 
 
 func set_lobby_status_icon(icon: Control, is_ready: bool, is_present: bool) -> void:
@@ -5804,11 +5812,8 @@ func update_hud() -> void:
 	if has_second_opponent:
 		opponent_two_hp_bar.value = int(opponent_two_player.get("hp", 0))
 		opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
-	var is_opponent_arithmetician := str(opponent_player.get("character_id", "")) == "arithmetic"
-	opponent_arithmetic_multiplier_label.visible = is_opponent_arithmetician
-	if is_opponent_arithmetician:
-		var opponent_multiplier := float(opponent_player.get("arithmetic_interference_multiplier", 1.0))
-		opponent_arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(opponent_multiplier, 1.0) else "f(x) = %.1fx" % opponent_multiplier
+	_update_opponent_arithmetic_multiplier(opponent_one_arithmetic_multiplier_label, opponent_player)
+	_update_opponent_arithmetic_multiplier(opponent_two_arithmetic_multiplier_label, opponent_two_player)
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		var equation_locked := float(own_player.get("equation_lock_time", 0.0)) > 0.0
@@ -5823,6 +5828,14 @@ func update_hud() -> void:
 			widget.call("set_equation_lock", equation_locked)
 	var remaining_seconds := maxi(0, ceili(match_state.time_remaining))
 	timer_label.text = "%02d:%02d" % [remaining_seconds / 60, remaining_seconds % 60]
+
+
+func _update_opponent_arithmetic_multiplier(label: Label, opponent: Dictionary) -> void:
+	var is_arithmetician := str(opponent.get("character_id", "")) == "arithmetic"
+	label.visible = is_arithmetician
+	if is_arithmetician:
+		var multiplier := float(opponent.get("arithmetic_interference_multiplier", 1.0))
+		label.text = "f(x) = x" if is_equal_approx(multiplier, 1.0) else "f(x) = %.1fx" % multiplier
 
 
 func get_hud_player_id() -> int:
