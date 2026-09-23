@@ -611,7 +611,7 @@ const USER_SETTINGS_HOME_BUTTON_PATHS := [
 var cpu_panel: Panel
 var tutorial_panel: Panel
 var cpu_player_selection := 0
-var cpu_opponent_selection := 0
+var cpu_opponent_selection := 1
 var cpu_level := 1
 var cpu_move_direction := Vector2.ZERO
 var cpu_decision_timer := 0.0
@@ -3338,6 +3338,8 @@ func clear_active_challenge_state() -> void:
 
 
 func apply_screen_state(next_screen: String) -> void:
+	if next_screen == "tutorial_intro":
+		next_screen = "home"
 	lobby_debug_log("apply_screen_state %s -> %s; mode=%s phase=%s" % [screen, next_screen, network_mode, phase])
 	screen = next_screen
 	screen_manager.call("show_screen", next_screen)
@@ -4472,13 +4474,14 @@ func create_navigation_ui() -> void:
 	var character_button := $UIRoot/Home/CharacterButton as Button
 	var home_cpu_button := $UIRoot/Home/CpuButton as Button
 	var home_tutorial_button := $UIRoot/Home/TutorialButton as Button
-	for button in [online_button, practice_button, character_button, home_cpu_button, home_tutorial_button]:
+	home_tutorial_button.disabled = true
+	home_tutorial_button.text = "チュートリアル（準備中）"
+	for button in [online_button, practice_button, character_button, home_cpu_button]:
 		style_menu_button(button, 30 if button == online_button else 20)
 	connect_button_once(online_button, show_online_menu)
 	connect_button_once(practice_button, show_practice_select)
 	connect_button_once(character_button, show_character_screen)
 	connect_button_once(home_cpu_button, show_cpu_select)
-	connect_button_once(home_tutorial_button, show_tutorial_intro)
 	character_button.tooltip_text = "Open character customization"
 	create_user_settings_ui()
 	create_cpu_and_tutorial_ui()
@@ -4606,18 +4609,20 @@ func show_cpu_select() -> void:
 
 
 func show_tutorial_intro() -> void:
-	apply_screen_state("tutorial_intro")
+	show_home()
 
 
 func create_cpu_and_tutorial_ui() -> void:
 	cpu_panel = $UIRoot/CpuBattle as Panel
 	tutorial_panel = $UIRoot/Tutorial as Panel
-	for panel in [cpu_panel, tutorial_panel]:
-		var panel_style := StyleBoxFlat.new()
-		panel_style.bg_color = Color(0.06, 0.10, 0.18, 0.84)
-		panel_style.border_color = Color("8fa8e8")
-		panel_style.set_border_width_all(2)
-		panel.add_theme_stylebox_override("panel", panel_style)
+	var cpu_style := StyleBoxFlat.new()
+	cpu_style.bg_color = Color.TRANSPARENT
+	cpu_panel.add_theme_stylebox_override("panel", cpu_style)
+	var tutorial_style := StyleBoxFlat.new()
+	tutorial_style.bg_color = Color(0.06, 0.10, 0.18, 0.84)
+	tutorial_style.border_color = Color("8fa8e8")
+	tutorial_style.set_border_width_all(2)
+	tutorial_panel.add_theme_stylebox_override("panel", tutorial_style)
 	for name in ["PlayerPrev", "PlayerNext", "OpponentPrev", "OpponentNext", "LevelPrev", "LevelNext", "StartButton", "BackButton"]:
 		style_menu_button(cpu_panel.get_node(name) as Button)
 	for name in ["StartButton", "BackButton"]:
@@ -4650,9 +4655,18 @@ func update_cpu_selection_labels() -> void:
 	if cpu_panel == null:
 		return
 	var names := character_names()
+	var visual_ids: Array[String] = ["typist", "arithmetician", "chanter"]
 	($UIRoot/CpuBattle/PlayerName as Label).text = names[cpu_player_selection]
 	($UIRoot/CpuBattle/OpponentName as Label).text = names[cpu_opponent_selection]
-	($UIRoot/CpuBattle/LevelLabel as Label).text = "CPU レベル %d  （%s）" % [cpu_level, ["弱い", "標準", "強い"][cpu_level - 1]]
+	($UIRoot/CpuBattle/PlayerPortrait as TextureRect).texture = get_idle_texture(visual_ids[cpu_player_selection])
+	($UIRoot/CpuBattle/OpponentPortrait as TextureRect).texture = get_idle_texture(visual_ids[cpu_opponent_selection])
+	($UIRoot/CpuBattle/LevelLabel as Label).text = "CPU レベル%d" % cpu_level
+	var can_decrease_level := cpu_level > 1
+	var can_increase_level := cpu_level < 3
+	($UIRoot/CpuBattle/LevelPrev as Button).visible = can_decrease_level
+	($UIRoot/CpuBattle/LevelPrevFrame as TextureRect).visible = can_decrease_level
+	($UIRoot/CpuBattle/LevelNext as Button).visible = can_increase_level
+	($UIRoot/CpuBattle/LevelNextFrame as TextureRect).visible = can_increase_level
 
 
 func start_cpu_match() -> void:

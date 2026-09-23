@@ -315,7 +315,8 @@ theme_override_styles/normal = SubResource("StyleBoxEmpty_vrx01")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_1uevf")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_tc087")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_73205")
-text = "チュートリアル"
+text = "チュートリアル（準備中）"
+disabled = true
 
 [node name="TutorialButtonFrame" type="TextureRect" parent="."]
 z_index = -1

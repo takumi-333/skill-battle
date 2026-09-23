@@ -1,116 +1,296 @@
 [gd_scene format=3]
 
+[ext_resource type="Texture2D" path="res://assets/ui/panel_frame.png" id="1_panel"]
+[ext_resource type="Texture2D" path="res://assets/ui/button_secondary.png" id="2_secondary"]
+[ext_resource type="Texture2D" path="res://assets/ui/button_primary.png" id="3_primary"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/typist_idle.png" id="4_player"]
+[ext_resource type="Texture2D" path="res://assets/characters/portraits/arithmetician_idle.png" id="5_cpu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_clear"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_button"]
+
 [node name="CpuBattle" type="Panel"]
 offset_right = 1280.0
 offset_bottom = 720.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_clear")
+
+[node name="PanelFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 103.0
+offset_top = 55.0
+offset_right = 1227.0
+offset_bottom = 708.0
+mouse_filter = 2
+texture = ExtResource("1_panel")
+expand_mode = 1
 
 [node name="Title" type="Label" parent="."]
-offset_left = 130.0
-offset_top = 62.0
-offset_right = 1150.0
-offset_bottom = 120.0
-theme_override_font_sizes/font_size = 36
+offset_left = 240.0
+offset_top = 89.0
+offset_right = 1050.0
+offset_bottom = 145.0
+theme_override_font_sizes/font_size = 34
 text = "CPU対戦"
 horizontal_alignment = 1
 
 [node name="PlayerLabel" type="Label" parent="."]
-offset_left = 160.0
-offset_top = 190.0
-offset_right = 570.0
-offset_bottom = 235.0
-theme_override_font_sizes/font_size = 26
-text = "あなたのキャラクター"
+offset_left = 280.0
+offset_top = 153.0
+offset_right = 610.0
+offset_bottom = 185.0
+theme_override_font_sizes/font_size = 19
+text = "あなた"
 horizontal_alignment = 1
-
-[node name="PlayerPrev" type="Button" parent="."]
-offset_left = 170.0
-offset_top = 285.0
-offset_right = 240.0
-offset_bottom = 355.0
-text = "◀"
 
 [node name="PlayerName" type="Label" parent="."]
-offset_left = 245.0
-offset_top = 280.0
-offset_right = 485.0
-offset_bottom = 360.0
-theme_override_font_sizes/font_size = 30
+offset_left = 280.0
+offset_top = 181.0
+offset_right = 610.0
+offset_bottom = 219.0
+theme_override_font_sizes/font_size = 26
+text = "打鍵士"
 horizontal_alignment = 1
-vertical_alignment = 1
 
-[node name="PlayerNext" type="Button" parent="."]
-offset_left = 490.0
-offset_top = 285.0
-offset_right = 560.0
-offset_bottom = 355.0
-text = "▶"
+[node name="PlayerPortrait" type="TextureRect" parent="."]
+offset_left = 259.0
+offset_top = 217.0
+offset_right = 585.0
+offset_bottom = 462.0
+mouse_filter = 2
+texture = ExtResource("4_player")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="OpponentLabel" type="Label" parent="."]
-offset_left = 710.0
-offset_top = 190.0
-offset_right = 1120.0
-offset_bottom = 235.0
-theme_override_font_sizes/font_size = 26
-text = "CPUのキャラクター"
+offset_left = 700.0
+offset_top = 153.0
+offset_right = 1045.0
+offset_bottom = 185.0
+theme_override_font_sizes/font_size = 19
+text = "CPU"
 horizontal_alignment = 1
 
-[node name="OpponentPrev" type="Button" parent="."]
-offset_left = 720.0
-offset_top = 285.0
-offset_right = 790.0
-offset_bottom = 355.0
+[node name="OpponentName" type="Label" parent="."]
+offset_left = 700.0
+offset_top = 181.0
+offset_right = 1045.0
+offset_bottom = 219.0
+theme_override_font_sizes/font_size = 26
+text = "算術士"
+horizontal_alignment = 1
+
+[node name="OpponentPortrait" type="TextureRect" parent="."]
+offset_left = 672.0
+offset_top = 212.0
+offset_right = 1046.0
+offset_bottom = 470.0
+mouse_filter = 2
+texture = ExtResource("5_cpu")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayerPrevFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 300.0
+offset_top = 476.0
+offset_right = 390.0
+offset_bottom = 532.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
+
+[node name="PlayerPrev" type="Button" parent="."]
+z_index = 10
+offset_left = 300.0
+offset_top = 477.0
+offset_right = 390.0
+offset_bottom = 531.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
 text = "◀"
 
-[node name="OpponentName" type="Label" parent="."]
-offset_left = 795.0
-offset_top = 280.0
-offset_right = 1035.0
-offset_bottom = 360.0
-theme_override_font_sizes/font_size = 30
+[node name="PlayerNextFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 500.0
+offset_top = 476.0
+offset_right = 590.0
+offset_bottom = 532.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
+
+[node name="PlayerNext" type="Button" parent="."]
+z_index = 10
+offset_left = 500.0
+offset_top = 477.0
+offset_right = 590.0
+offset_bottom = 531.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
+text = "▶"
+
+[node name="OpponentPrevFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 715.0
+offset_top = 476.0
+offset_right = 805.0
+offset_bottom = 532.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
+
+[node name="OpponentPrev" type="Button" parent="."]
+z_index = 10
+offset_left = 715.0
+offset_top = 477.0
+offset_right = 805.0
+offset_bottom = 531.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
+text = "◀"
+
+[node name="OpponentNextFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 950.0
+offset_top = 476.0
+offset_right = 1040.0
+offset_bottom = 532.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
+
+[node name="OpponentNext" type="Button" parent="."]
+z_index = 10
+offset_left = 950.0
+offset_top = 477.0
+offset_right = 1040.0
+offset_bottom = 531.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
+text = "▶"
+
+[node name="LevelPrevFrame" type="TextureRect" parent="."]
+z_index = -1
+visible = false
+offset_left = 708.0
+offset_top = 547.0
+offset_right = 774.0
+offset_bottom = 593.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
+
+[node name="LevelPrev" type="Button" parent="."]
+z_index = 10
+visible = false
+offset_left = 708.0
+offset_top = 548.0
+offset_right = 774.0
+offset_bottom = 592.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
+text = "◀"
+
+[node name="LevelLabel" type="Label" parent="."]
+offset_left = 776.0
+offset_top = 544.0
+offset_right = 1021.0
+offset_bottom = 596.0
+theme_override_font_sizes/font_size = 21
+text = "CPU レベル1"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="OpponentNext" type="Button" parent="."]
-offset_left = 1040.0
-offset_top = 285.0
-offset_right = 1110.0
-offset_bottom = 355.0
-text = "▶"
-
-[node name="LevelLabel" type="Label" parent="."]
-offset_left = 340.0
-offset_top = 405.0
-offset_right = 940.0
-offset_bottom = 450.0
-theme_override_font_sizes/font_size = 24
-horizontal_alignment = 1
-
-[node name="LevelPrev" type="Button" parent="."]
-offset_left = 395.0
-offset_top = 465.0
-offset_right = 475.0
-offset_bottom = 525.0
-text = "◀"
+[node name="LevelNextFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 1024.0
+offset_top = 547.0
+offset_right = 1090.0
+offset_bottom = 593.0
+mouse_filter = 2
+texture = ExtResource("2_secondary")
+expand_mode = 1
 
 [node name="LevelNext" type="Button" parent="."]
-offset_left = 805.0
-offset_top = 465.0
-offset_right = 885.0
-offset_bottom = 525.0
+z_index = 10
+offset_left = 1024.0
+offset_top = 548.0
+offset_right = 1090.0
+offset_bottom = 592.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
 text = "▶"
 
+[node name="StartButtonFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 470.0
+offset_top = 613.0
+offset_right = 810.0
+offset_bottom = 687.0
+mouse_filter = 2
+texture = ExtResource("3_primary")
+expand_mode = 1
+
 [node name="StartButton" type="Button" parent="."]
-offset_left = 760.0
-offset_top = 590.0
-offset_right = 1110.0
-offset_bottom = 655.0
-theme_override_font_sizes/font_size = 26
-text = "対戦開始"
+z_index = 10
+offset_left = 470.0
+offset_top = 624.0
+offset_right = 810.0
+offset_bottom = 679.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 24
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
+text = "対戦を開始"
+
+[node name="BackButtonFrame" type="TextureRect" parent="."]
+z_index = -1
+offset_left = 30.0
+offset_top = 9.0
+offset_right = 222.0
+offset_bottom = 91.0
+mouse_filter = 2
+texture = ExtResource("3_primary")
+expand_mode = 1
 
 [node name="BackButton" type="Button" parent="."]
-offset_left = 170.0
-offset_top = 590.0
-offset_right = 520.0
-offset_bottom = 655.0
-theme_override_font_sizes/font_size = 24
+z_index = 10
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 222.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 0.9411765, 0.7882353, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxEmpty_button")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_button")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_button")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_button")
 text = "ホームへ戻る"
