@@ -3240,12 +3240,13 @@ func _activate_skill_slot(owner_id: int, slot: int) -> void:
 func set_gameplay_hud_visible(is_visible: bool) -> void:
 	# The screen-state coordinator owns the HUD parent. This function only
 	# controls HUD-specific child state.
+	var is_ffa := dedicated_match_mode == "free_for_all"
 	hud_root.z_index = 100
 	player_one_label.visible = is_visible
 	hp_bar.visible = is_visible
 	arithmetic_multiplier_label.visible = is_visible and arithmetic_multiplier_label.visible
 	opponent_hp_bar.visible = is_visible
-	opponent_one_label.visible = is_visible
+	opponent_one_label.visible = is_visible and is_ffa
 	if opponent_two_hp_bar:
 		opponent_two_hp_bar.visible = false
 	if opponent_two_label:
@@ -5736,20 +5737,24 @@ func update_hud() -> void:
 	if is_arithmetician:
 		var multiplier := float(own_player.get("arithmetic_interference_multiplier", 1.0))
 		arithmetic_multiplier_label.text = "f(x) = x" if is_equal_approx(multiplier, 1.0) else "f(x) = %.1fx" % multiplier
+	var is_ffa := dedicated_match_mode == "free_for_all"
 	if not opponent_player.is_empty():
 		opponent_hp_bar.value = int(opponent_player.get("hp", 0))
-		opponent_one_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[0]), int(opponent_player.get("hp", 0))]
+		opponent_one_label.text = match_player_display_name(opponent_ids[0])
+		opponent_one_label.visible = is_ffa
 	var has_second_opponent := not opponent_two_player.is_empty()
 	if opponent_two_hp_bar:
 		opponent_two_hp_bar.visible = has_second_opponent
 	if opponent_two_label:
-		opponent_two_label.visible = has_second_opponent
+		opponent_two_label.visible = is_ffa and has_second_opponent
 	if has_second_opponent and opponent_two_hp_bar and opponent_two_label:
 		opponent_two_hp_bar.value = int(opponent_two_player.get("hp", 0))
-		opponent_two_label.text = "%s  HP %d / 100" % [match_player_display_name(opponent_ids[1]), int(opponent_two_player.get("hp", 0))]
+		opponent_two_label.text = match_player_display_name(opponent_ids[1])
 	_update_opponent_arithmetic_multiplier(opponent_one_arithmetic_multiplier_label, opponent_player)
+	opponent_one_arithmetic_multiplier_label.visible = is_ffa and opponent_one_arithmetic_multiplier_label.visible
 	if opponent_two_arithmetic_multiplier_label:
 		_update_opponent_arithmetic_multiplier(opponent_two_arithmetic_multiplier_label, opponent_two_player)
+		opponent_two_arithmetic_multiplier_label.visible = is_ffa and opponent_two_arithmetic_multiplier_label.visible
 	if skill_widgets.size() >= 4:
 		var is_focused := bool(own_player["focused"])
 		var equation_locked := float(own_player.get("equation_lock_time", 0.0)) > 0.0
